@@ -185,6 +185,7 @@ final class SettingsView extends TabView {
             case RENDERING -> {
                 rows.add(toggle("render_enabled", c -> c.renderEnabled, (c, v) -> c.renderEnabled = v));
                 rows.add(toggle("render_ghost", c -> c.renderGhostBlocks, (c, v) -> c.renderGhostBlocks = v));
+                rows.add(toggle("ghosts_loaded_only", c -> c.ghostsOnlyLoaded, (c, v) -> c.ghostsOnlyLoaded = v));
                 rows.add(percent("ghost_alpha", () -> Math.round(this.working.ghostAlpha * 100.0F),
                         v -> this.working.ghostAlpha = v / 100.0F, 20));
                 rows.add(toggle("render_overlay", c -> c.renderOverlay, (c, v) -> c.renderOverlay = v));

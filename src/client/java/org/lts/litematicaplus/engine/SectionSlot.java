@@ -15,6 +15,7 @@ public final class SectionSlot {
     boolean ghostBuilt;
     boolean built;
     boolean chunkLoaded;
+    boolean borderIncomplete;
     GpuBuffer ghost;
     int ghostIndices;
     GpuBuffer fill;

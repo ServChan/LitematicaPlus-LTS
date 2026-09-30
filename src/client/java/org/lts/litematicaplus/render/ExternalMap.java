@@ -10,6 +10,7 @@ public final class ExternalMap {
     private static final Method CENTER_X = resolve("centerX");
     private static final Method CENTER_Y = resolve("centerY");
     private static final Method CENTER_Z = resolve("centerZ");
+    private static final Method SHOWN = resolveSetting();
     private static final Method CAMERA_X = resolve("cameraX");
     private static final Method CAMERA_Y = resolve("cameraY");
     private static final Method CAMERA_Z = resolve("cameraZ");
@@ -23,6 +24,17 @@ public final class ExternalMap {
         }
         try {
             return Class.forName("com.voxymap.client.map.VoxyMapCameraController").getMethod(name);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private static Method resolveSetting() {
+        if (!FabricLoader.getInstance().isModLoaded("voxymap")) {
+            return null;
+        }
+        try {
+            return Class.forName("com.voxymap.client.map.VoxyMapSettings").getMethod("schematicsEnabled");
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             return null;
         }
@@ -60,6 +72,17 @@ public final class ExternalMap {
             return (float) (camera.distanceTo(focus(camera)) * 1.25 + 512.0);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             return 0.0F;
+        }
+    }
+
+    public static boolean hidden() {
+        if (SHOWN == null || !active()) {
+            return false;
+        }
+        try {
+            return Boolean.FALSE.equals(SHOWN.invoke(null));
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            return false;
         }
     }
 

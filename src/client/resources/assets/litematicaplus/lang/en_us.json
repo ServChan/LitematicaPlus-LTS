@@ -385,5 +385,7 @@
   "litematicaplus.option.trust_hidden": "Hidden blocks count as correct",
   "litematicaplus.option.trust_hidden.tip": "On servers with anti-xray the client receives fake blocks for everything buried inside other blocks. A wrong block that is covered on all six sides is therefore not reported. Does not apply in singleplayer.",
   "litematicaplus.option.world_cache": "Check unloaded chunks with Voxy",
-  "litematicaplus.option.world_cache.tip": "Where a chunk is not loaded, the schematic is compared with the blocks Voxy has stored. Needs Voxy and VoxyMap; without them such parts stay unknown and are drawn as ghosts."
+  "litematicaplus.option.world_cache.tip": "Where a chunk is not loaded, the schematic is compared with the blocks Voxy has stored. Needs Voxy and VoxyMap; without them such parts stay unknown and are drawn as ghosts.",
+  "litematicaplus.option.ghosts_loaded_only": "Ghosts only in loaded chunks",
+  "litematicaplus.option.ghosts_loaded_only.tip": "Ghost blocks are drawn only where the game itself draws the terrain, so mountains and walls always cover them. When off, the schematic is also drawn beyond loaded chunks and can show through distant terrain from Voxy."
 }

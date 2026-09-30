@@ -404,12 +404,16 @@ public final class GhostEngine {
         }
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
-            if (volume == null || chunkX < volume.minX() >> 4 || chunkX > volume.maxX() >> 4
-                    || chunkZ < volume.minZ() >> 4 || chunkZ > volume.maxZ() >> 4) {
+            if (volume == null || chunkX < (volume.minX() >> 4) - 1 || chunkX > (volume.maxX() >> 4) + 1
+                    || chunkZ < (volume.minZ() >> 4) - 1 || chunkZ > (volume.maxZ() >> 4) + 1) {
                 continue;
             }
             for (int sectionY = volume.minY() >> 4; sectionY <= volume.maxY() >> 4; sectionY++) {
                 markDirty(runtime, runtime.slots.get(SectionPos.asLong(chunkX, sectionY, chunkZ)));
+                completeBorder(runtime, runtime.slots.get(SectionPos.asLong(chunkX - 1, sectionY, chunkZ)));
+                completeBorder(runtime, runtime.slots.get(SectionPos.asLong(chunkX + 1, sectionY, chunkZ)));
+                completeBorder(runtime, runtime.slots.get(SectionPos.asLong(chunkX, sectionY, chunkZ - 1)));
+                completeBorder(runtime, runtime.slots.get(SectionPos.asLong(chunkX, sectionY, chunkZ + 1)));
             }
         }
     }
@@ -419,6 +423,12 @@ public final class GhostEngine {
             for (SectionSlot slot : runtime.slots.values()) {
                 markDirty(runtime, slot);
             }
+        }
+    }
+
+    private static void completeBorder(PlacementRuntime runtime, SectionSlot slot) {
+        if (slot != null && slot.borderIncomplete) {
+            markDirty(runtime, slot);
         }
     }
 
@@ -497,11 +507,16 @@ public final class GhostEngine {
         }
     }
 
+    public static boolean ghostsAnywhere() {
+        return !LitematicaPlusConfig.current().ghostsOnlyLoaded || TopView.active();
+    }
+
     private void sweep(ClientLevel current, Vec3 camera) {
         int distance = TopView.ghostRange(LitematicaPlusConfig.current().renderDistance);
         double near = (double) distance * distance;
         int margin = Math.max(UNLOAD_MARGIN, distance / 2);
         boolean keep = ExternalMap.active() || TopView.active();
+        boolean anywhere = ghostsAnywhere();
         double far = (double) (distance + margin) * (distance + margin);
         for (PlacementRuntime runtime : this.runtimes.values()) {
             for (SectionSlot slot : runtime.slots.values()) {
@@ -513,7 +528,7 @@ public final class GhostEngine {
                         slot.ghostBuilt = false;
                     }
                 } else if (slot.built && !slot.inFlight && range <= near && !runtime.dirty.contains(slot.key)
-                        && (slot.hasSolid || slot.verdict != null && slot.verdict.errors() > 0)) {
+                        && (anywhere || slot.chunkLoaded) && (slot.hasSolid || slot.verdict != null && slot.verdict.errors() > 0)) {
                     markDirty(runtime, slot);
                 }
             }
@@ -539,6 +554,7 @@ public final class GhostEngine {
         long deadline = System.nanoTime() + config.snapshotBudgetMicros * 1000L;
         int configuredRange = TopView.ghostRange(config.renderDistance);
         double ghostRange = (double) configuredRange * configuredRange;
+        boolean anywhere = ghostsAnywhere();
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
             if (volume == null || runtime.dirty.isEmpty() || !runtime.placement().enabled()) {
@@ -563,9 +579,13 @@ public final class GhostEngine {
                     runtime.dirty.remove(slot.key);
                     continue;
                 }
-                boolean ghost = this.selectedDistances[i] <= ghostRange;
                 BlockState[] world = snapshot(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
                         SectionPos.z(slot.key));
+                boolean ghost = this.selectedDistances[i] <= ghostRange && (world != null || anywhere);
+                slot.chunkLoaded = world != null;
+                long[] border = world == null ? null : borders(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
+                        SectionPos.z(slot.key));
+                slot.borderIncomplete = world != null && this.borderIncomplete;
                 runtime.dirty.remove(slot.key);
                 slot.inFlight = true;
                 slot.pendingGhost = ghost;
@@ -574,9 +594,7 @@ public final class GhostEngine {
                 SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
                         ? slot.verdict : null;
                 SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                        runtime.specialByPalette, world, world == null ? null : borders(current,
-                                SectionPos.x(slot.key), SectionPos.y(slot.key), SectionPos.z(slot.key)), remembered,
-                        this.layer, current, models, fluids,
+                        runtime.specialByPalette, world, border, remembered, this.layer, current, models, fluids,
                         minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
                 try {
                     executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
@@ -690,28 +708,38 @@ public final class GhostEngine {
         this.heapKeys[position] = key;
     }
 
-    private static LevelChunkSection neighbor(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
+    private boolean borderIncomplete;
+
+    private LevelChunkSection neighbor(ClientLevel current, long[] bits, int face, int sectionX, int sectionY,
+            int sectionZ) {
         LevelChunk chunk = current.getChunkSource().getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
-        if (chunk == null || sectionY < chunk.getMinSectionY() || sectionY > chunk.getMaxSectionY()) {
+        if (chunk == null) {
+            Arrays.fill(bits, face * 4, face * 4 + 4, -1L);
+            this.borderIncomplete = true;
+            return null;
+        }
+        if (sectionY < chunk.getMinSectionY()) {
+            Arrays.fill(bits, face * 4, face * 4 + 4, -1L);
+            return null;
+        }
+        if (sectionY > chunk.getMaxSectionY()) {
             return null;
         }
         LevelChunkSection section = chunk.getSection(chunk.getSectionIndexFromSectionY(sectionY));
         return section == null || section.hasOnlyAir() ? null : section;
     }
 
-    private static long[] borders(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
+    private long[] borders(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
         long[] bits = new long[SectionVerdict.BORDER_LONGS];
-        if (sectionY - 1 < current.getMinSectionY()) {
-            java.util.Arrays.fill(bits, SectionVerdict.FACE_DOWN * 4, SectionVerdict.FACE_DOWN * 4 + 4, -1L);
-        }
+        this.borderIncomplete = false;
         for (int face = 0; face < 6; face++) {
             LevelChunkSection section = switch (face) {
-                case SectionVerdict.FACE_DOWN -> neighbor(current, sectionX, sectionY - 1, sectionZ);
-                case SectionVerdict.FACE_UP -> neighbor(current, sectionX, sectionY + 1, sectionZ);
-                case SectionVerdict.FACE_NORTH -> neighbor(current, sectionX, sectionY, sectionZ - 1);
-                case SectionVerdict.FACE_SOUTH -> neighbor(current, sectionX, sectionY, sectionZ + 1);
-                case SectionVerdict.FACE_WEST -> neighbor(current, sectionX - 1, sectionY, sectionZ);
-                default -> neighbor(current, sectionX + 1, sectionY, sectionZ);
+                case SectionVerdict.FACE_DOWN -> neighbor(current, bits, face, sectionX, sectionY - 1, sectionZ);
+                case SectionVerdict.FACE_UP -> neighbor(current, bits, face, sectionX, sectionY + 1, sectionZ);
+                case SectionVerdict.FACE_NORTH -> neighbor(current, bits, face, sectionX, sectionY, sectionZ - 1);
+                case SectionVerdict.FACE_SOUTH -> neighbor(current, bits, face, sectionX, sectionY, sectionZ + 1);
+                case SectionVerdict.FACE_WEST -> neighbor(current, bits, face, sectionX - 1, sectionY, sectionZ);
+                default -> neighbor(current, bits, face, sectionX + 1, sectionY, sectionZ);
             };
             if (section == null) {
                 continue;

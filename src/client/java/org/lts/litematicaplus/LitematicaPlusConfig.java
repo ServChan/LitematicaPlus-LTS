@@ -109,6 +109,7 @@ public final class LitematicaPlusConfig {
     public boolean hudDiagnostics = false;
     public boolean trustHiddenBlocks = true;
     public boolean useWorldCache = true;
+    public boolean ghostsOnlyLoaded = true;
     public boolean materialHelper = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;

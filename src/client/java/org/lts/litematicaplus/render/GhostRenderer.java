@@ -90,8 +90,9 @@ public final class GhostRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         Vec3 focus = ExternalMap.focus(camera.pos);
         boolean onMap = ExternalMap.active();
+        boolean anywhere = GhostEngine.ghostsAnywhere();
         engine.frame(minecraft, focus);
-        if (!config.renderEnabled || minecraft.player == null || minecraft.level == null) {
+        if (!config.renderEnabled || minecraft.player == null || minecraft.level == null || ExternalMap.hidden()) {
             return;
         }
         Vec3 cameraPos = camera.pos;
@@ -106,7 +107,7 @@ public final class GhostRenderer {
             List<SectionSlot> drawable = runtime.drawable();
             for (int slotIndex = 0; slotIndex < drawable.size(); slotIndex++) {
                 SectionSlot slot = drawable.get(slotIndex);
-                boolean ghost = slot.ghost() != null && config.renderGhostBlocks;
+                boolean ghost = slot.ghost() != null && config.renderGhostBlocks && (anywhere || slot.chunkLoaded());
                 boolean overlay = (slot.fill() != null || slot.lines() != null) && config.renderOverlay && !onMap
                         && (slot.chunkLoaded() || config.overlayThroughWalls);
                 if (!ghost && !overlay) {

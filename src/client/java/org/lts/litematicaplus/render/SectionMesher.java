@@ -58,12 +58,12 @@ public final class SectionMesher {
         GhostSection section = live.section();
         SectionJob job = live;
         if (live.world() == null && live.remembered() == null && options.worldCache()) {
-            BlockState[] cached = WorldCache.section(live.level(), SectionPos.x(live.sectionKey()),
+            WorldCache.Snapshot cached = WorldCache.section(live.level(), SectionPos.x(live.sectionKey()),
                     SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
             if (cached != null) {
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), cached, null, null, live.layer(), live.level(), live.blockModels(),
-                        live.fluidModels(), live.blockColors(), options);
+                        live.specialByPalette(), cached.world(), cached.border(), null, live.layer(), live.level(),
+                        live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         }
         SectionVerdict verdict = job.world() == null && job.remembered() != null ? job.remembered()
