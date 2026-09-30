@@ -130,7 +130,11 @@ public final class Stepper extends AbstractWidget {
 
     @Override
     public void setFocused(boolean focused) {
+        boolean changed = focused != isFocused();
         super.setFocused(focused);
+        if (changed) {
+            Minecraft.getInstance().onTextInputFocusChange(this, focused);
+        }
         if (!focused) {
             commit();
         }
