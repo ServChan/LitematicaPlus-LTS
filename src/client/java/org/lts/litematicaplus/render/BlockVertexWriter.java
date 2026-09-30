@@ -10,6 +10,9 @@ final class BlockVertexWriter implements VertexConsumer {
 
     private ByteBuffer buffer;
     private int vertexStart = -1;
+    private float offsetX;
+    private float offsetY;
+    private float offsetZ;
 
     BlockVertexWriter(int capacity) {
         this.buffer = MemoryUtil.memAlloc(capacity);
@@ -18,6 +21,12 @@ final class BlockVertexWriter implements VertexConsumer {
     void reset() {
         this.buffer.clear();
         this.vertexStart = -1;
+    }
+
+    void offset(float x, float y, float z) {
+        this.offsetX = x;
+        this.offsetY = y;
+        this.offsetZ = z;
     }
 
     int vertices() {
@@ -51,14 +60,16 @@ final class BlockVertexWriter implements VertexConsumer {
             float nx, float ny, float nz) {
         ensure();
         this.vertexStart = -1;
-        this.buffer.putFloat(x).putFloat(y).putFloat(z).putInt(abgr(color)).putFloat(u).putFloat(v).putInt(lightCoords);
+        this.buffer.putFloat(x + this.offsetX).putFloat(y + this.offsetY).putFloat(z + this.offsetZ).putInt(abgr(color))
+                .putFloat(u).putFloat(v).putInt(lightCoords);
     }
 
     @Override
     public VertexConsumer addVertex(float x, float y, float z) {
         ensure();
         this.vertexStart = this.buffer.position();
-        this.buffer.putFloat(x).putFloat(y).putFloat(z).putInt(-1).putFloat(0.0F).putFloat(0.0F).putInt(FULL_BRIGHT);
+        this.buffer.putFloat(x + this.offsetX).putFloat(y + this.offsetY).putFloat(z + this.offsetZ).putInt(-1)
+                .putFloat(0.0F).putFloat(0.0F).putInt(FULL_BRIGHT);
         return this;
     }
 

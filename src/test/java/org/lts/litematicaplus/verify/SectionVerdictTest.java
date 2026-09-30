@@ -28,6 +28,15 @@ class SectionVerdictTest {
         assertFalse(SectionVerdict.hidden(world, center));
         world[center + 1] = Blocks.GLASS.defaultBlockState();
         assertFalse(SectionVerdict.hidden(world, center));
+        long[] border = new long[SectionVerdict.BORDER_LONGS];
+        assertFalse(SectionVerdict.hidden(world, border, 0));
+        java.util.Arrays.fill(border, -1L);
+        assertTrue(SectionVerdict.hidden(world, border, 0));
+        int top = 3 | 5 << 4 | 15 << 8;
+        int bit = 3 + 5 * 16;
+        border[SectionVerdict.FACE_UP * 4 + (bit >> 6)] &= ~(1L << (bit & 63));
+        assertFalse(SectionVerdict.hidden(world, border, top));
+        assertTrue(SectionVerdict.hidden(world, border, top + 1));
     }
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();

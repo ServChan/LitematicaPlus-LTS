@@ -383,5 +383,7 @@
   "litematicaplus.hud.diag_sections": "Secciones %1$s / %2$s / %3$s",
   "litematicaplus.hud.diag_work": "Cola %1$s, en curso %2$s, por s %3$s",
   "litematicaplus.option.trust_hidden": "Bloques ocultos como correctos",
-  "litematicaplus.option.trust_hidden.tip": "En servidores con anti-rayos X el cliente recibe bloques falsos para todo lo que está enterrado. Por eso un bloque erróneo cubierto por sus seis lados no se marca. No se aplica en un jugador."
+  "litematicaplus.option.trust_hidden.tip": "En servidores con anti-rayos X el cliente recibe bloques falsos para todo lo que está enterrado. Por eso un bloque erróneo cubierto por sus seis lados no se marca. No se aplica en un jugador.",
+  "litematicaplus.option.world_cache": "Comprobar lo no cargado con Voxy",
+  "litematicaplus.option.world_cache.tip": "Donde un chunk no está cargado, el esquema se compara con los bloques que guardó Voxy. Requiere Voxy y VoxyMap; sin ellos esas partes quedan desconocidas y se dibujan como fantasmas."
 }

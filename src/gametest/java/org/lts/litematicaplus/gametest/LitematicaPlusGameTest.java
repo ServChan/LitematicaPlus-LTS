@@ -377,9 +377,16 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
     }
 
     private static void mapView(ClientGameTestContext context, TestSingleplayerContext world) throws IOException {
+        context.runOnClient(client -> {
+            client.options.framerateLimit().set(260);
+            client.options.enableVsync().set(false);
+            client.player.getAbilities().flying = true;
+            client.player.onUpdateAbilities();
+        });
         world.getServer().runCommand("tp @p -2.5 -59 -2.5 -45 12");
         context.waitTicks(10);
         Schematic house = house();
+        long total = house.metadata().totalBlocks;
         Path file = context.computeOnClient(client -> {
             Path target = PlacementManager.schematicsDirectory().resolve("gametest/house.litematic");
             SchematicIo.write(target, house);
@@ -388,27 +395,59 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, ORIGIN));
         settle(context, placement);
         check(org.lts.litematicaplus.api.MapApi.placements().size() == 1, "the map API should list one placement");
+        context.runOnClient(client -> PasteController.startPaste(client, GhostEngine.get().runtime(placement.id())));
+        context.waitFor(client -> !PasteController.active(), 600);
+        world.getConnection().waitForClientboundPackets();
         context.waitTicks(40);
-        context.takeScreenshot("map_0_minimap");
-        context.getInput().pressKey(InputConstants.KEY_M);
-        context.waitTicks(80);
-        check(org.lts.litematicaplus.render.ExternalMap.active(), "pressing M should open the VoxyMap view");
-        context.takeScreenshot("map_1_open");
-        for (int i = 0; i < 14; i++) {
-            context.getInput().scroll(1.0);
-            context.waitTicks(3);
-        }
-        context.waitTicks(30);
-        context.takeScreenshot("map_1b_zoomed");
-        int scale = context.computeOnClient(client -> client.getWindow().getGuiScale());
-        click(context, scale, 30, 83);
+        settle(context, placement);
+        PlacementRuntime near = context.computeOnClient(client -> GhostEngine.get().runtime(placement.id()));
+        check(near.count(MismatchType.CORRECT) == total, "the pasted house should be complete");
+        world.getServer().runCommand("tp @p 900.5 -40 900.5 -45 12");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(200);
+        context.runOnClient(client -> {
+            PlacementManager.get().setEnabled(placement, false);
+            PlacementManager.get().setEnabled(placement, true);
+        });
         context.waitTicks(20);
-        context.takeScreenshot("map_2_objects");
-        click(context, scale, 60, 190);
-        context.waitTicks(10);
-        context.takeScreenshot("map_3_selected");
-        System.out.println("MAP drawn=" + GhostRenderer.lastDrawn() + " screen="
-                + context.computeOnClient(client -> String.valueOf(client.gui.screen())));
+        settle(context, placement);
+        PlacementRuntime far = context.computeOnClient(client -> GhostEngine.get().runtime(placement.id()));
+        System.out.println("CACHE available=" + org.lts.litematicaplus.world.WorldCache.available() + " correct="
+                + far.count(MismatchType.CORRECT) + " of " + total + " unknown=" + far.count(MismatchType.UNKNOWN)
+                + " missing=" + far.count(MismatchType.MISSING));
+        String sample = System.getProperty("litematicaplus.perfSample", "");
+        if (!sample.isBlank()) {
+            SchematicPlacement big = context.computeOnClient(client -> PlacementManager.get().create(Path.of(sample),
+                    new BlockPos(740, -60, 740)));
+            context.waitFor(client -> {
+                PlacementRuntime runtime = GhostEngine.get().runtime(big.id());
+                return runtime != null && runtime.volume() != null && !runtime.building() && runtime.pendingSections() == 0
+                        && GhostEngine.get().inFlight() == 0;
+            }, 6000);
+            context.waitTicks(100);
+            int fpsWorld = context.computeOnClient(Minecraft::getFps);
+            context.takeScreenshot("map_0_world");
+            context.getInput().pressKey(InputConstants.KEY_M);
+            context.waitTicks(60);
+            check(org.lts.litematicaplus.render.ExternalMap.active(), "pressing M should open the VoxyMap view");
+            context.waitFor(client -> GhostEngine.get().pending() == 0 && GhostEngine.get().inFlight() == 0, 6000);
+            context.waitTicks(100);
+            int fpsMap = context.computeOnClient(Minecraft::getFps);
+            int drawn = GhostRenderer.lastDrawn();
+            context.takeScreenshot("map_1_open");
+            context.runOnClient(client -> {
+                LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+                config.renderGhostBlocks = false;
+                LitematicaPlusConfig.save(config);
+            });
+            context.waitTicks(100);
+            int fpsNoGhosts = context.computeOnClient(Minecraft::getFps);
+            context.runOnClient(client -> PlacementManager.get().remove(big));
+            context.waitTicks(100);
+            int fpsNoPlacement = context.computeOnClient(Minecraft::getFps);
+            System.out.println("MAPFPS world=" + fpsWorld + " map=" + fpsMap + " drawn=" + drawn + " mapNoGhosts="
+                    + fpsNoGhosts + " mapNoBigPlacement=" + fpsNoPlacement);
+        }
         checkHealthy();
     }
 

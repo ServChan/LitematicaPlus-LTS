@@ -479,13 +479,14 @@ public final class GhostEngine {
         SectionJob.Options next = new SectionJob.Options(render && config.renderGhostBlocks,
                 render && config.renderOverlay, config.renderCollidingBlocks, config.lenientStates,
                 config.trustHiddenBlocks && !Minecraft.getInstance().hasSingleplayerServer(),
+                config.overlayThroughWalls, config.useWorldCache,
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
                 config.overlayFillAlpha, config.overlayLineAlpha);
         if (!next.equals(this.options)) {
             boolean changed = this.options != null;
             this.options = next;
             this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(),
-                    next.lenientStates(), next.trustHidden(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
+                    next.lenientStates(), next.trustHidden(), next.throughWalls(), next.worldCache(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
                     next.showWrongState(), next.fillAlpha(), next.lineAlpha());
             if (changed) {
                 for (PlacementRuntime runtime : this.runtimes.values()) {
@@ -573,7 +574,9 @@ public final class GhostEngine {
                 SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
                         ? slot.verdict : null;
                 SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                        runtime.specialByPalette, world, remembered, this.layer, current, models, fluids,
+                        runtime.specialByPalette, world, world == null ? null : borders(current,
+                                SectionPos.x(slot.key), SectionPos.y(slot.key), SectionPos.z(slot.key)), remembered,
+                        this.layer, current, models, fluids,
                         minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
                 try {
                     executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
@@ -685,6 +688,47 @@ public final class GhostEngine {
         }
         this.heapDistances[position] = range;
         this.heapKeys[position] = key;
+    }
+
+    private static LevelChunkSection neighbor(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
+        LevelChunk chunk = current.getChunkSource().getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
+        if (chunk == null || sectionY < chunk.getMinSectionY() || sectionY > chunk.getMaxSectionY()) {
+            return null;
+        }
+        LevelChunkSection section = chunk.getSection(chunk.getSectionIndexFromSectionY(sectionY));
+        return section == null || section.hasOnlyAir() ? null : section;
+    }
+
+    private static long[] borders(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
+        long[] bits = new long[SectionVerdict.BORDER_LONGS];
+        if (sectionY - 1 < current.getMinSectionY()) {
+            java.util.Arrays.fill(bits, SectionVerdict.FACE_DOWN * 4, SectionVerdict.FACE_DOWN * 4 + 4, -1L);
+        }
+        for (int face = 0; face < 6; face++) {
+            LevelChunkSection section = switch (face) {
+                case SectionVerdict.FACE_DOWN -> neighbor(current, sectionX, sectionY - 1, sectionZ);
+                case SectionVerdict.FACE_UP -> neighbor(current, sectionX, sectionY + 1, sectionZ);
+                case SectionVerdict.FACE_NORTH -> neighbor(current, sectionX, sectionY, sectionZ - 1);
+                case SectionVerdict.FACE_SOUTH -> neighbor(current, sectionX, sectionY, sectionZ + 1);
+                case SectionVerdict.FACE_WEST -> neighbor(current, sectionX - 1, sectionY, sectionZ);
+                default -> neighbor(current, sectionX + 1, sectionY, sectionZ);
+            };
+            if (section == null) {
+                continue;
+            }
+            int fixed = (face & 1) == 0 ? 15 : 0;
+            for (int b = 0; b < 16; b++) {
+                for (int a = 0; a < 16; a++) {
+                    BlockState state = face < 2 ? section.getBlockState(a, fixed, b)
+                            : face < 4 ? section.getBlockState(a, b, fixed) : section.getBlockState(fixed, b, a);
+                    if (state.isSolidRender()) {
+                        int bit = a + b * 16;
+                        bits[face * 4 + (bit >> 6)] |= 1L << (bit & 63);
+                    }
+                }
+            }
+        }
+        return bits;
     }
 
     private BlockState[] snapshot(ClientLevel current, int sectionX, int sectionY, int sectionZ) {

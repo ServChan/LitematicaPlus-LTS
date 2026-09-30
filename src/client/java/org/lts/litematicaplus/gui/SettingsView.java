@@ -197,6 +197,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("render_block_entities", c -> c.renderBlockEntities, (c, v) -> c.renderBlockEntities = v));
                 rows.add(toggle("lenient_states", c -> c.lenientStates, (c, v) -> c.lenientStates = v));
                 rows.add(toggle("trust_hidden", c -> c.trustHiddenBlocks, (c, v) -> c.trustHiddenBlocks = v));
+                rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
                 rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
                 rows.add(toggle("selection_boxes", c -> c.renderSelectionBoxes, (c, v) -> c.renderSelectionBoxes = v));
                 rows.add(number("render_distance", () -> this.working.renderDistance,

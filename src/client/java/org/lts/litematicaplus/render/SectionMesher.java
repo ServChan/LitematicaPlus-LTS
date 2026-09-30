@@ -15,6 +15,7 @@ import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
+import org.lts.litematicaplus.world.WorldCache;
 import org.lts.litematicaplus.world.PlacementVolume;
 import org.lwjgl.system.MemoryUtil;
 
@@ -51,13 +52,23 @@ public final class SectionMesher {
         }
     }
 
-    private MeshResult build(SectionJob job) {
-        SectionJob.Options options = job.options();
-        PlacementVolume volume = job.volume();
-        GhostSection section = job.section();
+    private MeshResult build(SectionJob live) {
+        SectionJob.Options options = live.options();
+        PlacementVolume volume = live.volume();
+        GhostSection section = live.section();
+        SectionJob job = live;
+        if (live.world() == null && live.remembered() == null && options.worldCache()) {
+            BlockState[] cached = WorldCache.section(live.level(), SectionPos.x(live.sectionKey()),
+                    SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
+            if (cached != null) {
+                job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
+                        live.specialByPalette(), cached, null, null, live.layer(), live.level(), live.blockModels(),
+                        live.fluidModels(), live.blockColors(), options);
+            }
+        }
         SectionVerdict verdict = job.world() == null && job.remembered() != null ? job.remembered()
                 : SectionVerdict.compute(section, volume.globalIds(), volume.solid(), job.world(), options.lenientStates(),
-                        options.trustHidden());
+                        options.trustHidden(), job.border());
         int sectionX = SectionPos.x(job.sectionKey());
         int sectionY = SectionPos.y(job.sectionKey());
         int sectionZ = SectionPos.z(job.sectionKey());
@@ -75,11 +86,14 @@ public final class SectionMesher {
         try {
             if (inLayer && options.ghostBlocks() && section.solidCount() > 0) {
                 this.ghost.reset();
+                this.ghost.offset((sectionX << 4) & GhostRenderer.ANCHOR_MASK, (sectionY << 4) & GhostRenderer.ANCHOR_MASK,
+                        (sectionZ << 4) & GhostRenderer.ANCHOR_MASK);
                 buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
                 ghostVertices = this.ghost.vertices();
                 ghostData = this.ghost.copy();
             }
-            if (inLayer && options.overlay() && verdict.worldKnown() && verdict.errors() > 0) {
+            if (inLayer && options.overlay() && verdict.worldKnown() && verdict.errors() > 0
+                    && (live.world() != null || options.throughWalls())) {
                 this.fill.reset();
                 this.lines.reset();
                 buildOverlay(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
@@ -161,6 +175,9 @@ public final class SectionMesher {
         byte[] categories = verdict.categories();
         LayerRange layer = job.layer();
         boolean layered = !layer.isAll();
+        BlockState[] world = job.world();
+        long[] border = job.border();
+        boolean surfaceOnly = !options.throughWalls() && world != null;
         for (int index = 0; index < GhostSection.VOLUME; index++) {
             byte category = categories[index];
             if (!shown(category, options)) {
@@ -190,6 +207,26 @@ public final class SectionMesher {
             }
             if (!same(categories, view, category, x + 1, y, z, originX, originY, originZ, layer, layered)) {
                 exposed |= EAST;
+            }
+            if (exposed != 0 && surfaceOnly) {
+                if ((exposed & DOWN) != 0 && SectionVerdict.occludes(world, border, x, y - 1, z)) {
+                    exposed &= ~DOWN;
+                }
+                if ((exposed & UP) != 0 && SectionVerdict.occludes(world, border, x, y + 1, z)) {
+                    exposed &= ~UP;
+                }
+                if ((exposed & NORTH) != 0 && SectionVerdict.occludes(world, border, x, y, z - 1)) {
+                    exposed &= ~NORTH;
+                }
+                if ((exposed & SOUTH) != 0 && SectionVerdict.occludes(world, border, x, y, z + 1)) {
+                    exposed &= ~SOUTH;
+                }
+                if ((exposed & WEST) != 0 && SectionVerdict.occludes(world, border, x - 1, y, z)) {
+                    exposed &= ~WEST;
+                }
+                if ((exposed & EAST) != 0 && SectionVerdict.occludes(world, border, x + 1, y, z)) {
+                    exposed &= ~EAST;
+                }
             }
             if (exposed == 0) {
                 continue;

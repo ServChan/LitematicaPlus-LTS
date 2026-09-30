@@ -108,6 +108,7 @@ public final class LitematicaPlusConfig {
     public boolean noteTuningHud = true;
     public boolean hudDiagnostics = false;
     public boolean trustHiddenBlocks = true;
+    public boolean useWorldCache = true;
     public boolean materialHelper = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;

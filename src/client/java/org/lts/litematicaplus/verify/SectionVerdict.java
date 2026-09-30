@@ -7,6 +7,13 @@ import org.lts.litematicaplus.world.GhostSection;
 public final class SectionVerdict {
     private static final int TYPES = MismatchType.VALUES.length;
 
+    public static final int FACE_DOWN = 0;
+    public static final int FACE_UP = 1;
+    public static final int FACE_NORTH = 2;
+    public static final int FACE_SOUTH = 3;
+    public static final int FACE_WEST = 4;
+    public static final int FACE_EAST = 5;
+    public static final int BORDER_LONGS = 24;
     private static final int[] NO_INTS = new int[0];
     private static final byte[] ALL_NONE = uniform(MismatchType.NONE);
     private static final byte[] ALL_CORRECT = uniform(MismatchType.CORRECT);
@@ -34,7 +41,37 @@ public final class SectionVerdict {
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
             boolean lenient) {
-        return compute(section, globalIds, solid, world, lenient, false);
+        return compute(section, globalIds, solid, world, lenient, false, null);
+    }
+
+    public static boolean borderSolid(long[] border, int face, int a, int b) {
+        if (border == null) {
+            return true;
+        }
+        int bit = a + b * 16;
+        return (border[face * 4 + (bit >> 6)] >>> (bit & 63) & 1L) != 0L;
+    }
+
+    public static boolean occludes(BlockState[] world, long[] border, int x, int y, int z) {
+        if (y < 0) {
+            return borderSolid(border, FACE_DOWN, x, z);
+        }
+        if (y > 15) {
+            return borderSolid(border, FACE_UP, x, z);
+        }
+        if (z < 0) {
+            return borderSolid(border, FACE_NORTH, x, y);
+        }
+        if (z > 15) {
+            return borderSolid(border, FACE_SOUTH, x, y);
+        }
+        if (x < 0) {
+            return borderSolid(border, FACE_WEST, z, y);
+        }
+        if (x > 15) {
+            return borderSolid(border, FACE_EAST, z, y);
+        }
+        return occluding(world, x | z << 4 | y << 8);
     }
 
     private static boolean occluding(BlockState[] world, int index) {
@@ -43,16 +80,20 @@ public final class SectionVerdict {
     }
 
     static boolean hidden(BlockState[] world, int index) {
+        return hidden(world, null, index);
+    }
+
+    static boolean hidden(BlockState[] world, long[] border, int index) {
         int x = index & 15;
         int z = index >> 4 & 15;
         int y = index >> 8;
-        return (x == 0 || occluding(world, index - 1)) && (x == 15 || occluding(world, index + 1))
-                && (z == 0 || occluding(world, index - 16)) && (z == 15 || occluding(world, index + 16))
-                && (y == 0 || occluding(world, index - 256)) && (y == 15 || occluding(world, index + 256));
+        return occludes(world, border, x - 1, y, z) && occludes(world, border, x + 1, y, z)
+                && occludes(world, border, x, y, z - 1) && occludes(world, border, x, y, z + 1)
+                && occludes(world, border, x, y - 1, z) && occludes(world, border, x, y + 1, z);
     }
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
-            boolean lenient, boolean trustHidden) {
+            boolean lenient, boolean trustHidden, long[] border) {
         byte[] categories = new byte[GhostSection.VOLUME];
         int[] counts = new int[TYPES];
         int[] correct = new int[globalIds.length];
@@ -87,7 +128,7 @@ public final class SectionVerdict {
             }
             int paletteIndex = value & 0xFFFF;
             MismatchType type = comparator.compare(globalIds[paletteIndex], worldId, lenient);
-            if (trustHidden && type == MismatchType.WRONG_BLOCK && hidden(world, i)) {
+            if (trustHidden && type == MismatchType.WRONG_BLOCK && hidden(world, border, i)) {
                 type = MismatchType.CORRECT;
             }
             int ordinal = type.ordinal();

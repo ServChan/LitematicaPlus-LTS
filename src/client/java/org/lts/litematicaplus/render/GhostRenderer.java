@@ -37,6 +37,7 @@ import org.lts.litematicaplus.engine.SectionSlot;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class GhostRenderer {
+    static final int ANCHOR_MASK = 1023;
     private static final int FULL_BRIGHT = 15728880;
     private static final int MAX_SPECIALS_PER_FRAME = 384;
     private static final double SPECIAL_RANGE_SQUARED = 72.0 * 72.0;
@@ -44,7 +45,7 @@ public final class GhostRenderer {
             | FrustumIntersection.PLANE_MASK_NY | FrustumIntersection.PLANE_MASK_PY;
     private static final Identifier BLOCK_ATLAS = Identifier.withDefaultNamespace("textures/atlas/blocks.png");
     private static final Matrix4f IDENTITY = new Matrix4f();
-    private static final Comparator<SectionSlot> FAR_TO_NEAR = (a, b) -> Float.compare(b.sortDistance, a.sortDistance);
+    private static final Comparator<SectionSlot> NEAR_TO_FAR = (a, b) -> Float.compare(a.sortDistance, b.sortDistance);
     private static final List<SectionSlot> GHOSTS = new ArrayList<>();
     private static final List<SectionSlot> OVERLAYS = new ArrayList<>();
     private static final Matrix4f FRUSTUM_MATRIX = new Matrix4f();
@@ -138,7 +139,7 @@ public final class GhostRenderer {
                 }
             }
         }
-        GHOSTS.sort(FAR_TO_NEAR);
+        GHOSTS.sort(NEAR_TO_FAR);
         lastDrawn = GHOSTS.size();
         boolean boxes = BoxRenderer.prepare(minecraft, cameraPos);
         if (GHOSTS.isEmpty() && OVERLAYS.isEmpty() && !boxes) {
@@ -170,10 +171,23 @@ public final class GhostRenderer {
                         RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
                 pass.setIndexBuffer(quadBuffer, quadType);
                 Vector4f color = new Vector4f(1.0F, 1.0F, 1.0F, config.ghostAlpha);
+                boolean anchored = false;
+                int anchorX = 0;
+                int anchorY = 0;
+                int anchorZ = 0;
                 for (SectionSlot slot : GHOSTS) {
-                    Vector3f offset = new Vector3f((float) (slot.originX - cameraPos.x),
-                            (float) (slot.originY - cameraPos.y), (float) (slot.originZ - cameraPos.z));
-                    pass.setUniform("DynamicTransforms", dynamic.writeTransform(modelView, color, offset, IDENTITY));
+                    int slotX = slot.originX & ~ANCHOR_MASK;
+                    int slotY = slot.originY & ~ANCHOR_MASK;
+                    int slotZ = slot.originZ & ~ANCHOR_MASK;
+                    if (!anchored || slotX != anchorX || slotY != anchorY || slotZ != anchorZ) {
+                        anchored = true;
+                        anchorX = slotX;
+                        anchorY = slotY;
+                        anchorZ = slotZ;
+                        Vector3f offset = new Vector3f((float) (anchorX - cameraPos.x), (float) (anchorY - cameraPos.y),
+                                (float) (anchorZ - cameraPos.z));
+                        pass.setUniform("DynamicTransforms", dynamic.writeTransform(modelView, color, offset, IDENTITY));
+                    }
                     pass.setVertexBuffer(0, slot.ghost().slice());
                     pass.drawIndexed(slot.ghostIndices(), 1, 0, 0, 0);
                 }
