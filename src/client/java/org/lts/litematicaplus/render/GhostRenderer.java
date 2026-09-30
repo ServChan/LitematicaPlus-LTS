@@ -87,7 +87,8 @@ public final class GhostRenderer {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         GhostEngine engine = GhostEngine.get();
         Minecraft minecraft = Minecraft.getInstance();
-        engine.frame(minecraft, camera.pos);
+        Vec3 focus = ExternalMap.focus(camera.pos);
+        engine.frame(minecraft, focus);
         if (!config.renderEnabled || minecraft.player == null || minecraft.level == null) {
             return;
         }
@@ -115,7 +116,10 @@ public final class GhostRenderer {
                 float centerY = minY + 8.0F;
                 float centerZ = minZ + 8.0F;
                 float distance = centerX * centerX + centerY * centerY + centerZ * centerZ;
-                if (distance > range) {
+                double focusX = slot.originX + 8.0 - focus.x;
+                double focusY = slot.originY + 8.0 - focus.y;
+                double focusZ = slot.originZ + 8.0 - focus.z;
+                if (focusX * focusX + focusY * focusY + focusZ * focusZ > range) {
                     continue;
                 }
                 slot.sortDistance = distance;

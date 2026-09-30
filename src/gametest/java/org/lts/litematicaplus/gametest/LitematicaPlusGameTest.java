@@ -66,6 +66,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 .adjustSettings(settings -> settings.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE))
                 .create()) {
             world.getConnection().waitForChunksRender();
+            if (System.getProperty("litematicaplus.mapOnly") != null) {
+                mapView(context, world);
+                return;
+            }
             if (System.getProperty("litematicaplus.stressOnly") != null) {
                 stress(context, world, null);
                 return;
@@ -370,6 +374,42 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         context.takeScreenshot("gui_two_placements");
         context.setScreen(() -> null);
         context.waitTicks(2);
+    }
+
+    private static void mapView(ClientGameTestContext context, TestSingleplayerContext world) throws IOException {
+        world.getServer().runCommand("tp @p -2.5 -59 -2.5 -45 12");
+        context.waitTicks(10);
+        Schematic house = house();
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/house.litematic");
+            SchematicIo.write(target, house);
+            return target;
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, ORIGIN));
+        settle(context, placement);
+        check(org.lts.litematicaplus.api.MapApi.placements().size() == 1, "the map API should list one placement");
+        context.waitTicks(40);
+        context.takeScreenshot("map_0_minimap");
+        context.getInput().pressKey(InputConstants.KEY_M);
+        context.waitTicks(80);
+        check(org.lts.litematicaplus.render.ExternalMap.active(), "pressing M should open the VoxyMap view");
+        context.takeScreenshot("map_1_open");
+        for (int i = 0; i < 14; i++) {
+            context.getInput().scroll(1.0);
+            context.waitTicks(3);
+        }
+        context.waitTicks(30);
+        context.takeScreenshot("map_1b_zoomed");
+        int scale = context.computeOnClient(client -> client.getWindow().getGuiScale());
+        click(context, scale, 30, 83);
+        context.waitTicks(20);
+        context.takeScreenshot("map_2_objects");
+        click(context, scale, 60, 190);
+        context.waitTicks(10);
+        context.takeScreenshot("map_3_selected");
+        System.out.println("MAP drawn=" + GhostRenderer.lastDrawn() + " screen="
+                + context.computeOnClient(client -> String.valueOf(client.gui.screen())));
+        checkHealthy();
     }
 
     private static void click(ClientGameTestContext context, int scale, int guiX, int guiY) {
