@@ -5,6 +5,7 @@
   "client": [
     "BlockModelRenderStateAccessor",
     "ClientLevelMixin",
+    "LevelRendererMixin",
     "MinecraftMixin",
     "MouseHandlerMixin"
   ],

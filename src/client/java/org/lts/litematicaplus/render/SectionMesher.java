@@ -1,10 +1,5 @@
 package org.lts.litematicaplus.render;
 
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import java.nio.ByteBuffer;
 import net.minecraft.client.renderer.block.BlockModelLighter;
@@ -21,7 +16,6 @@ import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
-import org.lwjgl.system.MemoryUtil;
 
 public final class SectionMesher {
     private static final ThreadLocal<SectionMesher> LOCAL = ThreadLocal.withInitial(SectionMesher::new);
@@ -39,12 +33,11 @@ public final class SectionMesher {
     private static final int WEST = 16;
     private static final int EAST = 32;
 
-    private final ByteBufferBuilder ghostBytes = new ByteBufferBuilder(1 << 18);
+    private final BlockVertexWriter ghost = new BlockVertexWriter(1 << 18);
     private final NativeWriter fill = new NativeWriter(1 << 14);
     private final NativeWriter lines = new NativeWriter(1 << 14);
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
     private final IntArrayList specials = new IntArrayList();
-    private BufferBuilder ghostBuilder;
 
     private SectionMesher() {
     }
@@ -74,17 +67,10 @@ public final class SectionMesher {
         boolean inLayer = job.layer().intersects(sectionX << 4, sectionY << 4, sectionZ << 4,
                 (sectionX << 4) + 15, (sectionY << 4) + 15, (sectionZ << 4) + 15);
         if (inLayer && options.ghostBlocks() && section.solidCount() > 0) {
-            MeshData mesh = buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
-            if (mesh != null) {
-                try {
-                    ByteBuffer source = mesh.vertexBuffer();
-                    ghostVertices = mesh.drawState().vertexCount();
-                    ghostData = MemoryUtil.memAlloc(source.remaining());
-                    MemoryUtil.memCopy(MemoryUtil.memAddress(source), MemoryUtil.memAddress(ghostData), source.remaining());
-                } finally {
-                    mesh.close();
-                }
-            }
+            this.ghost.reset();
+            buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
+            ghostVertices = this.ghost.vertices();
+            ghostData = this.ghost.copy();
         }
         ByteBuffer fillData = null;
         ByteBuffer lineData = null;
@@ -103,7 +89,7 @@ public final class SectionMesher {
                 this.specials.toIntArray(), ghostData, ghostVertices, fillData, fillVertices, lineData, lineVertices, null);
     }
 
-    private MeshData buildGhost(SectionJob job, SectionVerdict verdict, GhostBlockView view, int originX, int originY,
+    private void buildGhost(SectionJob job, SectionVerdict verdict, GhostBlockView view, int originX, int originY,
             int originZ) {
         PlacementVolume volume = job.volume();
         BlockState[] palette = volume.palette();
@@ -113,13 +99,12 @@ public final class SectionMesher {
         byte[] categories = verdict.categories();
         LayerRange layer = job.layer();
         boolean colliding = job.options().renderColliding();
-        this.ghostBuilder = null;
         BlockModelLighter.enableCaching();
         try {
             ModelBlockRenderer blockRenderer = new ModelBlockRenderer(true, true, job.blockColors());
             FluidRenderer fluidRenderer = new FluidRenderer(job.fluidModels());
-            BlockQuadOutput output = (x, y, z, quad, instance) -> builder().putBlockBakedQuad(x, y, z, quad, instance);
-            FluidRenderer.Output fluidOutput = ignored -> builder();
+            BlockQuadOutput output = this.ghost::putBlockBakedQuad;
+            FluidRenderer.Output fluidOutput = ignored -> this.ghost;
             for (int index = 0; index < GhostSection.VOLUME; index++) {
                 short value = raw[index];
                 if (value == GhostSection.OUTSIDE) {
@@ -156,18 +141,9 @@ public final class SectionMesher {
                     this.specials.add(paletteIndex);
                 }
             }
-            return this.ghostBuilder == null ? null : this.ghostBuilder.build();
         } finally {
             BlockModelLighter.clearCache();
-            this.ghostBuilder = null;
         }
-    }
-
-    private BufferBuilder builder() {
-        if (this.ghostBuilder == null) {
-            this.ghostBuilder = new BufferBuilder(this.ghostBytes, PrimitiveTopology.QUADS, DefaultVertexFormat.BLOCK);
-        }
-        return this.ghostBuilder;
     }
 
     private void buildOverlay(SectionJob job, SectionVerdict verdict, GhostBlockView view, int originX, int originY,

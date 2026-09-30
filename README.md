@@ -34,7 +34,9 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 - вставка сущностей, старый формат `.schematic` (MCEdit), сдвиг отдельных подрегионов, проекты схем, режимы инструмента «заливка/замена», сетка размещений;
 - на сервере вставка не переносит содержимое контейнеров (ограничение длины команды);
-- совместная работа с Sodium/Iris на 26.3 не проверялась; мод рисует собственным проходом поверх кадра и не трогает рендер чанков.
+- с шейдерами Iris призраки рисуются поверх готового кадра, поэтому на них не действуют тени, блум и тональная коррекция пакета; сундуки и другие блоки со специальной моделью рисуются игрой как обычные, непрозрачными.
+
+Совместимость проверена автотестом в игре: без модов рендера, с Sodium `0.9.3-alpha.1` и с Sodium + Iris `1.11.6` (шейдеры выключены и с пакетом Complementary Reimagined r5.9.3).
 
 ### Управление
 
@@ -110,7 +112,9 @@ Not ported from Litematica yet:
 
 - entity pasting, the legacy `.schematic` (MCEdit) format, moving individual sub-regions, schematic projects, the fill/replace tool modes, grid placements;
 - server-side paste does not carry container contents (command length limit);
-- running alongside Sodium/Iris on 26.3 has not been tested; the mod draws in its own pass on top of the frame and does not touch chunk rendering.
+- with Iris shaders the ghosts are drawn on top of the finished frame, so a pack's shadows, bloom and tone mapping do not apply to them; chests and other blocks with a special model are drawn by the game as ordinary, opaque blocks.
+
+Compatibility was checked by the automated in-game test: without render mods, with Sodium `0.9.3-alpha.1`, and with Sodium + Iris `1.11.6` (shaders off and with the Complementary Reimagined r5.9.3 pack).
 
 ### Controls
 

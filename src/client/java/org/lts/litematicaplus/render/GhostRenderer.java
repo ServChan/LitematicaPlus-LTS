@@ -58,16 +58,15 @@ public final class GhostRenderer {
     }
 
     public static void register() {
-        LevelRenderEvents.END_MAIN.register(GhostRenderer::renderMain);
         LevelRenderEvents.COLLECT_SUBMITS.register(GhostRenderer::collectSubmits);
     }
 
-    private static void renderMain(LevelRenderContext context) {
+    public static void renderAfterLevel(CameraRenderState camera) {
         if (drawFailed) {
             return;
         }
         try {
-            draw(context);
+            draw(camera);
         } catch (RuntimeException | LinkageError exception) {
             drawFailed = true;
             LitematicaPlusClient.LOGGER.error("Schematic rendering failed and was switched off for this session", exception);
@@ -77,7 +76,7 @@ public final class GhostRenderer {
         }
     }
 
-    private static void draw(LevelRenderContext context) {
+    private static void draw(CameraRenderState camera) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         GhostEngine engine = GhostEngine.get();
         Minecraft minecraft = Minecraft.getInstance();
@@ -85,7 +84,6 @@ public final class GhostRenderer {
         if (!config.renderEnabled || minecraft.player == null || minecraft.level == null) {
             return;
         }
-        CameraRenderState camera = context.levelState().cameraRenderState;
         Vec3 cameraPos = camera.pos;
         FRUSTUM_MATRIX.set(camera.projectionMatrix).mul(camera.viewRotationMatrix);
         FRUSTUM.set(FRUSTUM_MATRIX);
@@ -139,7 +137,7 @@ public final class GhostRenderer {
         RenderSystem.AutoStorageIndexBuffer lineIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.LINES);
         GpuBuffer lineBuffer = lineIndices.getBuffer(Math.max(6, Math.max(BoxRenderer.maxLineIndices(), engine.maxLineIndices())));
         IndexType lineType = lineIndices.type();
-        Matrix4f modelView = RenderSystem.getModelViewMatrixCopy();
+        Matrix4f modelView = new Matrix4f(camera.viewRotationMatrix);
         DynamicGpuData dynamic = RenderSystem.getDynamicUniforms();
         AbstractTexture atlas = minecraft.getTextureManager().getTexture(BLOCK_ATLAS);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(

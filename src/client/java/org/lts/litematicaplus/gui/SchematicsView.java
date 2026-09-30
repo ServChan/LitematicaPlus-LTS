@@ -30,7 +30,7 @@ final class SchematicsView extends TabView {
     private record Entry(Path path, boolean directory, boolean parent, String name, long size, long modified) {
     }
 
-    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
     private static final Map<String, SchematicMetadata> METADATA = new ConcurrentHashMap<>();
     private static Path currentDirectory;
     private static String filter = "";
