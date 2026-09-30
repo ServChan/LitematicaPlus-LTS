@@ -44,6 +44,7 @@ import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
@@ -510,11 +511,6 @@ public final class GhostEngine {
                         && (slot.hasSolid || slot.verdict != null && slot.verdict.errors() > 0)) {
                     markDirty(runtime, slot);
                 }
-                if (slot.verdict != null && slot.verdict.worldKnown() && !slot.inFlight
-                        && !current.hasChunk(slot.originX >> 4, slot.originZ >> 4)
-                        && !runtime.dirty.contains(slot.key)) {
-                    markDirty(runtime, slot);
-                }
             }
         }
     }
@@ -570,8 +566,10 @@ public final class GhostEngine {
                 slot.pendingGhost = ghost;
                 this.inFlight++;
                 this.jobsStarted++;
+                SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
+                        ? slot.verdict : null;
                 SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                        runtime.specialByPalette, world, this.layer, current, models, fluids,
+                        runtime.specialByPalette, world, remembered, this.layer, current, models, fluids,
                         minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
                 try {
                     executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));

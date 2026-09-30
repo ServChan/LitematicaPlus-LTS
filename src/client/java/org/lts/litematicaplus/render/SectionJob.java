@@ -5,6 +5,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.block.BlockStateModelSet;
 import net.minecraft.client.renderer.block.FluidStateModelSet;
 import net.minecraft.world.level.block.state.BlockState;
+import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
@@ -17,6 +18,7 @@ public record SectionJob(
         PlacementVolume volume,
         boolean[] specialByPalette,
         BlockState[] world,
+        SectionVerdict remembered,
         LayerRange layer,
         ClientLevel level,
         BlockStateModelSet blockModels,
