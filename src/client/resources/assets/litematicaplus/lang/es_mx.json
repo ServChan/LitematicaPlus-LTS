@@ -376,5 +376,10 @@
   "litematicaplus.hud.entity_blocked": "Difiere del esquema: %s",
   "litematicaplus.hud.entity_rotate": "Girar el objeto: %s",
   "litematicaplus.hud.entity_waiting": "Primero necesita su soporte: %s",
-  "litematicaplus.message.entity_random_painting": "No hay un cuadro con este dibujo en el inventario, así que el juego elige uno al azar"
+  "litematicaplus.message.entity_random_painting": "No hay un cuadro con este dibujo en el inventario, así que el juego elige uno al azar",
+  "litematicaplus.option.hud_diagnostics": "Diagnóstico en el panel",
+  "litematicaplus.option.hud_diagnostics.tip": "Dos líneas: secciones dibujadas / listas / totales, luego en cola, en proceso y rehechas en el último segundo.",
+  "litematicaplus.option.render_distance.tip": "Hasta qué distancia de la cámara se dibujan los bloques fantasma, en bloques. No depende de los chunks cargados.",
+  "litematicaplus.hud.diag_sections": "Secciones %1$s / %2$s / %3$s",
+  "litematicaplus.hud.diag_work": "Cola %1$s, en curso %2$s, por s %3$s"
 }

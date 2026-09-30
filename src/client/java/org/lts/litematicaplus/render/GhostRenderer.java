@@ -50,9 +50,14 @@ public final class GhostRenderer {
     private static final Matrix4f FRUSTUM_MATRIX = new Matrix4f();
     private static final FrustumIntersection FRUSTUM = new FrustumIntersection();
     private static boolean drawFailed;
+    private static int lastDrawn;
     private static boolean submitFailed;
 
     private GhostRenderer() {
+    }
+
+    public static int lastDrawn() {
+        return lastDrawn;
     }
 
     public static boolean failed() {
@@ -128,6 +133,7 @@ public final class GhostRenderer {
             }
         }
         GHOSTS.sort(FAR_TO_NEAR);
+        lastDrawn = GHOSTS.size();
         boolean boxes = BoxRenderer.prepare(minecraft, cameraPos);
         if (GHOSTS.isEmpty() && OVERLAYS.isEmpty() && !boxes) {
             return;

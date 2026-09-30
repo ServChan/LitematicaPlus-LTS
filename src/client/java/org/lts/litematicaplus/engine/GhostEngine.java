@@ -55,7 +55,9 @@ public final class GhostEngine {
     private static final double QUEUE_STALE_DISTANCE_SQUARED = 24.0 * 24.0;
     private static final int MAX_SLOT_FAILURES = 3;
     private static final int MAX_FAILURE_LOGS = 5;
-    private static final int UNLOAD_MARGIN = 48;
+    private static final int UNLOAD_MARGIN = 96;
+    private static final long UPLOAD_BUDGET_NANOS = 1_000_000L;
+    private long jobsStarted;
 
     private record Completed(PlacementRuntime runtime, MeshResult result, BlockState[] world) {
     }
@@ -109,6 +111,18 @@ public final class GhostEngine {
 
     public int maxLineIndices() {
         return this.maxLineIndices;
+    }
+
+    public int pending() {
+        int total = 0;
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            total += runtime.dirty.size();
+        }
+        return total;
+    }
+
+    public long jobsStarted() {
+        return this.jobsStarted;
     }
 
     public int inFlight() {
@@ -482,7 +496,8 @@ public final class GhostEngine {
     private void sweep(ClientLevel current, Vec3 camera) {
         int distance = TopView.ghostRange(LitematicaPlusConfig.current().renderDistance);
         double near = (double) distance * distance;
-        double far = (double) (distance + UNLOAD_MARGIN) * (distance + UNLOAD_MARGIN);
+        int margin = Math.max(UNLOAD_MARGIN, distance / 2);
+        double far = (double) (distance + margin) * (distance + margin);
         for (PlacementRuntime runtime : this.runtimes.values()) {
             for (SectionSlot slot : runtime.slots.values()) {
                 double range = distanceSquared(slot, camera);
@@ -554,6 +569,7 @@ public final class GhostEngine {
                 slot.inFlight = true;
                 slot.pendingGhost = ghost;
                 this.inFlight++;
+                this.jobsStarted++;
                 SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
                         runtime.specialByPalette, world, this.layer, current, models, fluids,
                         minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
@@ -707,8 +723,10 @@ public final class GhostEngine {
 
     public void drain(int limit) {
         int processed = 0;
+        long deadline = System.nanoTime() + UPLOAD_BUDGET_NANOS;
         Completed entry;
-        while (processed < limit && (entry = this.completed.poll()) != null) {
+        while (processed < limit && (processed == 0 || System.nanoTime() < deadline)
+                && (entry = this.completed.poll()) != null) {
             processed++;
             this.inFlight--;
             release(entry.world());

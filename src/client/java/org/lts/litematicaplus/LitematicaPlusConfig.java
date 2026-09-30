@@ -16,7 +16,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.lts.litematicaplus.util.Workers;
 
 public final class LitematicaPlusConfig {
-    private static final int CURRENT_CONFIG_VERSION = 3;
+    private static final int CURRENT_CONFIG_VERSION = 4;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
     private static final AtomicReference<LitematicaPlusConfig> PENDING = new AtomicReference<>();
@@ -66,10 +66,10 @@ public final class LitematicaPlusConfig {
     public float ghostAlpha = 0.65F;
     public float overlayFillAlpha = 0.22F;
     public float overlayLineAlpha = 0.9F;
-    public int renderDistance = 192;
+    public int renderDistance = 320;
     public int workerThreads = 0;
     public int meshUploadsPerFrame = 24;
-    public int snapshotBudgetMicros = 1500;
+    public int snapshotBudgetMicros = 600;
     public boolean showMissing = true;
     public boolean showExtra = true;
     public boolean showWrongBlock = true;
@@ -106,6 +106,7 @@ public final class LitematicaPlusConfig {
     public boolean breakWrongBlocks = false;
     public boolean entityPlacement = true;
     public boolean noteTuningHud = true;
+    public boolean hudDiagnostics = false;
     public boolean materialHelper = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
@@ -222,6 +223,14 @@ public final class LitematicaPlusConfig {
             config.easyPlaceAirPlacement = true;
             config.easyPlacePreset = config.easyPlaceDelayTicks == 2 ? PlacementPreset.BALANCED : PlacementPreset.CUSTOM;
         }
+        if (config.configVersion < 4) {
+            if (config.renderDistance == 192) {
+                config.renderDistance = 320;
+            }
+            if (config.snapshotBudgetMicros == 1500) {
+                config.snapshotBudgetMicros = 600;
+            }
+        }
         return config;
     }
 
@@ -230,7 +239,7 @@ public final class LitematicaPlusConfig {
         config.ghostAlpha = (float) clamp(config.ghostAlpha, 0.2, 1.0);
         config.overlayFillAlpha = (float) clamp(config.overlayFillAlpha, 0.0, 1.0);
         config.overlayLineAlpha = (float) clamp(config.overlayLineAlpha, 0.0, 1.0);
-        config.renderDistance = clamp(config.renderDistance, 32, 1024);
+        config.renderDistance = clamp(config.renderDistance, 32, 2048);
         config.workerThreads = clamp(config.workerThreads, 0, 16);
         config.meshUploadsPerFrame = clamp(config.meshUploadsPerFrame, 1, 256);
         config.snapshotBudgetMicros = clamp(config.snapshotBudgetMicros, 200, 10000);

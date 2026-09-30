@@ -38,6 +38,8 @@ public final class InfoHud {
     private static List<MaterialList.Entry> materials = List.of();
     private static Component target;
     private static int ticks;
+    private static long lastJobs;
+    private static long jobsPerSecond;
 
     private InfoHud() {
     }
@@ -68,6 +70,11 @@ public final class InfoHud {
                     }
                 }
             }
+        }
+        if (ticks % 20 == 0) {
+            long jobs = GhostEngine.get().jobsStarted();
+            jobsPerSecond = jobs - lastJobs;
+            lastJobs = jobs;
         }
         if (ticks % 10 != 0) {
             return;
@@ -133,6 +140,9 @@ public final class InfoHud {
         if (GhostRenderer.failed()) {
             lines++;
         }
+        if (config.hudDiagnostics) {
+            lines += 2;
+        }
         Component targeted = target;
         if (targeted != null) {
             lines++;
@@ -184,6 +194,21 @@ public final class InfoHud {
         }
         if (GhostRenderer.failed()) {
             graphics.text(font, Component.translatable("litematicaplus.hud.render_failed"), textX, cursor, Theme.DANGER, false);
+            cursor += LINE;
+        }
+        if (config.hudDiagnostics) {
+            GhostEngine engine = GhostEngine.get();
+            int total = 0;
+            int ready = 0;
+            for (PlacementRuntime each : engine.runtimes()) {
+                total += each.slotCount();
+                ready += each.drawable().size();
+            }
+            graphics.text(font, Component.translatable("litematicaplus.hud.diag_sections", GhostRenderer.lastDrawn(), ready,
+                    total), textX, cursor, Theme.TEXT_DIM, false);
+            cursor += LINE;
+            graphics.text(font, Component.translatable("litematicaplus.hud.diag_work", engine.pending(), engine.inFlight(),
+                    jobsPerSecond), textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (!materials.isEmpty()) {

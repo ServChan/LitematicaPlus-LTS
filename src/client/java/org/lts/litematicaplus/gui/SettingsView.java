@@ -199,12 +199,13 @@ final class SettingsView extends TabView {
                 rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
                 rows.add(toggle("selection_boxes", c -> c.renderSelectionBoxes, (c, v) -> c.renderSelectionBoxes = v));
                 rows.add(number("render_distance", () -> this.working.renderDistance,
-                        v -> this.working.renderDistance = v, 32, 1024, 16));
+                        v -> this.working.renderDistance = v, 32, 2048, 32));
                 rows.add(toggle("hud_enabled", c -> c.hudEnabled, (c, v) -> c.hudEnabled = v));
                 rows.add(toggle("hud_right_side", c -> c.hudRightSide, (c, v) -> c.hudRightSide = v));
                 rows.add(number("hud_material_lines", () -> this.working.hudMaterialLines,
                         v -> this.working.hudMaterialLines = v, 0, 16, 1));
                 rows.add(toggle("note_tuning_hud", c -> c.noteTuningHud, (c, v) -> c.noteTuningHud = v));
+                rows.add(toggle("hud_diagnostics", c -> c.hudDiagnostics, (c, v) -> c.hudDiagnostics = v));
             }
             case TOOLS -> {
                 rows.add(toggle("tool_enabled", c -> c.toolEnabled, (c, v) -> c.toolEnabled = v));

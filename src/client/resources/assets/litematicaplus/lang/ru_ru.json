@@ -376,5 +376,10 @@
   "litematicaplus.hud.entity_blocked": "Отличается от схемы: %s",
   "litematicaplus.hud.entity_rotate": "Повернуть предмет: %s",
   "litematicaplus.hud.entity_waiting": "Сначала нужна опора: %s",
-  "litematicaplus.message.entity_random_painting": "В инвентаре нет картины с этим рисунком, поэтому игра выберет случайный"
+  "litematicaplus.message.entity_random_painting": "В инвентаре нет картины с этим рисунком, поэтому игра выберет случайный",
+  "litematicaplus.option.hud_diagnostics": "Диагностика отрисовки на панели",
+  "litematicaplus.option.hud_diagnostics.tip": "Две строки: секций нарисовано / готово / всего, затем в очереди, в работе и перестроено за последнюю секунду.",
+  "litematicaplus.option.render_distance.tip": "Как далеко от камеры рисуются блоки-призраки, в блоках. Не зависит от прогруженных чанков.",
+  "litematicaplus.hud.diag_sections": "Секции %1$s / %2$s / %3$s",
+  "litematicaplus.hud.diag_work": "Очередь %1$s, в работе %2$s, за сек %3$s"
 }
