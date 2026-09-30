@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.SessionStore;
 
 public final class SelectionManager {
@@ -150,7 +151,7 @@ public final class SelectionManager {
     }
 
     private String defaultBoxName() {
-        return "Box " + (this.boxes.size() + 1);
+        return Component.translatable("litematicaplus.area.default_box", this.boxes.size() + 1).getString();
     }
 
     private static BlockPos pos(int[] values) {

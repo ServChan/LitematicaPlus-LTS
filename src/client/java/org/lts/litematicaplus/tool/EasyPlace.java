@@ -13,6 +13,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.block.NoteBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -50,8 +51,8 @@ public final class EasyPlace {
             return false;
         }
         if (config.easyPlaceEnabled && config.renderEnabled) {
-            GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, true);
-            if (hit != null && isPlaceable(minecraft.level, hit)) {
+            GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isPlaceable(minecraft.level, candidate));
+            if (hit != null) {
                 if (cooldown <= 0) {
                     place(minecraft, hit, config);
                 }
@@ -66,22 +67,23 @@ public final class EasyPlace {
         if (!config.pickBlockEnabled || !config.renderEnabled || minecraft.player == null) {
             return false;
         }
-        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, false);
+        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> candidate.type() == MismatchType.MISSING
+                && InventoryHelper.itemFor(candidate.state()) != Items.AIR);
         if (hit == null) {
             return false;
         }
         Item item = InventoryHelper.itemFor(hit.state());
-        if (item == Items.AIR) {
-            return false;
-        }
         if (!InventoryHelper.ensureInHand(minecraft, item)) {
             Notify.actionBar("litematicaplus.message.item_missing", new ItemStack(item).getHoverName());
         }
         return true;
     }
 
-    private static boolean isPlaceable(ClientLevel level, GhostRaycast.Hit hit) {
+    public static boolean isPlaceable(ClientLevel level, GhostRaycast.Hit hit) {
         BlockState target = hit.state();
+        if (!(InventoryHelper.itemFor(target) instanceof BlockItem)) {
+            return false;
+        }
         if (target.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
                 && target.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
             return false;
@@ -145,7 +147,7 @@ public final class EasyPlace {
         for (Direction side : DIRECTIONS) {
             BlockPos neighbor = pos.relative(side.getOpposite());
             BlockState neighborState = level.getBlockState(neighbor);
-            if (neighborState.canBeReplaced() || neighborState.hasBlockEntity()) {
+            if (!isPlainSupport(level, neighbor, neighborState)) {
                 continue;
             }
             for (double height : HEIGHTS) {
@@ -176,6 +178,13 @@ public final class EasyPlace {
             }
         }
         return config.easyPlaceStrictOrientation ? null : fallback;
+    }
+
+    private static boolean isPlainSupport(ClientLevel level, BlockPos pos, BlockState state) {
+        if (state.canBeReplaced() || state.hasBlockEntity() || state.getBlock() instanceof NoteBlock) {
+            return false;
+        }
+        return state.isCollisionShapeFullBlock(level, pos) && state.getMenuProvider(level, pos) == null;
     }
 
     private static Vec3 faceLocation(BlockPos block, Direction side, double height) {

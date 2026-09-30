@@ -85,6 +85,7 @@
   "litematicaplus.area.summary": "Boxes: %s, blocks: %s",
   "litematicaplus.area.empty_title": "No boxes yet",
   "litematicaplus.area.empty_hint": "Add a box, then set its two corners.",
+  "litematicaplus.area.default_box": "Box %s",
   "litematicaplus.area.add_box": "Add box",
   "litematicaplus.area.remove_box": "Remove",
   "litematicaplus.area.box_name": "Box name",

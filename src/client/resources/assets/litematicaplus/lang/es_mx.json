@@ -85,6 +85,7 @@
   "litematicaplus.area.summary": "Cajas: %s, bloques: %s",
   "litematicaplus.area.empty_title": "Aún no hay cajas",
   "litematicaplus.area.empty_hint": "Añade una caja y fija sus dos esquinas.",
+  "litematicaplus.area.default_box": "Caja %s",
   "litematicaplus.area.add_box": "Añadir",
   "litematicaplus.area.remove_box": "Quitar",
   "litematicaplus.area.box_name": "Nombre de la caja",

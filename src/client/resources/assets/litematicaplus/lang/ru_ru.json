@@ -85,6 +85,7 @@
   "litematicaplus.area.summary": "Боксов: %s, блоков: %s",
   "litematicaplus.area.empty_title": "Боксов пока нет",
   "litematicaplus.area.empty_hint": "Добавьте бокс и задайте два угла.",
+  "litematicaplus.area.default_box": "Бокс %s",
   "litematicaplus.area.add_box": "Добавить",
   "litematicaplus.area.remove_box": "Удалить",
   "litematicaplus.area.box_name": "Название бокса",

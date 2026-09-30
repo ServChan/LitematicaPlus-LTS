@@ -48,7 +48,7 @@ public final class SchematicCapture {
             if (box.isEmpty()) {
                 continue;
             }
-            String name = box.name().isBlank() ? "Box " + counter : box.name();
+            String name = box.name().isBlank() ? "Region " + counter : box.name();
             String unique = name;
             int suffix = 2;
             while (contains(frozen, unique)) {

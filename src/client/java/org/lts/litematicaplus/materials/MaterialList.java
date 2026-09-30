@@ -2,6 +2,7 @@ package org.lts.litematicaplus.materials;
 
 import it.unimi.dsi.fastutil.objects.Reference2LongMap;
 import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -120,12 +121,16 @@ public final class MaterialList {
             Item item = entry.getKey();
             entries.add(new Entry(item, entry.getLongValue(), missingByItem.getLong(item), available.getLong(item)));
         }
-        entries.sort(comparator(sort));
+        Reference2ObjectOpenHashMap<Item, String> names = new Reference2ObjectOpenHashMap<>();
+        for (Entry entry : entries) {
+            names.put(entry.item(), new ItemStack(entry.item()).getHoverName().getString());
+        }
+        entries.sort(comparator(sort, names));
         return entries;
     }
 
-    private static Comparator<Entry> comparator(Sort sort) {
-        Comparator<Entry> byName = Comparator.comparing(entry -> new ItemStack(entry.item()).getHoverName().getString());
+    private static Comparator<Entry> comparator(Sort sort, Reference2ObjectOpenHashMap<Item, String> names) {
+        Comparator<Entry> byName = Comparator.comparing(entry -> names.get(entry.item()));
         return switch (sort) {
             case TOTAL -> Comparator.comparingLong(Entry::total).reversed().thenComparing(byName);
             case NAME -> byName;

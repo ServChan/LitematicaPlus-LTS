@@ -12,10 +12,15 @@ public final class GhostRaycast {
     public record Hit(BlockPos pos, BlockState state, MismatchType type) {
     }
 
+    @FunctionalInterface
+    public interface Filter {
+        boolean accept(Hit hit);
+    }
+
     private GhostRaycast() {
     }
 
-    public static Hit trace(Minecraft minecraft, boolean includeWrongState) {
+    public static Hit trace(Minecraft minecraft, Filter filter) {
         if (minecraft.player == null || minecraft.level == null) {
             return null;
         }
@@ -45,10 +50,13 @@ public final class GhostRaycast {
         double travelled = 0.0;
         for (int guard = 0; guard < 256 && travelled <= reach; guard++) {
             MismatchType type = engine.categoryAt(x, y, z);
-            if (type == MismatchType.MISSING || includeWrongState && type == MismatchType.WRONG_STATE) {
+            if (type == MismatchType.MISSING || type == MismatchType.WRONG_STATE) {
                 BlockState state = engine.schematicStateAt(x, y, z);
                 if (state != null && !state.isAir()) {
-                    return new Hit(new BlockPos(x, y, z), state, type);
+                    Hit hit = new Hit(new BlockPos(x, y, z), state, type);
+                    if (filter.accept(hit)) {
+                        return hit;
+                    }
                 }
             }
             if (maxX <= maxY && maxX <= maxZ) {

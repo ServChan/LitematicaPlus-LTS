@@ -8,7 +8,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.lts.litematicaplus.LitematicaPlusConfig;
@@ -21,8 +20,8 @@ import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
+import org.lts.litematicaplus.tool.EasyPlace;
 import org.lts.litematicaplus.tool.GhostRaycast;
-import org.lts.litematicaplus.tool.InventoryHelper;
 import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.verify.MismatchType;
@@ -55,8 +54,9 @@ public final class InfoHud {
         if (++ticks % 2 == 0) {
             target = null;
             if (config.hudEnabled && config.renderEnabled && minecraft.gui.screen() == null) {
-                GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, true);
-                if (hit != null && InventoryHelper.itemFor(hit.state()) instanceof BlockItem) {
+                GhostRaycast.Hit hit = GhostRaycast.trace(minecraft,
+                        candidate -> EasyPlace.isPlaceable(minecraft.level, candidate));
+                if (hit != null) {
                     target = Component.translatable("litematicaplus.hud.target", hit.state().getBlock().getName());
                 }
             }

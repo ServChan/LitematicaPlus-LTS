@@ -256,9 +256,11 @@ public final class GhostEngine {
                     minecraft.execute(() -> install(target, token, volume));
                 } catch (RuntimeException | OutOfMemoryError exception) {
                     LitematicaPlusClient.LOGGER.error("Could not build placement '{}'", placement.name(), exception);
+                    String reason = exception instanceof OutOfMemoryError ? "not enough memory" : String.valueOf(exception.getMessage());
                     minecraft.execute(() -> {
                         if (target.buildToken == token) {
                             target.building = false;
+                            placement.markFailed(reason);
                         }
                     });
                 }
