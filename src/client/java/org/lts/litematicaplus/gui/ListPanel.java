@@ -3,6 +3,7 @@ package org.lts.litematicaplus.gui;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -27,6 +28,8 @@ public final class ListPanel<T> extends AbstractWidget {
     private int scroll;
     private Consumer<T> onSelect = item -> { };
     private Consumer<T> onActivate = item -> { };
+    private Consumer<T> onPress;
+    private Function<T, String> describer;
     private Component emptyTitle = Component.empty();
     private Component emptyHint = Component.empty();
 
@@ -43,6 +46,16 @@ public final class ListPanel<T> extends AbstractWidget {
 
     public ListPanel<T> onActivate(Consumer<T> listener) {
         this.onActivate = listener;
+        return this;
+    }
+
+    public ListPanel<T> onPress(Consumer<T> listener) {
+        this.onPress = listener;
+        return this;
+    }
+
+    public ListPanel<T> describe(Function<T, String> function) {
+        this.describer = function;
         return this;
     }
 
@@ -169,11 +182,16 @@ public final class ListPanel<T> extends AbstractWidget {
         if (event.y() < getY() + 1 || index < 0 || index >= this.items.size()) {
             return;
         }
+        if (maxScroll() > 0 && event.x() >= getX() + getWidth() - 6) {
+            return;
+        }
         boolean same = index == this.selected;
         this.selected = index;
         T item = this.items.get(index);
         this.onSelect.accept(item);
-        if (doubleClick && same) {
+        if (this.onPress != null) {
+            this.onPress.accept(item);
+        } else if (doubleClick && same) {
             this.onActivate.accept(item);
         }
     }
@@ -219,10 +237,15 @@ public final class ListPanel<T> extends AbstractWidget {
             next = 0;
         } else if (key == InputConstants.KEY_END) {
             next = this.items.size() - 1;
-        } else if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
+        } else if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER
+                || key == InputConstants.KEY_SPACE && this.onPress != null) {
             T item = selectedItem();
             if (item != null) {
-                this.onActivate.accept(item);
+                if (this.onPress != null) {
+                    this.onPress.accept(item);
+                } else {
+                    this.onActivate.accept(item);
+                }
                 return true;
             }
             return false;
@@ -240,5 +263,13 @@ public final class ListPanel<T> extends AbstractWidget {
     @Override
     protected void updateWidgetNarration(NarrationElementOutput output) {
         output.add(NarratedElementType.TITLE, getMessage());
+        T item = selectedItem();
+        if (item != null) {
+            output.add(NarratedElementType.POSITION, Component.translatable("narrator.position.list",
+                    this.selected + 1, this.items.size()));
+            if (this.describer != null) {
+                output.add(NarratedElementType.HINT, Component.literal(this.describer.apply(item)));
+            }
+        }
     }
 }

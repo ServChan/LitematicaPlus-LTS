@@ -18,6 +18,7 @@ import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SchematicCapture;
 import org.lts.litematicaplus.selection.SelectionManager;
+import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 
 final class AreaView extends TabView {
@@ -53,6 +54,7 @@ final class AreaView extends TabView {
         int buttonsY = this.top + this.height - Theme.CONTROL_HEIGHT;
         this.list = add(new ListPanel<AreaBox>(this.left, this.top, listWidth, this.height - Theme.CONTROL_HEIGHT - 4,
                 Theme.ROW_HEIGHT, tr("litematicaplus.tab.area"), this::renderRow)
+                .describe(AreaBox::name)
                 .onSelect(box -> {
                     selection.select(selection.boxes().indexOf(box));
                     this.screen.refresh();
@@ -92,7 +94,7 @@ final class AreaView extends TabView {
         EditBox file = field(x, this.saveTop + 11, this.detailWidth, fileName, tr("litematicaplus.area.file_name"), 80);
         file.setResponder(value -> {
             fileName = value;
-            this.overwriteArmed = false;
+            disarmOverwrite();
             updateSave();
         });
         this.saveButton = add(FlatButton.primary(x + this.detailWidth - saveWidth,
@@ -152,6 +154,13 @@ final class AreaView extends TabView {
         }
     }
 
+    private void disarmOverwrite() {
+        this.overwriteArmed = false;
+        if (this.saveButton != null) {
+            this.saveButton.setMessage(tr("litematicaplus.area.save"));
+        }
+    }
+
     private static String cleanName(String raw) {
         String clean = raw.strip().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
         if (clean.toLowerCase(java.util.Locale.ROOT).endsWith(SchematicIo.LITEMATIC_EXTENSION)) {
@@ -159,6 +168,9 @@ final class AreaView extends TabView {
         }
         while (clean.endsWith(".") || clean.endsWith(" ")) {
             clean = clean.substring(0, clean.length() - 1);
+        }
+        if (clean.matches("(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(\\..*)?")) {
+            clean = "_" + clean;
         }
         return clean;
     }
@@ -185,10 +197,11 @@ final class AreaView extends TabView {
         Path target = PlacementManager.schematicsDirectory().resolve(name + SchematicIo.LITEMATIC_EXTENSION);
         if (Files.exists(target) && !this.overwriteArmed) {
             this.overwriteArmed = true;
+            this.saveButton.setMessage(tr("litematicaplus.area.replace"));
             setStatus(tr("litematicaplus.area.error_exists", target.getFileName().toString()), Theme.WARNING);
             return;
         }
-        this.overwriteArmed = false;
+        disarmOverwrite();
         this.saving = true;
         updateSave();
         setStatus(tr("litematicaplus.area.saving"), Theme.TEXT_DIM);
@@ -196,7 +209,7 @@ final class AreaView extends TabView {
                 ? this.minecraft.player.getGameProfile().name() : LitematicaPlusConfig.current().defaultAuthor;
         SchematicCapture.capture(this.minecraft, boxes, name, author, "").whenComplete((result, failure) -> {
             if (failure != null || result == null) {
-                finish(tr("litematicaplus.area.error_capture", message(failure)), Theme.DANGER);
+                finish(tr("litematicaplus.area.error_capture", Notify.describe(failure)), Theme.DANGER);
                 return;
             }
             try {
@@ -204,24 +217,22 @@ final class AreaView extends TabView {
                     try {
                         SchematicIo.write(target, result.schematic());
                         long blocks = result.schematic().metadata().totalBlocks;
-                        finish(tr("litematicaplus.area.saved", blocks, target.getFileName().toString()), Theme.SUCCESS);
+                        this.minecraft.execute(() -> PlacementManager.get().invalidate(target));
+                        if (result.unloadedChunks() > 0) {
+                            finish(tr("litematicaplus.area.saved_partial", blocks, target.getFileName().toString(),
+                                    result.unloadedChunks()), Theme.WARNING);
+                        } else {
+                            finish(tr("litematicaplus.area.saved", blocks, target.getFileName().toString()), Theme.SUCCESS);
+                        }
                     } catch (IOException | RuntimeException exception) {
                         LitematicaPlusClient.LOGGER.error("Could not save schematic {}", target, exception);
-                        finish(tr("litematicaplus.area.error_write", String.valueOf(exception.getMessage())), Theme.DANGER);
+                        finish(tr("litematicaplus.area.error_write", Notify.describe(exception)), Theme.DANGER);
                     }
                 });
             } catch (RejectedExecutionException exception) {
-                finish(tr("litematicaplus.area.error_write", String.valueOf(exception.getMessage())), Theme.DANGER);
+                finish(tr("litematicaplus.area.error_write", Notify.describe(exception)), Theme.DANGER);
             }
         });
-    }
-
-    private static String message(Throwable failure) {
-        if (failure == null) {
-            return "";
-        }
-        Throwable cause = failure.getCause() != null ? failure.getCause() : failure;
-        return String.valueOf(cause.getMessage());
     }
 
     private void finish(Component message, int color) {
@@ -235,7 +246,8 @@ final class AreaView extends TabView {
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, AreaBox box, int x, int y, int rowWidth,
             int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
-        String size = box.isEmpty() ? "-" : box.sizeX() + "x" + box.sizeY() + "x" + box.sizeZ();
+        String size = box.isEmpty() ? "-" : box.isComplete() ? box.sizeX() + "x" + box.sizeY() + "x" + box.sizeZ()
+                : tr("litematicaplus.area.incomplete").getString();
         int sizeWidth = rowFont.width(size);
         Ui.clipped(graphics, rowFont, box.name().isBlank() ? "?" : box.name(), x + 8, textY, rowWidth - sizeWidth - 22,
                 Theme.TEXT_BRIGHT);
@@ -253,8 +265,8 @@ final class AreaView extends TabView {
                     LitematicaPlusConfig.current().toolItem), this.detailX, this.top + 2, this.detailWidth, Theme.TEXT_DIM, false);
         }
         Ui.label(graphics, this.font, tr("litematicaplus.area.save_label"), this.detailX, this.saveTop);
-        int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 6;
+        int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 1;
         int statusWidth = this.detailWidth - Math.min(110, this.detailWidth / 3) - 8;
-        Ui.clipped(graphics, this.font, this.status.getString(), this.detailX, statusY, statusWidth, this.statusColor);
+        Ui.wrapped(graphics, this.font, this.status, this.detailX, statusY, statusWidth, 2, this.statusColor, mouseX, mouseY);
     }
 }

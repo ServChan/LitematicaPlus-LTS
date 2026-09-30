@@ -16,6 +16,7 @@ import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
+import org.lwjgl.system.MemoryUtil;
 
 public final class SectionMesher {
     private static final ThreadLocal<SectionMesher> LOCAL = ThreadLocal.withInitial(SectionMesher::new);
@@ -62,28 +63,35 @@ public final class SectionMesher {
         GhostBlockView view = new GhostBlockView(volume, job.layer(), job.level());
         view.bind(sectionX, sectionY, sectionZ);
         ByteBuffer ghostData = null;
+        ByteBuffer fillData = null;
+        ByteBuffer lineData = null;
         int ghostVertices = 0;
+        int fillVertices = 0;
+        int lineVertices = 0;
         this.specials.clear();
         boolean inLayer = job.layer().intersects(sectionX << 4, sectionY << 4, sectionZ << 4,
                 (sectionX << 4) + 15, (sectionY << 4) + 15, (sectionZ << 4) + 15);
-        if (inLayer && options.ghostBlocks() && section.solidCount() > 0) {
-            this.ghost.reset();
-            buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
-            ghostVertices = this.ghost.vertices();
-            ghostData = this.ghost.copy();
-        }
-        ByteBuffer fillData = null;
-        ByteBuffer lineData = null;
-        int fillVertices = 0;
-        int lineVertices = 0;
-        if (inLayer && options.overlay() && verdict.worldKnown() && verdict.errors() > 0) {
-            this.fill.reset();
-            this.lines.reset();
-            buildOverlay(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
-            fillVertices = this.fill.size() / 16;
-            lineVertices = this.lines.size() / 24;
-            fillData = this.fill.copy();
-            lineData = this.lines.copy();
+        try {
+            if (inLayer && options.ghostBlocks() && section.solidCount() > 0) {
+                this.ghost.reset();
+                buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
+                ghostVertices = this.ghost.vertices();
+                ghostData = this.ghost.copy();
+            }
+            if (inLayer && options.overlay() && verdict.worldKnown() && verdict.errors() > 0) {
+                this.fill.reset();
+                this.lines.reset();
+                buildOverlay(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
+                fillVertices = this.fill.size() / 16;
+                lineVertices = this.lines.size() / 24;
+                fillData = this.fill.copy();
+                lineData = this.lines.copy();
+            }
+        } catch (Throwable throwable) {
+            MemoryUtil.memFree(ghostData);
+            MemoryUtil.memFree(fillData);
+            MemoryUtil.memFree(lineData);
+            throw throwable;
         }
         return new MeshResult(job.sectionKey(), job.generation(), job.revision(), verdict,
                 this.specials.toIntArray(), ghostData, ghostVertices, fillData, fillVertices, lineData, lineVertices, null);

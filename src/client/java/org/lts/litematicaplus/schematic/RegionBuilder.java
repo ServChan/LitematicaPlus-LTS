@@ -69,9 +69,7 @@ public final class RegionBuilder {
             this.lastState = state;
             this.lastIndex = index;
         }
-        if (index != 0) {
-            this.states.set(((long) y * this.sizeZ + z) * this.sizeX + x, index);
-        }
+        this.states.set(((long) y * this.sizeZ + z) * this.sizeX + x, index);
     }
 
     public void blockEntity(int x, int y, int z, CompoundTag tag) {

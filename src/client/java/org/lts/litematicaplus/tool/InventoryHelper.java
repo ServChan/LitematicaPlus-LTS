@@ -10,6 +10,10 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 
 public final class InventoryHelper {
+    private static final int HOTBAR_SIZE = 9;
+    private static final int MAIN_SIZE = 36;
+    private static final int HOTBAR_MENU_OFFSET = 36;
+
     private InventoryHelper() {
     }
 
@@ -27,42 +31,43 @@ public final class InventoryHelper {
         if (inventory.getSelectedItem().is(item)) {
             return true;
         }
-        for (int slot = 0; slot < 9; slot++) {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
             if (inventory.getItem(slot).is(item)) {
                 inventory.setSelectedSlot(slot);
                 return true;
             }
         }
-        if (player.hasInfiniteMaterials()) {
-            int slot = emptyHotbarSlot(inventory);
-            ItemStack stack = new ItemStack(item);
-            inventory.setSelectedSlot(slot);
-            inventory.setItem(slot, stack);
-            minecraft.gameMode.handleCreativeModeItemAdd(stack, 36 + slot);
-            return true;
+        boolean ownInventory = player.containerMenu == player.inventoryMenu;
+        if (ownInventory) {
+            for (int slot = HOTBAR_SIZE; slot < MAIN_SIZE; slot++) {
+                if (inventory.getItem(slot).is(item)) {
+                    minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot,
+                            inventory.getSelectedSlot(), ContainerInput.SWAP, player);
+                    return true;
+                }
+            }
         }
-        if (player.containerMenu != player.inventoryMenu) {
+        if (!player.hasInfiniteMaterials()) {
             return false;
         }
-        for (int slot = 9; slot < 36; slot++) {
-            if (inventory.getItem(slot).is(item)) {
-                minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot,
-                        inventory.getSelectedSlot(), ContainerInput.SWAP, player);
-                return true;
+        int slot = inventory.getSuitableHotbarSlot();
+        ItemStack displaced = inventory.getItem(slot);
+        if (!displaced.isEmpty()) {
+            int free = inventory.getFreeSlot();
+            if (free >= 0 && free < MAIN_SIZE) {
+                ItemStack moved = displaced.copy();
+                inventory.setItem(free, moved);
+                minecraft.gameMode.handleCreativeModeItemAdd(moved, menuSlot(free));
             }
         }
-        return false;
+        ItemStack stack = new ItemStack(item);
+        inventory.setSelectedSlot(slot);
+        inventory.setItem(slot, stack);
+        minecraft.gameMode.handleCreativeModeItemAdd(stack, menuSlot(slot));
+        return true;
     }
 
-    private static int emptyHotbarSlot(Inventory inventory) {
-        if (inventory.getSelectedItem().isEmpty()) {
-            return inventory.getSelectedSlot();
-        }
-        for (int slot = 0; slot < 9; slot++) {
-            if (inventory.getItem(slot).isEmpty()) {
-                return slot;
-            }
-        }
-        return inventory.getSelectedSlot();
+    private static int menuSlot(int inventorySlot) {
+        return inventorySlot < HOTBAR_SIZE ? HOTBAR_MENU_OFFSET + inventorySlot : inventorySlot;
     }
 }

@@ -25,6 +25,8 @@ final class MaterialsView extends TabView {
     private int scroll;
     private int columnWidth;
     private boolean showStacks;
+    private FlatButton copyButton;
+    private int copiedTicks;
 
     MaterialsView(HubScreen screen) {
         super(screen);
@@ -54,13 +56,14 @@ final class MaterialsView extends TabView {
                     hideCompleted = !hideCompleted;
                     recompute();
                 }));
-        add(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, this.top, this.width - (third + Theme.GAP) * 2,
-                tr("litematicaplus.materials.copy"), button -> copy()));
+        this.copyButton = add(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, this.top,
+                this.width - (third + Theme.GAP) * 2, tr("litematicaplus.materials.copy"), button -> copy()));
         int listTop = this.top + Theme.CONTROL_HEIGHT + 16;
         this.columnWidth = Math.max(44, Math.min(110, this.width / 5));
         this.showStacks = this.width >= 400;
         this.list = add(new ListPanel<MaterialList.Entry>(this.left, listTop, this.width, this.top + this.height - listTop,
                 Theme.ROW_HEIGHT, tr("litematicaplus.tab.materials"), this::renderRow)
+                .describe(entry -> InfoHud.stackOf(entry.item()).getHoverName().getString() + " " + entry.missing())
                 .empty(tr("litematicaplus.materials.empty_title"), tr("litematicaplus.materials.empty_hint")));
         recompute();
         this.list.setScroll(this.scroll);
@@ -73,6 +76,15 @@ final class MaterialsView extends TabView {
             return;
         }
         PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+        if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
+            this.list.empty(tr("litematicaplus.state.failed_title"), tr("litematicaplus.state.failed_hint"));
+        } else if (!placement.enabled()) {
+            this.list.empty(tr("litematicaplus.state.hidden_title"), tr("litematicaplus.state.hidden_hint"));
+        } else if (runtime == null || runtime.volume() == null || runtime.pendingSections() > 0 && runtime.verifiedSections() == 0) {
+            this.list.empty(tr("litematicaplus.state.loading_title"), tr("litematicaplus.state.loading_hint"));
+        } else {
+            this.list.empty(tr("litematicaplus.materials.empty_title"), tr("litematicaplus.materials.empty_hint"));
+        }
         List<MaterialList.Entry> all = MaterialList.compute(runtime,
                 this.minecraft.player == null ? null : this.minecraft.player.getInventory(), sort);
         List<MaterialList.Entry> shown = new ArrayList<>();
@@ -100,12 +112,19 @@ final class MaterialsView extends TabView {
                     .append(entry.available()).append('\n');
         }
         this.minecraft.keyboardHandler.setClipboard(builder.toString());
+        if (this.copyButton != null) {
+            this.copyButton.setMessage(tr("litematicaplus.materials.copied"));
+            this.copiedTicks = 40;
+        }
     }
 
     @Override
     void tick() {
         if (this.list != null) {
             this.scroll = this.list.scroll();
+            if (this.copiedTicks > 0 && --this.copiedTicks == 0 && this.copyButton != null) {
+                this.copyButton.setMessage(tr("litematicaplus.materials.copy"));
+            }
             if (++this.ticks % 10 == 0) {
                 recompute();
             }

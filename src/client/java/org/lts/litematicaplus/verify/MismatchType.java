@@ -19,6 +19,15 @@ public enum MismatchType {
         this.key = key;
     }
 
+    public int textColor() {
+        return switch (this) {
+            case WRONG_BLOCK -> 0xFFFF9090;
+            case EXTRA -> 0xFFFF8AE6;
+            case UNKNOWN -> 0xFF9FB5CB;
+            default -> this.color;
+        };
+    }
+
     public int color() {
         return this.color;
     }

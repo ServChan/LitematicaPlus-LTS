@@ -17,6 +17,18 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.Property;
 
 public final class BlockStateNbt {
+    public static final class Unresolved {
+        private int count;
+
+        public int count() {
+            return this.count;
+        }
+
+        void add() {
+            this.count++;
+        }
+    }
+
     private BlockStateNbt() {
     }
 
@@ -25,6 +37,10 @@ public final class BlockStateNbt {
     }
 
     public static BlockState read(CompoundTag tag, int dataVersion) {
+        return read(tag, dataVersion, null);
+    }
+
+    public static BlockState read(CompoundTag tag, int dataVersion, Unresolved unresolved) {
         CompoundTag fixed = tag;
         int current = currentDataVersion();
         if (dataVersion > 0 && dataVersion < current) {
@@ -39,17 +55,21 @@ public final class BlockStateNbt {
                 fixed = tag;
             }
         }
-        return read(fixed);
+        return read(fixed, unresolved);
     }
 
     public static BlockState read(CompoundTag tag) {
+        return read(tag, null);
+    }
+
+    public static BlockState read(CompoundTag tag, Unresolved unresolved) {
         String name = tag.getString("Name").or(() -> tag.getString("id")).orElse("");
         Identifier id = Identifier.tryParse(name);
-        if (id == null) {
-            return Blocks.AIR.defaultBlockState();
-        }
-        Optional<Block> block = BuiltInRegistries.BLOCK.getOptional(id);
+        Optional<Block> block = id == null ? Optional.empty() : BuiltInRegistries.BLOCK.getOptional(id);
         if (block.isEmpty()) {
+            if (unresolved != null && !name.isBlank()) {
+                unresolved.add();
+            }
             return Blocks.AIR.defaultBlockState();
         }
         BlockState state = block.get().defaultBlockState();
@@ -68,33 +88,47 @@ public final class BlockStateNbt {
     }
 
     public static BlockState parse(String text) {
+        return read(toTag(text), null);
+    }
+
+    public static BlockState parse(String text, int dataVersion, Unresolved unresolved) {
+        return read(toTag(text), dataVersion, unresolved);
+    }
+
+    public static CompoundTag toTag(String text) {
         String trimmed = text.trim();
         int bracket = trimmed.indexOf('[');
-        String name = bracket < 0 ? trimmed : trimmed.substring(0, bracket);
-        Identifier id = Identifier.tryParse(name);
-        if (id == null) {
-            return Blocks.AIR.defaultBlockState();
-        }
-        Optional<Block> block = BuiltInRegistries.BLOCK.getOptional(id);
-        if (block.isEmpty()) {
-            return Blocks.AIR.defaultBlockState();
-        }
-        BlockState state = block.get().defaultBlockState();
+        CompoundTag tag = new CompoundTag();
+        tag.putString("Name", bracket < 0 ? trimmed : trimmed.substring(0, bracket));
         if (bracket < 0 || !trimmed.endsWith("]")) {
-            return state;
+            return tag;
         }
-        StateDefinition<Block, BlockState> definition = block.get().getStateDefinition();
+        CompoundTag properties = new CompoundTag();
         for (String pair : trimmed.substring(bracket + 1, trimmed.length() - 1).split(",")) {
             int equals = pair.indexOf('=');
-            if (equals <= 0) {
-                continue;
-            }
-            Property<?> property = definition.getProperty(pair.substring(0, equals).trim());
-            if (property != null) {
-                state = apply(state, property, pair.substring(equals + 1).trim());
+            if (equals > 0) {
+                properties.putString(pair.substring(0, equals).trim(), pair.substring(equals + 1).trim());
             }
         }
-        return state;
+        if (!properties.isEmpty()) {
+            tag.put("Properties", properties);
+        }
+        return tag;
+    }
+
+    public static CompoundTag fixBlockEntity(CompoundTag tag, int dataVersion) {
+        int current = currentDataVersion();
+        if (dataVersion <= 0 || dataVersion >= current || !tag.contains("id")) {
+            return tag;
+        }
+        try {
+            Tag updated = DataFixers.getDataFixer()
+                    .update(References.BLOCK_ENTITY, new Dynamic<>(NbtOps.INSTANCE, tag.copy()), dataVersion, current)
+                    .getValue();
+            return updated instanceof CompoundTag compound ? compound : tag;
+        } catch (RuntimeException exception) {
+            return tag;
+        }
     }
 
     public static CompoundTag write(BlockState state) {

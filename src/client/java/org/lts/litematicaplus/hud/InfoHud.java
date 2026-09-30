@@ -55,7 +55,7 @@ public final class InfoHud {
             target = null;
             if (config.hudEnabled && config.renderEnabled && minecraft.gui.screen() == null) {
                 GhostRaycast.Hit hit = GhostRaycast.trace(minecraft,
-                        candidate -> EasyPlace.isPlaceable(minecraft.level, candidate));
+                        candidate -> EasyPlace.isPlaceable(minecraft, candidate));
                 if (hit != null) {
                     target = Component.translatable("litematicaplus.hud.target", hit.state().getBlock().getName());
                 }
@@ -88,7 +88,7 @@ public final class InfoHud {
         if (minecraft.player == null || minecraft.level == null || minecraft.gui.hud.isHidden()) {
             return;
         }
-        if (minecraft.gui.screen() != null) {
+        if (minecraft.gui.screen() != null || minecraft.gui.hud.getDebugOverlay().showDebugScreen()) {
             return;
         }
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
@@ -150,8 +150,9 @@ public final class InfoHud {
             cursor += LINE;
         }
         if (box != null && !box.isEmpty()) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.selection", box.name(), box.sizeX(),
-                    box.sizeY(), box.sizeZ()), textX, cursor, Theme.TEXT_DIM, false);
+            graphics.text(font, font.plainSubstrByWidth(Component.translatable("litematicaplus.hud.selection",
+                    box.name(), box.sizeX(), box.sizeY(), box.sizeZ()).getString(), WIDTH - PADDING * 2 - 4),
+                    textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (PasteController.active()) {
@@ -169,7 +170,7 @@ public final class InfoHud {
         }
         if (!materials.isEmpty()) {
             cursor += 2;
-            graphics.fill(textX, cursor - 1, x + WIDTH - PADDING, cursor, Theme.BORDER);
+            graphics.fill(textX, cursor - 1, x + WIDTH - PADDING, cursor, Theme.DIVIDER);
             cursor += 2;
             for (MaterialList.Entry entry : materials) {
                 ItemStack stack = stackOf(entry.item());
@@ -219,10 +220,10 @@ public final class InfoHud {
         long wrong = runtime.count(MismatchType.WRONG_BLOCK) + runtime.count(MismatchType.WRONG_STATE);
         int cx = textX;
         cx = stat(graphics, font, "litematicaplus.hud.missing", runtime.count(MismatchType.MISSING),
-                MismatchType.MISSING.color(), cx, cursor);
-        cx = stat(graphics, font, "litematicaplus.hud.wrong", wrong, MismatchType.WRONG_BLOCK.color(), cx, cursor);
+                MismatchType.MISSING.textColor(), cx, cursor);
+        cx = stat(graphics, font, "litematicaplus.hud.wrong", wrong, MismatchType.WRONG_BLOCK.textColor(), cx, cursor);
         stat(graphics, font, "litematicaplus.hud.extra", runtime.count(MismatchType.EXTRA),
-                MismatchType.EXTRA.color(), cx, cursor);
+                MismatchType.EXTRA.textColor(), cx, cursor);
         return cursor + LINE;
     }
 

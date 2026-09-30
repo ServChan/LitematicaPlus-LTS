@@ -6,6 +6,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class VanillaStructureCodec {
     private VanillaStructureCodec() {
@@ -21,16 +22,21 @@ public final class VanillaStructureCodec {
         int sizeY = size.getIntOr(1, 0);
         int sizeZ = size.getIntOr(2, 0);
         if (sizeX <= 0 || sizeY <= 0 || sizeZ <= 0) {
-            throw new IOException("Structure file has an empty size");
+            throw new LocalizedException("litematicaplus.error.empty_schematic", "Structure file has an empty size");
+        }
+        long volume = (long) sizeX * sizeY * sizeZ;
+        if (volume > LitematicCodec.MAX_REGION_VOLUME) {
+            throw new LocalizedException("litematicaplus.error.too_large", "Structure file is too large: " + volume + " blocks");
         }
         int dataVersion = root.getIntOr("DataVersion", 0);
+        BlockStateNbt.Unresolved unresolved = new BlockStateNbt.Unresolved();
         ListTag paletteTag = root.getListOrEmpty("palette");
         if (paletteTag.isEmpty()) {
             paletteTag = root.getListOrEmpty("palettes").getListOrEmpty(0);
         }
         BlockState[] palette = new BlockState[paletteTag.size()];
         for (int i = 0; i < palette.length; i++) {
-            palette[i] = BlockStateNbt.read(paletteTag.getCompoundOrEmpty(i), dataVersion);
+            palette[i] = BlockStateNbt.read(paletteTag.getCompoundOrEmpty(i), dataVersion, unresolved);
         }
         RegionBuilder builder = new RegionBuilder(fallbackName, 0, 0, 0, sizeX, sizeY, sizeZ);
         ListTag blocks = root.getListOrEmpty("blocks");
@@ -70,6 +76,7 @@ public final class VanillaStructureCodec {
         metadata.author = root.getStringOr("author", "");
         metadata.dataVersion = dataVersion;
         metadata.totalBlocks = count;
+        metadata.unknownStates = unresolved.count();
         metadata.format = "structure";
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
     }

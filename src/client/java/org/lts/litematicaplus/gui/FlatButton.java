@@ -92,9 +92,11 @@ public final class FlatButton extends AbstractButton {
                 text = on ? Theme.TEXT_BRIGHT : hovered ? Theme.TEXT : Theme.TEXT_DIM;
             }
             default -> {
-                fill = !this.active ? Theme.SURFACE : hovered ? Theme.SURFACE_HOVER : Theme.SURFACE_RAISED;
-                border = hovered ? Theme.BORDER_STRONG : Theme.BORDER;
-                text = this.active ? Theme.TEXT : Theme.TEXT_DISABLED;
+                boolean marked = on && this.style == Style.SECONDARY;
+                fill = !this.active ? Theme.SURFACE : marked ? Theme.SURFACE_SELECTED
+                        : hovered ? Theme.SURFACE_HOVER : Theme.SURFACE_RAISED;
+                border = marked ? Theme.ACCENT : hovered ? Theme.BORDER_STRONG : Theme.BORDER;
+                text = !this.active ? Theme.TEXT_DISABLED : marked ? Theme.TEXT_BRIGHT : Theme.TEXT;
             }
         }
         graphics.fill(x, y, x + width, y + height, fill);
@@ -106,25 +108,36 @@ public final class FlatButton extends AbstractButton {
             if (on) {
                 graphics.fill(x, y, x + 2, y + height, Theme.ACCENT);
             }
-            graphics.text(font, font.plainSubstrByWidth(getMessage().getString(), width - 14), x + 10, textY, text, false);
+            graphics.text(font, shorten(font, getMessage().getString(), width - 14), x + 10, textY, text, false);
         } else if (this.style == Style.TOGGLE) {
             Component badge = Component.translatable(on ? "litematicaplus.state.on" : "litematicaplus.state.off");
             int badgeWidth = font.width(badge) + 10;
             int badgeX = x + width - badgeWidth - 4;
-            graphics.text(font, font.plainSubstrByWidth(getMessage().getString(), width - badgeWidth - 16), x + 8, textY,
+            graphics.text(font, shorten(font, getMessage().getString(), width - badgeWidth - 16), x + 8, textY,
                     text, false);
             graphics.fill(badgeX, y + 4, badgeX + badgeWidth, y + height - 4, on ? 0xFF14452A : 0xFF4A1F1F);
             graphics.text(font, badge, badgeX + 5, textY, on ? Theme.SUCCESS : Theme.DANGER, false);
         } else {
-            String label = getMessage().getString();
-            if (font.width(label) > width - 8) {
-                label = font.plainSubstrByWidth(label, width - 8);
-            }
+            String label = shorten(font, getMessage().getString(), width - 8);
             graphics.text(font, label, x + (width - font.width(label)) / 2, textY, text, false);
         }
         if (isFocused()) {
             graphics.outline(x - 1, y - 1, width + 2, height + 2, Theme.FOCUS);
         }
+    }
+
+    private static String shorten(Font font, String label, int width) {
+        if (font.width(label) <= width) {
+            return label;
+        }
+        return font.plainSubstrByWidth(label, Math.max(0, width - 6)) + "..";
+    }
+
+    @Override
+    public void setMessage(Component message) {
+        super.setMessage(message);
+        int reserved = this.style == Style.TOGGLE ? 52 : this.style == Style.TAB ? 14 : 8;
+        setTooltip(Minecraft.getInstance().font.width(message) > getWidth() - reserved ? Tooltip.create(message) : null);
     }
 
     @Override

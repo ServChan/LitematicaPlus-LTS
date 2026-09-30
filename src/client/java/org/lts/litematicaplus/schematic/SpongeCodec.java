@@ -1,13 +1,17 @@
 package org.lts.litematicaplus.schematic;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class SpongeCodec {
+    private static final int MAX_PALETTE_ID = 1 << 20;
+
     private SpongeCodec() {
     }
 
@@ -23,29 +27,39 @@ public final class SpongeCodec {
         int height = body.getShortOr("Height", (short) 0) & 0xFFFF;
         int length = body.getShortOr("Length", (short) 0) & 0xFFFF;
         if (width == 0 || height == 0 || length == 0) {
-            throw new IOException("Sponge schematic has an empty size");
+            throw new LocalizedException("litematicaplus.error.empty_schematic", "Sponge schematic has an empty size");
         }
         CompoundTag blocks = body.getCompound("Blocks").orElse(body);
         CompoundTag paletteTag = blocks.getCompoundOrEmpty("Palette");
         byte[] data = blocks.getByteArray("Data").or(() -> blocks.getByteArray("BlockData")).orElse(null);
         if (paletteTag.isEmpty() || data == null) {
-            throw new IOException("Sponge schematic has no block data");
+            throw new LocalizedException("litematicaplus.error.empty_schematic", "Sponge schematic has no block data");
         }
+        long volume = (long) width * height * length;
+        if (volume > LitematicCodec.MAX_REGION_VOLUME) {
+            throw new LocalizedException("litematicaplus.error.too_large", "Sponge schematic is too large: " + volume + " blocks");
+        }
+        if (data.length < volume) {
+            throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic block data is truncated: " + data.length + " bytes for "
+                    + volume + " blocks");
+        }
+        int dataVersion = body.getIntOr("DataVersion", 0);
         int maxId = 0;
         for (String key : paletteTag.keySet()) {
-            maxId = Math.max(maxId, paletteTag.getIntOr(key, 0));
+            int id = paletteTag.getIntOr(key, -1);
+            if (id < 0 || id > MAX_PALETTE_ID) {
+                throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic has an invalid palette id " + id);
+            }
+            maxId = Math.max(maxId, id);
         }
         BlockState[] palette = new BlockState[maxId + 1];
         BlockState air = Blocks.AIR.defaultBlockState();
-        java.util.Arrays.fill(palette, air);
+        Arrays.fill(palette, air);
+        BlockStateNbt.Unresolved unresolved = new BlockStateNbt.Unresolved();
         for (String key : paletteTag.keySet()) {
-            int id = paletteTag.getIntOr(key, -1);
-            if (id >= 0) {
-                palette[id] = BlockStateNbt.parse(key);
-            }
+            palette[paletteTag.getIntOr(key, 0)] = BlockStateNbt.parse(key, dataVersion, unresolved);
         }
         RegionBuilder builder = new RegionBuilder(fallbackName, 0, 0, 0, width, height, length);
-        long volume = (long) width * height * length;
         long count = 0L;
         int cursor = 0;
         for (long index = 0L; index < volume && cursor < data.length; index++) {
@@ -59,7 +73,7 @@ public final class SpongeCodec {
                 }
                 shift += 7;
                 if (shift > 28) {
-                    throw new IOException("Sponge schematic has a malformed block index");
+                    throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic has a malformed block index");
                 }
             }
             BlockState state = value >= 0 && value < palette.length ? palette[value] : air;
@@ -98,9 +112,10 @@ public final class SpongeCodec {
         metadata.name = meta.getStringOr("Name", fallbackName);
         metadata.author = meta.getStringOr("Author", "");
         metadata.timeCreated = meta.getLongOr("Date", 0L);
-        metadata.dataVersion = body.getIntOr("DataVersion", 0);
+        metadata.dataVersion = dataVersion;
         metadata.schematicVersion = body.getIntOr("Version", 0);
         metadata.totalBlocks = count;
+        metadata.unknownStates = unresolved.count();
         metadata.format = "sponge";
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
     }

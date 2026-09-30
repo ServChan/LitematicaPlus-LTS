@@ -1,20 +1,27 @@
 package org.lts.litematicaplus.tool;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.LayerRange;
@@ -22,9 +29,16 @@ import org.lts.litematicaplus.world.LayerRange;
 public final class ToolController {
     private static final ToolController INSTANCE = new ToolController();
     private static final double TARGET_RANGE = 160.0;
+    private static final int CONFIRM_TICKS = 80;
 
     private ToolMode mode = ToolMode.AREA_SELECTION;
     private int clickCooldown;
+    private boolean useReleased = true;
+    private double scrollRemainder;
+    private ToolMode armedMode;
+    private int armedTicks;
+    private String toolItemId = "";
+    private Item toolItem = Items.AIR;
 
     private ToolController() {
     }
@@ -39,10 +53,12 @@ public final class ToolController {
 
     public void setMode(ToolMode next) {
         this.mode = next == null ? ToolMode.AREA_SELECTION : next;
+        disarm();
     }
 
     public void cycleMode(boolean forward) {
         this.mode = this.mode.cycle(forward);
+        disarm();
         Session.markDirty();
         Notify.actionBar(Component.translatable("litematicaplus.message.tool_mode",
                 Component.translatable(this.mode.translationKey())));
@@ -52,20 +68,36 @@ public final class ToolController {
         if (this.clickCooldown > 0) {
             this.clickCooldown--;
         }
+        if (this.armedTicks > 0 && --this.armedTicks == 0) {
+            this.armedMode = null;
+        }
+        if (!minecraft.options.keyUse.isDown()) {
+            this.useReleased = true;
+        }
         EasyPlace.tick();
         PasteController.tick(minecraft);
     }
 
     public boolean holdingTool(Minecraft minecraft) {
         LocalPlayer player = minecraft.player;
-        if (player == null) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (player == null || !config.toolEnabled || player.isSpectator()) {
             return false;
         }
         ItemStack stack = player.getMainHandItem();
         if (stack.isEmpty()) {
             return false;
         }
-        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(LitematicaPlusConfig.current().toolItem);
+        return stack.getItem() == toolItem(config);
+    }
+
+    private Item toolItem(LitematicaPlusConfig config) {
+        if (!config.toolItem.equals(this.toolItemId)) {
+            this.toolItemId = config.toolItem;
+            Identifier id = Identifier.tryParse(config.toolItem);
+            this.toolItem = id == null ? Items.AIR : BuiltInRegistries.ITEM.getOptional(id).orElse(Items.AIR);
+        }
+        return this.toolItem;
     }
 
     public boolean onAttack(Minecraft minecraft) {
@@ -79,27 +111,81 @@ public final class ToolController {
         switch (this.mode) {
             case AREA_SELECTION -> setCorner(minecraft, true);
             case PLACEMENT -> movePlacement(minecraft);
-            case PASTE -> {
-                SchematicPlacement placement = PlacementManager.get().selected();
-                PasteController.startPaste(minecraft, placement == null ? null : GhostEngine.get().runtime(placement.id()));
-            }
-            case DELETE -> PasteController.startDelete(minecraft, SelectionManager.get().completeBoxes());
+            case PASTE -> pasteClick(minecraft);
+            case DELETE -> deleteClick(minecraft);
         }
         return true;
+    }
+
+    private void pasteClick(Minecraft minecraft) {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        PlacementRuntime runtime = placement == null ? null : GhostEngine.get().runtime(placement.id());
+        if (runtime == null || runtime.volume() == null) {
+            Notify.actionBar("litematicaplus.message.no_placement");
+            return;
+        }
+        if (!confirmed(ToolMode.PASTE)) {
+            Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
+            return;
+        }
+        PasteController.startPaste(minecraft, runtime);
+    }
+
+    private void deleteClick(Minecraft minecraft) {
+        List<AreaBox> boxes = new ArrayList<>();
+        long volume = 0L;
+        for (AreaBox box : SelectionManager.get().boxes()) {
+            if (box.isComplete()) {
+                boxes.add(box);
+                volume += box.volume();
+            }
+        }
+        if (boxes.isEmpty()) {
+            Notify.actionBar("litematicaplus.message.no_selection");
+            return;
+        }
+        if (volume > PasteController.MAX_DELETE_VOLUME) {
+            Notify.actionBar("litematicaplus.message.delete_too_large", volume, PasteController.MAX_DELETE_VOLUME);
+            return;
+        }
+        if (!confirmed(ToolMode.DELETE)) {
+            Notify.actionBar("litematicaplus.message.confirm_delete", boxes.size(), volume);
+            return;
+        }
+        PasteController.startDelete(minecraft, boxes);
+    }
+
+    private boolean confirmed(ToolMode wanted) {
+        if (this.armedMode == wanted && this.armedTicks > 0) {
+            disarm();
+            return true;
+        }
+        this.armedMode = wanted;
+        this.armedTicks = CONFIRM_TICKS;
+        return false;
+    }
+
+    private void disarm() {
+        this.armedMode = null;
+        this.armedTicks = 0;
     }
 
     public boolean onUse(Minecraft minecraft) {
         if (!holdingTool(minecraft)) {
             return EasyPlace.onUse(minecraft);
         }
-        if (this.clickCooldown > 0) {
+        if (!this.useReleased || this.clickCooldown > 0) {
             return true;
         }
+        this.useReleased = false;
         this.clickCooldown = 4;
         switch (this.mode) {
             case AREA_SELECTION -> setCorner(minecraft, false);
             case PLACEMENT -> rotatePlacement();
-            case PASTE, DELETE -> PasteController.cancel();
+            case PASTE, DELETE -> {
+                disarm();
+                PasteController.cancel();
+            }
         }
         return true;
     }
@@ -116,16 +202,27 @@ public final class ToolController {
         if (amount == 0.0 || minecraft.player == null || !holdingTool(minecraft)) {
             return false;
         }
-        boolean forward = amount > 0.0;
-        if (minecraft.hasControlDown()) {
+        boolean control = minecraft.hasControlDown();
+        if (!control && !minecraft.hasAltDown()) {
+            this.scrollRemainder = 0.0;
+            return false;
+        }
+        if (Math.signum(amount) != Math.signum(this.scrollRemainder)) {
+            this.scrollRemainder = 0.0;
+        }
+        this.scrollRemainder += amount;
+        int steps = (int) this.scrollRemainder;
+        if (steps == 0) {
+            return true;
+        }
+        this.scrollRemainder -= steps;
+        boolean forward = steps > 0;
+        if (control) {
             cycleMode(forward);
             return true;
         }
-        if (!minecraft.hasAltDown()) {
-            return false;
-        }
         Direction direction = Direction.getApproximateNearest(minecraft.player.getViewVector(1.0F));
-        int step = forward ? 1 : -1;
+        int step = Math.max(-8, Math.min(8, steps));
         if (this.mode == ToolMode.AREA_SELECTION || this.mode == ToolMode.DELETE) {
             boolean sneaking = minecraft.player.isShiftKeyDown();
             SelectionManager.get().nudge(true, !sneaking, direction, step);
@@ -231,7 +328,6 @@ public final class ToolController {
         }
         Rotation next = placement.rotation().getRotated(Rotation.CLOCKWISE_90);
         PlacementManager.get().rotate(placement, next);
-        Notify.actionBar("litematicaplus.message.placement_rotated",
-                Component.translatable("litematicaplus.rotation." + next.name().toLowerCase(java.util.Locale.ROOT)));
+        Notify.actionBar("litematicaplus.message.placement_rotated", next.ordinal() * 90);
     }
 }

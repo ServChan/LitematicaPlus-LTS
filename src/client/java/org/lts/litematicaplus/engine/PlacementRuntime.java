@@ -1,7 +1,10 @@
 package org.lts.litematicaplus.engine;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.verify.SectionVerdict;
@@ -11,12 +14,20 @@ public final class PlacementRuntime {
     private final SchematicPlacement placement;
     final Long2ObjectOpenHashMap<SectionSlot> slots = new Long2ObjectOpenHashMap<>();
     final LongOpenHashSet dirty = new LongOpenHashSet();
+    final ArrayList<SectionSlot> drawable = new ArrayList<>();
+    final LongArrayFIFOQueue urgent = new LongArrayFIFOQueue();
+    long[] queue = new long[0];
+    int queueSize;
+    int queuePos;
+    double queueX;
+    double queueY;
+    double queueZ;
     final long[] counts = new long[MismatchType.VALUES.length];
     PlacementVolume volume;
     long[] correctByPalette = new long[0];
     boolean[] specialByPalette = new boolean[0];
     int generation;
-    int buildToken;
+    volatile int buildToken;
     boolean building;
     int verifiedSections;
     int knownSections;
@@ -35,6 +46,10 @@ public final class PlacementRuntime {
 
     public Iterable<SectionSlot> slots() {
         return this.slots.values();
+    }
+
+    public List<SectionSlot> drawable() {
+        return this.drawable;
     }
 
     public int slotCount() {
@@ -91,11 +106,11 @@ public final class PlacementRuntime {
         for (int i = 0; i < values.length; i++) {
             this.counts[i] += (long) sign * values[i];
         }
-        int[] correct = verdict.correctByPalette();
-        int limit = Math.min(correct.length, this.correctByPalette.length);
-        for (int i = 0; i < limit; i++) {
-            if (correct[i] != 0) {
-                this.correctByPalette[i] += (long) sign * correct[i];
+        int[] indices = verdict.correctIndices();
+        int[] correct = verdict.correctCounts();
+        for (int i = 0; i < indices.length; i++) {
+            if (indices[i] < this.correctByPalette.length) {
+                this.correctByPalette[indices[i]] += (long) sign * correct[i];
             }
         }
         this.verifiedSections += sign;

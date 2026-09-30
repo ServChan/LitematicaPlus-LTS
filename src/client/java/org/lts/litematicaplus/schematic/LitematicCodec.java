@@ -12,11 +12,13 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class LitematicCodec {
     public static final int SCHEMATIC_VERSION = 7;
     public static final int SCHEMATIC_SUBVERSION = 1;
-    public static final long MAX_REGION_VOLUME = 1L << 31;
+    public static final long MAX_REGION_VOLUME = 1L << 28;
+    public static final long MAX_TOTAL_VOLUME = 1L << 28;
 
     private LitematicCodec() {
     }
@@ -24,7 +26,7 @@ public final class LitematicCodec {
     public static Schematic read(CompoundTag root) throws IOException {
         int version = root.getIntOr("Version", 0);
         if (version < 1) {
-            throw new IOException("Not a litematic file: missing Version");
+            throw new LocalizedException("litematicaplus.error.not_schematic", "Not a litematic file: missing Version");
         }
         int dataVersion = root.getIntOr("MinecraftDataVersion", 0);
         SchematicMetadata metadata = readMetadata(root.getCompoundOrEmpty("Metadata"));
@@ -33,15 +35,22 @@ public final class LitematicCodec {
         metadata.format = "litematic";
         CompoundTag regionsTag = root.getCompoundOrEmpty("Regions");
         Map<String, SchematicRegion> regions = new LinkedHashMap<>();
+        BlockStateNbt.Unresolved unresolved = new BlockStateNbt.Unresolved();
+        long totalVolume = 0L;
         for (String name : regionsTag.keySet()) {
             CompoundTag regionTag = regionsTag.getCompoundOrEmpty(name);
-            SchematicRegion region = readRegion(name, regionTag, dataVersion);
+            SchematicRegion region = readRegion(name, regionTag, dataVersion, unresolved);
             if (region != null) {
+                totalVolume += region.volume();
+                if (totalVolume > MAX_TOTAL_VOLUME) {
+                    throw new LocalizedException("litematicaplus.error.too_large", "Schematic is too large: more than " + MAX_TOTAL_VOLUME + " blocks of volume");
+                }
                 regions.put(name, region);
             }
         }
+        metadata.unknownStates = unresolved.count();
         if (regions.isEmpty()) {
-            throw new IOException("Litematic file contains no readable regions");
+            throw new LocalizedException("litematicaplus.error.empty_schematic", "Litematic file contains no readable regions");
         }
         return new Schematic(metadata, regions);
     }
@@ -93,13 +102,22 @@ public final class LitematicCodec {
         tag.putLong("TimeCreated", metadata.timeCreated);
         tag.putLong("TimeModified", metadata.timeModified);
         tag.putInt("RegionCount", metadata.regionCount);
-        tag.putLong("TotalBlocks", metadata.totalBlocks);
-        tag.putLong("TotalVolume", metadata.totalVolume);
+        putCount(tag, "TotalBlocks", metadata.totalBlocks);
+        putCount(tag, "TotalVolume", metadata.totalVolume);
         tag.put("EnclosingSize", vector(metadata.enclosingX, metadata.enclosingY, metadata.enclosingZ));
         return tag;
     }
 
-    private static SchematicRegion readRegion(String name, CompoundTag tag, int dataVersion) throws IOException {
+    private static void putCount(CompoundTag tag, String key, long value) {
+        if (value >= 0L && value <= Integer.MAX_VALUE) {
+            tag.putInt(key, (int) value);
+        } else {
+            tag.putLong(key, value);
+        }
+    }
+
+    private static SchematicRegion readRegion(String name, CompoundTag tag, int dataVersion,
+            BlockStateNbt.Unresolved unresolved) throws IOException {
         CompoundTag position = tag.getCompoundOrEmpty("Position");
         CompoundTag size = tag.getCompoundOrEmpty("Size");
         int sizeX = size.getIntOr("x", 0);
@@ -110,19 +128,19 @@ public final class LitematicCodec {
         }
         long volume = Math.abs((long) sizeX) * Math.abs((long) sizeY) * Math.abs((long) sizeZ);
         if (volume > MAX_REGION_VOLUME) {
-            throw new IOException("Region '" + name + "' is too large: " + volume + " blocks");
+            throw new LocalizedException("litematicaplus.error.too_large", "Region '" + name + "' is too large: " + volume + " blocks");
         }
         ListTag paletteTag = tag.getListOrEmpty("BlockStatePalette");
         BlockState[] palette = new BlockState[Math.max(1, paletteTag.size())];
         palette[0] = Blocks.AIR.defaultBlockState();
         for (int i = 0; i < paletteTag.size(); i++) {
-            palette[i] = BlockStateNbt.read(paletteTag.getCompoundOrEmpty(i), dataVersion);
+            palette[i] = BlockStateNbt.read(paletteTag.getCompoundOrEmpty(i), dataVersion, unresolved);
         }
         int bits = BitPackedArray.bitsFor(palette.length);
         long[] raw = tag.getLongArray("BlockStates").orElse(null);
         int expected = BitPackedArray.requiredLongs(bits, volume);
         if (raw == null || raw.length != expected) {
-            throw new IOException("Region '" + name + "' has a block array of "
+            throw new LocalizedException("litematicaplus.error.corrupt", "Region '" + name + "' has a block array of "
                     + (raw == null ? 0 : raw.length) + " longs, expected " + expected);
         }
         BitPackedArray states = new BitPackedArray(bits, volume, raw);

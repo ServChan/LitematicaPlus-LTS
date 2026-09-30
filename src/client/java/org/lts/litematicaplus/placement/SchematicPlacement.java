@@ -4,6 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.schematic.Schematic;
@@ -28,7 +29,8 @@ public final class SchematicPlacement {
     private final Set<String> disabledRegions = new LinkedHashSet<>();
     private Schematic schematic;
     private LoadState loadState = LoadState.LOADING;
-    private String error = "";
+    private Component error = Component.empty();
+    private int loadGeneration;
 
     public SchematicPlacement(UUID id, String name, String file, BlockPos origin) {
         this.id = id;
@@ -121,25 +123,30 @@ public final class SchematicPlacement {
         return this.loadState;
     }
 
-    public String error() {
+    public Component error() {
         return this.error;
     }
 
     public void markReady(Schematic loaded) {
         this.schematic = loaded;
         this.loadState = LoadState.READY;
-        this.error = "";
+        this.error = Component.empty();
     }
 
-    public void markFailed(String message) {
+    public void markFailed(Component message) {
         this.schematic = null;
         this.loadState = LoadState.FAILED;
-        this.error = message == null ? "" : message;
+        this.error = message == null ? Component.empty() : message;
     }
 
-    public void markLoading() {
+    public int markLoading() {
         this.loadState = LoadState.LOADING;
-        this.error = "";
+        this.error = Component.empty();
+        return ++this.loadGeneration;
+    }
+
+    public int loadGeneration() {
+        return this.loadGeneration;
     }
 
     public PlacementTransform transform() {

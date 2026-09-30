@@ -10,6 +10,7 @@ def licenseArchiveName = project.name
 def fabricKeyMappingApiVersion = project.fabric_key_mapping_api_version
 def fabricLifecycleEventsVersion = project.fabric_lifecycle_events_version
 def fabricRenderingVersion = project.fabric_rendering_version
+def fabricResourceLoaderVersion = project.fabric_resource_loader_version
 def fabricApiVersion = project.fabric_api_version
 def localModMenu = file(project.modmenu_jar)
 
@@ -51,6 +52,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-key-mapping-api-v1:${fabricKeyMappingApiVersion}"
     implementation "net.fabricmc.fabric-api:fabric-lifecycle-events-v1:${fabricLifecycleEventsVersion}"
     implementation "net.fabricmc.fabric-api:fabric-rendering-v1:${fabricRenderingVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-resource-loader-v1:${fabricResourceLoaderVersion}"
 
     if (localModMenu.isFile()) {
         compileOnly files(localModMenu)

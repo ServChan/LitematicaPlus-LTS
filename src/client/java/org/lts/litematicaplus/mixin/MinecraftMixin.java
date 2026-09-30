@@ -3,6 +3,7 @@ package org.lts.litematicaplus.mixin;
 import net.minecraft.client.Minecraft;
 import org.lts.litematicaplus.tool.ToolController;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -10,6 +11,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
+    @Shadow
+    private int rightClickDelay;
+
     @Inject(method = "startAttack", at = @At("HEAD"), cancellable = true)
     private void litematicaplus$startAttack(CallbackInfoReturnable<Boolean> cir) {
         Minecraft minecraft = (Minecraft) (Object) this;
@@ -30,6 +34,7 @@ public abstract class MinecraftMixin {
     private void litematicaplus$startUseItem(CallbackInfo ci) {
         Minecraft minecraft = (Minecraft) (Object) this;
         if (minecraft.player != null && ToolController.get().onUse(minecraft)) {
+            this.rightClickDelay = 4;
             ci.cancel();
         }
     }

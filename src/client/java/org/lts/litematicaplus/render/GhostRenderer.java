@@ -10,6 +10,7 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -43,6 +44,7 @@ public final class GhostRenderer {
             | FrustumIntersection.PLANE_MASK_NY | FrustumIntersection.PLANE_MASK_PY;
     private static final Identifier BLOCK_ATLAS = Identifier.withDefaultNamespace("textures/atlas/blocks.png");
     private static final Matrix4f IDENTITY = new Matrix4f();
+    private static final Comparator<SectionSlot> FAR_TO_NEAR = (a, b) -> Float.compare(b.sortDistance, a.sortDistance);
     private static final List<SectionSlot> GHOSTS = new ArrayList<>();
     private static final List<SectionSlot> OVERLAYS = new ArrayList<>();
     private static final Matrix4f FRUSTUM_MATRIX = new Matrix4f();
@@ -80,7 +82,7 @@ public final class GhostRenderer {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         GhostEngine engine = GhostEngine.get();
         Minecraft minecraft = Minecraft.getInstance();
-        engine.frame(minecraft);
+        engine.frame(minecraft, camera.pos);
         if (!config.renderEnabled || minecraft.player == null || minecraft.level == null) {
             return;
         }
@@ -92,7 +94,9 @@ public final class GhostRenderer {
             if (!runtime.placement().enabled() || runtime.volume() == null) {
                 continue;
             }
-            for (SectionSlot slot : runtime.slots()) {
+            List<SectionSlot> drawable = runtime.drawable();
+            for (int slotIndex = 0; slotIndex < drawable.size(); slotIndex++) {
+                SectionSlot slot = drawable.get(slotIndex);
                 boolean ghost = slot.ghost() != null && config.renderGhostBlocks;
                 boolean overlay = (slot.fill() != null || slot.lines() != null) && config.renderOverlay;
                 if (!ghost && !overlay) {
@@ -104,9 +108,11 @@ public final class GhostRenderer {
                 float centerX = minX + 8.0F;
                 float centerY = minY + 8.0F;
                 float centerZ = minZ + 8.0F;
-                if (centerX * centerX + centerY * centerY + centerZ * centerZ > range) {
+                float distance = centerX * centerX + centerY * centerY + centerZ * centerZ;
+                if (distance > range) {
                     continue;
                 }
+                slot.sortDistance = distance;
                 int side = FRUSTUM.intersectAab(minX - 2.0F, minY - 2.0F, minZ - 2.0F,
                         minX + 18.0F, minY + 18.0F, minZ + 18.0F, SIDE_PLANES);
                 if (side != FrustumIntersection.INTERSECT && side != FrustumIntersection.INSIDE) {
@@ -120,6 +126,7 @@ public final class GhostRenderer {
                 }
             }
         }
+        GHOSTS.sort(FAR_TO_NEAR);
         boolean boxes = BoxRenderer.prepare(minecraft, cameraPos);
         if (GHOSTS.isEmpty() && OVERLAYS.isEmpty() && !boxes) {
             return;
@@ -228,7 +235,9 @@ public final class GhostRenderer {
                 continue;
             }
             BlockState[] palette = volume.palette();
-            for (SectionSlot slot : runtime.slots()) {
+            List<SectionSlot> drawable = runtime.drawable();
+            for (int slotIndex = 0; slotIndex < drawable.size(); slotIndex++) {
+                SectionSlot slot = drawable.get(slotIndex);
                 int[] specials = slot.specials();
                 if (specials.length == 0) {
                     continue;

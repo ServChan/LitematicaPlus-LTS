@@ -1,8 +1,10 @@
 package org.lts.litematicaplus;
 
+import java.nio.file.Path;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.storage.LevelResource;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.selection.SelectionManager;
@@ -58,7 +60,7 @@ public final class Session {
     }
 
     public static void shutdown() {
-        if (dirty && !scope.isEmpty()) {
+        if (!scope.isEmpty()) {
             dirty = false;
             SessionStore.get().saveBlocking(scope, snapshot());
         }
@@ -93,7 +95,9 @@ public final class Session {
             GhostEngine.get().setLayer(new LayerRange(parse(LayerRange.Mode.class, data.layer.mode, LayerRange.Mode.ALL),
                     parse(Direction.Axis.class, data.layer.axis, Direction.Axis.Y),
                     data.layer.single, data.layer.min, data.layer.max));
-            ToolController.get().setMode(parse(ToolMode.class, data.toolMode, ToolMode.AREA_SELECTION));
+            ToolMode restored = parse(ToolMode.class, data.toolMode, ToolMode.AREA_SELECTION);
+            ToolController.get().setMode(restored == ToolMode.PASTE || restored == ToolMode.DELETE
+                    ? ToolMode.AREA_SELECTION : restored);
         } finally {
             restoring = false;
             dirty = false;
@@ -109,7 +113,8 @@ public final class Session {
         if (data != null) {
             server = data.ip;
         } else if (minecraft.getSingleplayerServer() != null) {
-            server = "singleplayer:" + minecraft.getSingleplayerServer().getWorldData().getLevelName();
+            Path root = minecraft.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+            server = "singleplayer:" + (root.getFileName() == null ? "world" : root.getFileName().toString());
         } else {
             server = "local";
         }

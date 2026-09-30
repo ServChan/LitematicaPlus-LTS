@@ -7,14 +7,19 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.loader.api.FabricLoader;
+import org.lts.litematicaplus.util.Workers;
 
 public final class LitematicaPlusConfig {
-    private static final int CURRENT_CONFIG_VERSION = 1;
+    private static final int CURRENT_CONFIG_VERSION = 2;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
+    private static final AtomicReference<LitematicaPlusConfig> PENDING = new AtomicReference<>();
 
     public enum PasteReplace {
         ALL,
@@ -51,14 +56,15 @@ public final class LitematicaPlusConfig {
     public boolean hudEnabled = true;
     public int hudMaterialLines = 6;
     public boolean hudRightSide = false;
+    public boolean toolEnabled = true;
     public String toolItem = "minecraft:stick";
     public boolean easyPlaceEnabled = false;
     public int easyPlaceDelayTicks = 2;
     public boolean easyPlaceStrictOrientation = true;
-    public boolean easyPlaceAirPlacement = true;
+    public boolean easyPlaceAirPlacement = false;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
-    public int pasteCommandsPerTick = 40;
+    public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
     public String schematicsDirectory = "schematics";
@@ -68,8 +74,12 @@ public final class LitematicaPlusConfig {
         Path configPath = configPath();
         LitematicaPlusConfig primary = read(configPath);
         if (primary != null) {
+            if (primary.configVersion > CURRENT_CONFIG_VERSION) {
+                LitematicaPlusClient.LOGGER.warn("Config {} was written by a newer version; unknown options will be dropped on save",
+                        configPath);
+            }
             boolean migrated = primary.configVersion < CURRENT_CONFIG_VERSION;
-            current = sanitize(primary);
+            current = sanitize(migrate(primary));
             if (migrated) {
                 try {
                     writeAtomically(configPath, current, true);
@@ -80,7 +90,7 @@ public final class LitematicaPlusConfig {
             return;
         }
         LitematicaPlusConfig backup = read(backupPath(configPath));
-        current = sanitize(backup == null ? defaults() : backup);
+        current = sanitize(backup == null ? defaults() : migrate(backup));
         try {
             writeAtomically(configPath, current, false);
         } catch (IOException exception) {
@@ -93,7 +103,7 @@ public final class LitematicaPlusConfig {
         if (loaded == null) {
             loaded = read(backupPath(path));
         }
-        return sanitize(loaded == null ? defaults() : loaded);
+        return sanitize(loaded == null ? defaults() : migrate(loaded));
     }
 
     public static LitematicaPlusConfig current() {
@@ -106,14 +116,26 @@ public final class LitematicaPlusConfig {
 
     public static boolean save(LitematicaPlusConfig config) {
         LitematicaPlusConfig clean = sanitize(copyOf(config));
+        current = clean;
+        PENDING.set(clean);
+        try {
+            Workers.writer().execute(LitematicaPlusConfig::writePending);
+        } catch (RejectedExecutionException exception) {
+            writePending();
+        }
+        return true;
+    }
+
+    private static void writePending() {
+        LitematicaPlusConfig snapshot = PENDING.getAndSet(null);
+        if (snapshot == null) {
+            return;
+        }
         Path configPath = configPath();
         try {
-            writeAtomically(configPath, clean, true);
-            current = clean;
-            return true;
+            writeAtomically(configPath, snapshot, true);
         } catch (IOException exception) {
             LitematicaPlusClient.LOGGER.error("Could not save config {}", configPath, exception);
-            return false;
         }
     }
 
@@ -143,9 +165,17 @@ public final class LitematicaPlusConfig {
         }
     }
 
+    static LitematicaPlusConfig migrate(LitematicaPlusConfig config) {
+        if (config.configVersion < 2) {
+            config.pasteCommandsPerTick = Math.min(config.pasteCommandsPerTick, 8);
+            config.easyPlaceAirPlacement = false;
+        }
+        return config;
+    }
+
     static LitematicaPlusConfig sanitize(LitematicaPlusConfig config) {
         config.configVersion = CURRENT_CONFIG_VERSION;
-        config.ghostAlpha = (float) clamp(config.ghostAlpha, 0.1, 1.0);
+        config.ghostAlpha = (float) clamp(config.ghostAlpha, 0.2, 1.0);
         config.overlayFillAlpha = (float) clamp(config.overlayFillAlpha, 0.0, 1.0);
         config.overlayLineAlpha = (float) clamp(config.overlayLineAlpha, 0.0, 1.0);
         config.renderDistance = clamp(config.renderDistance, 32, 1024);
@@ -154,7 +184,7 @@ public final class LitematicaPlusConfig {
         config.snapshotBudgetMicros = clamp(config.snapshotBudgetMicros, 200, 10000);
         config.hudMaterialLines = clamp(config.hudMaterialLines, 0, 16);
         config.easyPlaceDelayTicks = clamp(config.easyPlaceDelayTicks, 0, 20);
-        config.pasteCommandsPerTick = clamp(config.pasteCommandsPerTick, 1, 400);
+        config.pasteCommandsPerTick = clamp(config.pasteCommandsPerTick, 1, 16);
         if (config.pasteReplace == null) {
             config.pasteReplace = PasteReplace.ALL;
         }
@@ -181,6 +211,11 @@ public final class LitematicaPlusConfig {
         }
         String clean = value.strip().replace('\\', '/');
         if (clean.isEmpty() || clean.contains("..") || clean.length() > 260) {
+            return "schematics";
+        }
+        try {
+            Path.of(clean);
+        } catch (InvalidPathException exception) {
             return "schematics";
         }
         return clean;

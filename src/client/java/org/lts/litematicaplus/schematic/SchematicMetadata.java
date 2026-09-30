@@ -15,6 +15,7 @@ public final class SchematicMetadata {
     public int dataVersion;
     public int schematicVersion;
     public String format = "";
+    public int unknownStates;
 
     public SchematicMetadata copy() {
         SchematicMetadata copy = new SchematicMetadata();
@@ -32,6 +33,7 @@ public final class SchematicMetadata {
         copy.dataVersion = this.dataVersion;
         copy.schematicVersion = this.schematicVersion;
         copy.format = this.format;
+        copy.unknownStates = this.unknownStates;
         return copy;
     }
 }

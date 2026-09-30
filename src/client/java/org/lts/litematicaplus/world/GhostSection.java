@@ -10,8 +10,25 @@ public final class GhostSection {
     private int solid;
     private int inside;
 
+    private static final GhostSection FULL_AIR = fullAir();
+
     public GhostSection() {
         Arrays.fill(this.data, OUTSIDE);
+    }
+
+    private static GhostSection fullAir() {
+        GhostSection section = new GhostSection();
+        Arrays.fill(section.data, (short) 0);
+        section.inside = VOLUME;
+        return section;
+    }
+
+    public static GhostSection sharedFullAir() {
+        return FULL_AIR;
+    }
+
+    public boolean isFullAir() {
+        return this.inside == VOLUME && this.solid == 0;
     }
 
     public static int index(int x, int y, int z) {

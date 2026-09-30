@@ -19,12 +19,20 @@ import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 final class PlacementsView extends TabView {
+    private static final int ARM_TICKS = 80;
+    private static final int REGION_ROW_HEIGHT = 20;
+    private static final int INLINE_REGIONS_MIN_HEIGHT = 56;
+
     private ListPanel<SchematicPlacement> list;
-    private boolean removeArmed;
+    private int removeArmed;
+    private int pasteArmed;
+    private boolean regionsPage;
     private int detailX;
     private int detailWidth;
     private int regionsTop;
     private int knownCount = -1;
+    private SchematicPlacement.LoadState knownState;
+    private Schematic knownSchematic;
     private int listScroll;
 
     PlacementsView(HubScreen screen) {
@@ -41,6 +49,7 @@ final class PlacementsView extends TabView {
         PlacementManager manager = PlacementManager.get();
         List<SchematicPlacement> placements = new ArrayList<>(manager.placements());
         this.knownCount = placements.size();
+        this.regionsTop = 0;
         if (placements.isEmpty()) {
             add(FlatButton.primary(this.left + (this.width - 160) / 2, this.top + this.height / 2 + 30, 160,
                     tr("litematicaplus.overview.browse"), button -> this.screen.switchTab(HubScreen.Tab.SCHEMATICS)));
@@ -51,58 +60,79 @@ final class PlacementsView extends TabView {
         this.detailWidth = this.width - listWidth - Theme.GAP;
         this.list = add(new ListPanel<SchematicPlacement>(this.left, this.top, listWidth, this.height, Theme.ROW_HEIGHT,
                 tr("litematicaplus.tab.placements"), this::renderRow)
+                .describe(SchematicPlacement::name)
                 .onSelect(placement -> {
                     manager.select(placement);
-                    this.removeArmed = false;
+                    this.removeArmed = 0;
+                    this.pasteArmed = 0;
+                    this.regionsPage = false;
                     this.screen.refresh();
                 }));
         this.list.setItems(placements);
         SchematicPlacement selected = manager.selected();
         this.list.selectItem(selected);
         this.list.setScroll(this.listScroll);
+        this.knownState = selected == null ? null : selected.loadState();
+        this.knownSchematic = selected == null ? null : selected.schematic();
         if (selected == null) {
             return;
         }
+        Schematic schematic = selected.schematic();
+        boolean hasRegions = schematic != null && schematic.regions().size() > 1;
         int x = this.detailX;
+        int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
+        if (this.regionsPage && hasRegions) {
+            add(FlatButton.secondary(x, this.top, Math.min(90, this.detailWidth), tr("litematicaplus.placements.back"),
+                    button -> {
+                        this.regionsPage = false;
+                        this.screen.refresh();
+                    }));
+            this.regionsTop = this.top + Theme.CONTROL_HEIGHT + 16;
+            addRegions(manager, selected, schematic, x, this.regionsTop, this.top + this.height - this.regionsTop);
+            return;
+        }
+        this.regionsPage = false;
         int y = this.top;
         EditBox name = field(x, y, this.detailWidth, selected.name(), tr("litematicaplus.placements.name"), 96);
         name.setResponder(value -> manager.rename(selected, value));
         y += Theme.CONTROL_HEIGHT + 4;
         boolean wide = this.detailWidth >= 264;
-        int stepperWidth = wide ? (this.detailWidth - Theme.GAP * 2) / 3 : this.detailWidth;
+        int columns = wide ? 3 : 2;
+        int stepperWidth = (this.detailWidth - Theme.GAP * (columns - 1)) / columns;
         for (int axis = 0; axis < 3; axis++) {
             int index = axis;
-            Stepper stepper = new Stepper(wide ? x + axis * (stepperWidth + Theme.GAP) : x, y, stepperWidth,
+            Stepper stepper = new Stepper(x + axis % columns * (stepperWidth + Theme.GAP),
+                    y + axis / columns * (Theme.CONTROL_HEIGHT + 2), stepperWidth,
                     Component.literal(axis == 0 ? "X" : axis == 1 ? "Y" : "Z"),
                     () -> index == 0 ? selected.x() : index == 1 ? selected.y() : selected.z(),
                     value -> manager.move(selected, index == 0 ? value : selected.x(), index == 1 ? value : selected.y(),
                             index == 2 ? value : selected.z()), -30000000, 30000000, 1);
             stepper.active = !selected.locked();
             add(stepper);
-            if (!wide) {
-                y += Theme.CONTROL_HEIGHT + 2;
-            }
         }
-        if (wide) {
-            y += Theme.CONTROL_HEIGHT + 2;
-        }
-        y += 2;
         int third = (this.detailWidth - Theme.GAP * 2) / 3;
-        FlatButton here = add(FlatButton.secondary(x, y, third, tr("litematicaplus.placements.move_here"), button -> {
-            if (this.minecraft.player != null) {
-                BlockPos pos = this.minecraft.player.blockPosition();
-                manager.move(selected, pos.getX(), pos.getY(), pos.getZ());
-            }
-        }));
+        int hereX = wide ? x : x + stepperWidth + Theme.GAP;
+        int hereY = wide ? y + Theme.CONTROL_HEIGHT + 4 : y + Theme.CONTROL_HEIGHT + 2;
+        int hereWidth = wide ? third : this.detailWidth - stepperWidth - Theme.GAP;
+        FlatButton here = add(FlatButton.secondary(hereX, hereY, hereWidth, tr("litematicaplus.placements.move_here"),
+                button -> {
+                    if (this.minecraft.player != null) {
+                        BlockPos pos = this.minecraft.player.blockPosition();
+                        manager.move(selected, pos.getX(), pos.getY(), pos.getZ());
+                    }
+                }));
         here.active = !selected.locked() && this.minecraft.player != null;
-        FlatButton rotate = add(FlatButton.secondary(x + third + Theme.GAP, y, third,
+        y += wide ? Theme.CONTROL_HEIGHT + 4 : (Theme.CONTROL_HEIGHT + 2) * 2 + 2;
+        int turnX = wide ? x + third + Theme.GAP : x;
+        int turnWidth = wide ? third : (this.detailWidth - Theme.GAP) / 2;
+        FlatButton rotate = add(FlatButton.secondary(turnX, y, turnWidth,
                 tr("litematicaplus.rotation." + selected.rotation().name().toLowerCase(Locale.ROOT)), button -> {
                     manager.rotate(selected, selected.rotation().getRotated(Rotation.CLOCKWISE_90));
                     this.screen.refresh();
                 }));
         rotate.active = !selected.locked();
-        FlatButton mirror = add(FlatButton.secondary(x + (third + Theme.GAP) * 2, y,
-                this.detailWidth - (third + Theme.GAP) * 2,
+        int mirrorX = turnX + turnWidth + Theme.GAP;
+        FlatButton mirror = add(FlatButton.secondary(mirrorX, y, x + this.detailWidth - mirrorX,
                 tr("litematicaplus.mirror." + selected.mirror().name().toLowerCase(Locale.ROOT)), button -> {
                     Mirror[] values = Mirror.values();
                     manager.mirror(selected, values[(selected.mirror().ordinal() + 1) % values.length]);
@@ -119,43 +149,72 @@ final class PlacementsView extends TabView {
                     this.screen.refresh();
                 }));
         y += Theme.CONTROL_HEIGHT + 4;
-        int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
-        this.regionsTop = 0;
-        Schematic schematic = selected.schematic();
-        if (schematic != null && schematic.regions().size() > 1 && bottomY - y >= 60) {
-            this.regionsTop = y + 12;
-            ListPanel<String> regions = add(new ListPanel<String>(x, this.regionsTop, this.detailWidth,
-                    bottomY - this.regionsTop - 4, 16, tr("litematicaplus.placements.regions"),
-                    (graphics, rowFont, region, rowX, rowY, rowWidth, rowHeight, isSelected, hovered) -> {
-                        boolean on = !selected.disabledRegions().contains(region);
-                        Ui.clipped(graphics, rowFont, region, rowX + 6, rowY + 4, rowWidth - 44,
-                                on ? Theme.TEXT : Theme.TEXT_DISABLED);
-                        Ui.right(graphics, rowFont, tr(on ? "litematicaplus.state.on" : "litematicaplus.state.off").getString(),
-                                rowX + rowWidth - 6, rowY + 4, on ? Theme.SUCCESS : Theme.DANGER);
-                    })
-                    .onSelect(region -> manager.toggleRegion(selected, region)));
-            regions.setItems(new ArrayList<>(schematic.regions().keySet()));
-            regions.active = !selected.locked();
+        if (hasRegions) {
+            if (bottomY - y - 16 >= INLINE_REGIONS_MIN_HEIGHT) {
+                this.regionsTop = y + 12;
+                addRegions(manager, selected, schematic, x, this.regionsTop, bottomY - this.regionsTop - 4);
+            } else if (bottomY - y >= Theme.CONTROL_HEIGHT + 2) {
+                add(FlatButton.secondary(x, y, this.detailWidth,
+                        tr("litematicaplus.placements.regions_button", schematic.regions().size()), button -> {
+                            this.regionsPage = true;
+                            this.screen.refresh();
+                        }));
+            } else {
+                name.setWidth(this.detailWidth - 96 - Theme.GAP);
+                add(FlatButton.secondary(x + this.detailWidth - 96, this.top, 96,
+                        tr("litematicaplus.placements.regions_button", schematic.regions().size()), button -> {
+                            this.regionsPage = true;
+                            this.screen.refresh();
+                        }));
+            }
         }
-        FlatButton paste = add(FlatButton.primary(x, bottomY, third, tr("litematicaplus.placements.paste"), button -> {
-            PasteController.startPaste(this.minecraft, GhostEngine.get().runtime(selected.id()));
-            this.minecraft.gui.setScreen(null);
-        }));
+        FlatButton paste = add(FlatButton.primary(x, bottomY, third,
+                tr(this.pasteArmed > 0 ? "litematicaplus.placements.paste_confirm" : "litematicaplus.placements.paste"),
+                button -> {
+                    if (this.pasteArmed > 0) {
+                        this.pasteArmed = 0;
+                        PasteController.startPaste(this.minecraft, GhostEngine.get().runtime(selected.id()));
+                        this.minecraft.gui.setScreen(null);
+                    } else {
+                        this.pasteArmed = ARM_TICKS;
+                        this.removeArmed = 0;
+                        this.screen.refresh();
+                    }
+                }));
+        PlacementRuntime runtime = GhostEngine.get().runtime(selected.id());
         paste.active = this.minecraft.player != null && this.minecraft.player.hasInfiniteMaterials()
-                && !PasteController.active();
+                && !PasteController.active() && runtime != null && runtime.volume() != null;
         add(FlatButton.secondary(x + third + Theme.GAP, bottomY, third, tr("litematicaplus.placements.reload"),
                 button -> manager.reload(selected)));
         add(FlatButton.danger(x + (third + Theme.GAP) * 2, bottomY, this.detailWidth - (third + Theme.GAP) * 2,
-                tr(this.removeArmed ? "litematicaplus.placements.remove_confirm" : "litematicaplus.placements.remove"),
+                tr(this.removeArmed > 0 ? "litematicaplus.placements.remove_confirm" : "litematicaplus.placements.remove"),
                 button -> {
-                    if (this.removeArmed) {
-                        this.removeArmed = false;
+                    if (this.removeArmed > 0) {
+                        this.removeArmed = 0;
                         manager.remove(selected);
                     } else {
-                        this.removeArmed = true;
+                        this.removeArmed = ARM_TICKS;
+                        this.pasteArmed = 0;
                     }
                     this.screen.refresh();
                 }));
+    }
+
+    private void addRegions(PlacementManager manager, SchematicPlacement selected, Schematic schematic, int x, int y,
+            int panelHeight) {
+        ListPanel<String> regions = add(new ListPanel<String>(x, y, this.detailWidth, panelHeight, REGION_ROW_HEIGHT,
+                tr("litematicaplus.placements.regions"),
+                (graphics, rowFont, region, rowX, rowY, rowWidth, rowHeight, isSelected, hovered) -> {
+                    boolean on = !selected.disabledRegions().contains(region);
+                    int textY = rowY + (rowHeight - 8) / 2;
+                    Ui.clipped(graphics, rowFont, region, rowX + 6, textY, rowWidth - 44, on ? Theme.TEXT : Theme.TEXT_DIM);
+                    Ui.right(graphics, rowFont, tr(on ? "litematicaplus.state.on" : "litematicaplus.state.off").getString(),
+                            rowX + rowWidth - 6, textY, on ? Theme.SUCCESS : Theme.DANGER);
+                })
+                .describe(region -> region)
+                .onPress(region -> manager.toggleRegion(selected, region)));
+        regions.setItems(new ArrayList<>(schematic.regions().keySet()));
+        regions.active = !selected.locked();
     }
 
     @Override
@@ -163,7 +222,17 @@ final class PlacementsView extends TabView {
         if (this.list != null) {
             this.listScroll = this.list.scroll();
         }
-        if (PlacementManager.get().placements().size() != this.knownCount) {
+        boolean expired = false;
+        if (this.removeArmed > 0 && --this.removeArmed == 0) {
+            expired = true;
+        }
+        if (this.pasteArmed > 0 && --this.pasteArmed == 0) {
+            expired = true;
+        }
+        SchematicPlacement selected = PlacementManager.get().selected();
+        boolean stateChanged = selected != null
+                && (selected.loadState() != this.knownState || selected.schematic() != this.knownSchematic);
+        if (expired || stateChanged || PlacementManager.get().placements().size() != this.knownCount) {
             this.screen.refresh();
         }
     }
@@ -179,7 +248,7 @@ final class PlacementsView extends TabView {
             color = Theme.DANGER;
         } else if (!placement.enabled()) {
             status = tr("litematicaplus.state.off").getString();
-            color = Theme.TEXT_DISABLED;
+            color = Theme.TEXT_DIM;
         } else if (runtime == null || runtime.volume() == null) {
             status = tr("litematicaplus.placements.state_loading").getString();
             color = Theme.WARNING;
@@ -215,11 +284,9 @@ final class PlacementsView extends TabView {
             Ui.label(graphics, this.font, label, this.detailX, this.regionsTop - 11);
         }
         if (selected.loadState() == SchematicPlacement.LoadState.FAILED && this.regionsTop == 0) {
-            int y = this.top + this.height - Theme.CONTROL_HEIGHT - 26;
-            graphics.enableScissor(this.detailX, y, this.detailX + this.detailWidth, y + 22);
-            graphics.textWithWordWrap(this.font, tr("litematicaplus.placement.failed", selected.error()), this.detailX, y,
-                    this.detailWidth, Theme.DANGER, false);
-            graphics.disableScissor();
+            int y = this.top + this.height - Theme.CONTROL_HEIGHT - 24;
+            Ui.wrapped(graphics, this.font, tr("litematicaplus.placement.failed", selected.error()), this.detailX, y,
+                    this.detailWidth, 2, Theme.DANGER, mouseX, mouseY);
         }
     }
 }

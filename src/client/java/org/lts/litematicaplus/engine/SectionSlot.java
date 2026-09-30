@@ -22,6 +22,9 @@ public final class SectionSlot {
     int lineIndices;
     int[] specials = new int[0];
     SectionVerdict verdict;
+    int drawIndex = -1;
+    int failures;
+    public float sortDistance;
 
     SectionSlot(long key, int originX, int originY, int originZ, boolean hasSolid) {
         this.key = key;

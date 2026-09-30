@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.loader.api.FabricLoader;
 import org.lts.litematicaplus.util.AtomicFilePersistence;
 import org.lts.litematicaplus.util.Workers;
@@ -76,6 +77,8 @@ public final class SessionStore {
     private FileData data = new FileData();
     private boolean readOnly;
     private boolean loaded;
+    private volatile boolean retry;
+    private final AtomicReference<String> pending = new AtomicReference<>();
 
     SessionStore(Path path) {
         this.path = path;
@@ -127,7 +130,7 @@ public final class SessionStore {
         }
         ScopeData clean = sanitize(copy(scope));
         ScopeData previous = this.data.scopes.get(key);
-        if (previous != null && GSON.toJson(previous).equals(GSON.toJson(clean))) {
+        if (!this.retry && previous != null && GSON.toJson(previous).equals(GSON.toJson(clean))) {
             return;
         }
         this.data.scopes.remove(key);
@@ -136,11 +139,11 @@ public final class SessionStore {
             String oldest = this.data.scopes.keySet().iterator().next();
             this.data.scopes.remove(oldest);
         }
-        String json = GSON.toJson(this.data);
+        this.pending.set(GSON.toJson(this.data));
         try {
-            Workers.io().execute(() -> writeNow(json));
+            Workers.writer().execute(this::writePending);
         } catch (RejectedExecutionException exception) {
-            writeNow(json);
+            writePending();
         }
     }
 
@@ -150,14 +153,29 @@ public final class SessionStore {
         }
         this.loaded = true;
         this.data.scopes.put(key, sanitize(copy(scope)));
-        writeNow(GSON.toJson(this.data));
+        String json = GSON.toJson(this.data);
+        synchronized (this.path) {
+            this.pending.set(null);
+            writeNow(json);
+        }
+    }
+
+    private void writePending() {
+        synchronized (this.path) {
+            String json = this.pending.getAndSet(null);
+            if (json != null) {
+                writeNow(json);
+            }
+        }
     }
 
     private void writeNow(String json) {
         synchronized (this.path) {
             try {
                 AtomicFilePersistence.write(this.path, this.backup, json);
+                this.retry = false;
             } catch (IOException exception) {
+                this.retry = true;
                 LitematicaPlusClient.LOGGER.error("Could not save session {}", this.path, exception);
             }
         }

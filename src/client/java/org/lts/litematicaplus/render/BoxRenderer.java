@@ -56,7 +56,8 @@ public final class BoxRenderer {
         XRAY_LINES.reset();
         XRAY_FILLS.reset();
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (minecraft.player != null && focus != null) {
+        boolean visible = !minecraft.gui.hud.isHidden();
+        if (visible && minecraft.player != null && focus != null) {
             double pad = 0.04;
             box(XRAY_LINES, XRAY_FILLS, camera, focus.getX() - pad, focus.getY() - pad, focus.getZ() - pad,
                     focus.getX() + 1 + pad, focus.getY() + 1 + pad, focus.getZ() + 1 + pad, focusColor, 4.0F,
@@ -66,7 +67,7 @@ public final class BoxRenderer {
                     (float) (focus.getX() + 0.5 - camera.x), (float) (focus.getY() + 0.5 - camera.y),
                     (float) (focus.getZ() + 0.5 - camera.z), abgr(focusColor), 2.0F);
         }
-        if (config.renderPlacementBoxes) {
+        if (visible && config.renderPlacementBoxes) {
             SchematicPlacement selected = PlacementManager.get().selected();
             for (PlacementRuntime runtime : GhostEngine.get().runtimes()) {
                 PlacementVolume volume = runtime.volume();
@@ -87,7 +88,7 @@ public final class BoxRenderer {
                 }
             }
         }
-        if (config.renderSelectionBoxes) {
+        if (visible && config.renderSelectionBoxes) {
             SelectionManager selection = SelectionManager.get();
             List<AreaBox> boxes = selection.boxes();
             for (int i = 0; i < boxes.size(); i++) {
@@ -108,6 +109,13 @@ public final class BoxRenderer {
         XRAY_LINE_MESH.upload(XRAY_LINES);
         XRAY_FILL_MESH.upload(XRAY_FILLS);
         return !LINE_MESH.isEmpty() || !FILL_MESH.isEmpty() || !XRAY_LINE_MESH.isEmpty() || !XRAY_FILL_MESH.isEmpty();
+    }
+
+    public static void close() {
+        LINE_MESH.close();
+        FILL_MESH.close();
+        XRAY_LINE_MESH.close();
+        XRAY_FILL_MESH.close();
     }
 
     static int maxQuadIndices() {

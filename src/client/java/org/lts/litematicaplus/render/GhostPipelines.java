@@ -22,7 +22,7 @@ public final class GhostPipelines {
             .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
             .withVertexShader("core/block")
             .withFragmentShader("core/block")
-            .withShaderDefine("ALPHA_CUTOUT", 0.1F)
+            .withShaderDefine("ALPHA_CUTOUT", 0.01F)
             .withVertexBinding(0, DefaultVertexFormat.BLOCK)
             .withPrimitiveTopology(PrimitiveTopology.QUADS)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))

@@ -7,16 +7,29 @@ import org.lts.litematicaplus.world.GhostSection;
 public final class SectionVerdict {
     private static final int TYPES = MismatchType.VALUES.length;
 
+    private static final int[] NO_INTS = new int[0];
+    private static final byte[] ALL_NONE = uniform(MismatchType.NONE);
+    private static final byte[] ALL_CORRECT = uniform(MismatchType.CORRECT);
+
     private final byte[] categories;
     private final int[] counts;
-    private final int[] correctByPalette;
+    private final int[] correctIndices;
+    private final int[] correctCounts;
     private final boolean worldKnown;
 
-    private SectionVerdict(byte[] categories, int[] counts, int[] correctByPalette, boolean worldKnown) {
+    private SectionVerdict(byte[] categories, int[] counts, int[] correctIndices, int[] correctCounts,
+            boolean worldKnown) {
         this.categories = categories;
         this.counts = counts;
-        this.correctByPalette = correctByPalette;
+        this.correctIndices = correctIndices;
+        this.correctCounts = correctCounts;
         this.worldKnown = worldKnown;
+    }
+
+    private static byte[] uniform(MismatchType type) {
+        byte[] values = new byte[GhostSection.VOLUME];
+        java.util.Arrays.fill(values, (byte) type.ordinal());
+        return values;
     }
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
@@ -34,7 +47,7 @@ public final class SectionVerdict {
                     counts[unknown]++;
                 }
             }
-            return new SectionVerdict(categories, counts, correct, false);
+            return new SectionVerdict(categories, counts, NO_INTS, NO_INTS, false);
         }
         StateComparator comparator = StateComparator.get();
         BlockState lastState = null;
@@ -62,7 +75,31 @@ public final class SectionVerdict {
                 correct[paletteIndex]++;
             }
         }
-        return new SectionVerdict(categories, counts, correct, true);
+        int distinct = 0;
+        for (int value : correct) {
+            if (value != 0) {
+                distinct++;
+            }
+        }
+        int[] indices = distinct == 0 ? NO_INTS : new int[distinct];
+        int[] values = distinct == 0 ? NO_INTS : new int[distinct];
+        for (int i = 0, next = 0; i < correct.length && next < distinct; i++) {
+            if (correct[i] != 0) {
+                indices[next] = i;
+                values[next++] = correct[i];
+            }
+        }
+        byte[] shared = categories;
+        int inside = 0;
+        for (int value : counts) {
+            inside += value;
+        }
+        if (counts[MismatchType.NONE.ordinal()] == inside && MismatchType.NONE.ordinal() == 0) {
+            shared = ALL_NONE;
+        } else if (counts[MismatchType.CORRECT.ordinal()] == GhostSection.VOLUME) {
+            shared = ALL_CORRECT;
+        }
+        return new SectionVerdict(shared, counts, indices, values, true);
     }
 
     public byte[] categories() {
@@ -81,8 +118,21 @@ public final class SectionVerdict {
         return this.counts;
     }
 
-    public int[] correctByPalette() {
-        return this.correctByPalette;
+    public int[] correctIndices() {
+        return this.correctIndices;
+    }
+
+    public int[] correctCounts() {
+        return this.correctCounts;
+    }
+
+    public int correctFor(int paletteIndex) {
+        for (int i = 0; i < this.correctIndices.length; i++) {
+            if (this.correctIndices[i] == paletteIndex) {
+                return this.correctCounts[i];
+            }
+        }
+        return 0;
     }
 
     public boolean worldKnown() {

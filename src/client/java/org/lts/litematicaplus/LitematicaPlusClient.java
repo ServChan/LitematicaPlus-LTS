@@ -12,6 +12,7 @@ import net.minecraft.resources.Identifier;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.hud.InfoHud;
+import org.lts.litematicaplus.render.BoxRenderer;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.util.Notify;
@@ -27,6 +28,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
     public static KeyMapping OPEN_MENU_KEY;
     public static KeyMapping TOGGLE_RENDER_KEY;
     public static KeyMapping TOGGLE_EASY_PLACE_KEY;
+    public static KeyMapping TOGGLE_TOOL_KEY;
     public static KeyMapping TOOL_MODE_KEY;
     public static KeyMapping LAYER_MODE_KEY;
     public static KeyMapping LAYER_UP_KEY;
@@ -40,6 +42,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         OPEN_MENU_KEY = register("open_menu", InputConstants.KEY_K);
         TOGGLE_RENDER_KEY = register("toggle_render", InputConstants.UNKNOWN.getValue());
         TOGGLE_EASY_PLACE_KEY = register("toggle_easy_place", InputConstants.UNKNOWN.getValue());
+        TOGGLE_TOOL_KEY = register("toggle_tool", InputConstants.UNKNOWN.getValue());
         TOOL_MODE_KEY = register("tool_mode", InputConstants.UNKNOWN.getValue());
         LAYER_MODE_KEY = register("layer_mode", InputConstants.UNKNOWN.getValue());
         LAYER_UP_KEY = register("layer_up", InputConstants.UNKNOWN.getValue());
@@ -50,6 +53,8 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
             Session.shutdown();
             Workers.shutdown();
+            GhostEngine.get().shutdown();
+            BoxRenderer.close();
         });
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath(MOD_ID, "overlay"),
                 (graphics, tickCounter) -> InfoHud.render(Minecraft.getInstance(), graphics));
@@ -70,6 +75,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
             drain(OPEN_MENU_KEY);
             drain(TOGGLE_RENDER_KEY);
             drain(TOGGLE_EASY_PLACE_KEY);
+            drain(TOGGLE_TOOL_KEY);
             drain(TOOL_MODE_KEY);
             drain(LAYER_MODE_KEY);
             drain(LAYER_UP_KEY);
@@ -91,6 +97,12 @@ public final class LitematicaPlusClient implements ClientModInitializer {
             LitematicaPlusConfig.save(config);
             Notify.actionBar(config.easyPlaceEnabled
                     ? "litematicaplus.message.easy_place_on" : "litematicaplus.message.easy_place_off");
+        }
+        while (TOGGLE_TOOL_KEY.consumeClick()) {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.toolEnabled = !config.toolEnabled;
+            LitematicaPlusConfig.save(config);
+            Notify.actionBar(config.toolEnabled ? "litematicaplus.message.tool_on" : "litematicaplus.message.tool_off");
         }
         while (TOOL_MODE_KEY.consumeClick()) {
             ToolController.get().cycleMode(true);

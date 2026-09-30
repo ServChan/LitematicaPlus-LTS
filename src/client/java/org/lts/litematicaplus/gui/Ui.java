@@ -1,8 +1,10 @@
 package org.lts.litematicaplus.gui;
 
+import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 
 public final class Ui {
@@ -11,7 +13,7 @@ public final class Ui {
 
     public static void panel(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
         graphics.fill(x, y, x + width, y + height, Theme.SURFACE);
-        graphics.outline(x, y, width, height, Theme.BORDER);
+        graphics.outline(x, y, width, height, Theme.DIVIDER);
     }
 
     public static void raised(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int spine) {
@@ -32,10 +34,14 @@ public final class Ui {
     }
 
     public static int chip(GuiGraphicsExtractor graphics, Font font, int x, int y, Component text, int color) {
+        return chip(graphics, font, x, y, text, color, color);
+    }
+
+    public static int chip(GuiGraphicsExtractor graphics, Font font, int x, int y, Component text, int color, int textColor) {
         int width = font.width(text) + 12;
         graphics.fill(x, y, x + width, y + 13, Theme.alpha(color, 0x30));
         graphics.outline(x, y, width, 13, Theme.alpha(color, 0xB0));
-        graphics.text(font, text, x + 6, y + 3, color, false);
+        graphics.text(font, text, x + 6, y + 3, textColor, false);
         return x + width + 5;
     }
 
@@ -57,6 +63,22 @@ public final class Ui {
         }
         String shown = font.width(text) > maxWidth ? font.plainSubstrByWidth(text, Math.max(0, maxWidth - 6)) + ".." : text;
         graphics.text(font, shown, x, y, color, false);
+    }
+
+    public static int wrapped(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int width,
+            int maxLines, int color, int mouseX, int mouseY) {
+        if (width <= 0 || maxLines <= 0) {
+            return 0;
+        }
+        List<FormattedCharSequence> lines = font.split(text, width);
+        int shown = Math.min(lines.size(), maxLines);
+        for (int i = 0; i < shown; i++) {
+            graphics.text(font, lines.get(i), x, y + i * 10, color, false);
+        }
+        if (lines.size() > shown && mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + shown * 10) {
+            graphics.setTooltipForNextFrame(font.split(text, 240), mouseX, mouseY);
+        }
+        return shown;
     }
 
     public static void right(GuiGraphicsExtractor graphics, Font font, String text, int right, int y, int color) {

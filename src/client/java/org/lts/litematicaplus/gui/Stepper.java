@@ -97,7 +97,9 @@ public final class Stepper extends AbstractWidget {
         if (this.labelled) {
             graphics.fill(x, y, minusX, y + height, Theme.SURFACE_RAISED);
             graphics.outline(x, y, width, height, Theme.BORDER);
-            Ui.clipped(graphics, font, getMessage().getString(), x + 8, textY, minusX - x - 12,
+            int labelSpace = minusX - x;
+            int inset = labelSpace < 40 ? 4 : 8;
+            Ui.clipped(graphics, font, getMessage().getString(), x + inset, textY, labelSpace - inset - 2,
                     this.active ? Theme.TEXT : Theme.TEXT_DISABLED);
         }
         boolean over = this.active && mouseY >= y && mouseY < y + height;

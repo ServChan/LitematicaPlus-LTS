@@ -82,8 +82,8 @@ class SectionVerdictTest {
         assertEquals(3, verdict.errors());
         assertEquals(MismatchType.NONE, verdict.category(GhostSection.index(9, 9, 9)));
         assertEquals(MismatchType.NONE, verdict.category(GhostSection.index(4, 0, 0)));
-        assertEquals(1, verdict.correctByPalette()[1]);
-        assertEquals(0, verdict.correctByPalette()[2]);
+        assertEquals(1, verdict.correctFor(1));
+        assertEquals(0, verdict.correctFor(2));
     }
 
     @Test

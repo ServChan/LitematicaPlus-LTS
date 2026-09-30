@@ -42,7 +42,7 @@ final class SchematicsView extends TabView {
     private int request;
     private Entry selected;
     private SchematicMetadata metadata;
-    private String metadataError = "";
+    private Component metadataError;
     private int detailX;
     private int detailWidth;
 
@@ -79,6 +79,7 @@ final class SchematicsView extends TabView {
         this.list = add(new ListPanel<Entry>(this.left, this.top + Theme.CONTROL_HEIGHT + 4, listWidth,
                 this.height - Theme.CONTROL_HEIGHT - 4, Theme.ROW_HEIGHT, tr("litematicaplus.tab.schematics"),
                 this::renderRow)
+                .describe(Entry::name)
                 .onSelect(this::select)
                 .onActivate(this::activate)
                 .empty(tr("litematicaplus.schematics.empty_title"), tr("litematicaplus.schematics.empty_hint")));
@@ -170,13 +171,16 @@ final class SchematicsView extends TabView {
             }
         }
         this.list.setItems(shown);
-        this.list.selectItem(this.selected != null && shown.contains(this.selected) ? this.selected : null);
+        if (this.selected != null && !shown.contains(this.selected)) {
+            select(null);
+        }
+        this.list.selectItem(this.selected);
     }
 
     private void select(Entry entry) {
         this.selected = entry;
         this.metadata = null;
-        this.metadataError = "";
+        this.metadataError = null;
         updateButtons();
         if (entry == null || entry.directory()) {
             return;
@@ -190,15 +194,18 @@ final class SchematicsView extends TabView {
         try {
             Workers.io().execute(() -> {
                 SchematicMetadata loaded = null;
-                String error = "";
+                Component error = null;
                 try {
                     loaded = SchematicIo.readMetadata(entry.path());
+                    if (METADATA.size() > 512) {
+                        METADATA.clear();
+                    }
                     METADATA.put(key, loaded);
                 } catch (IOException | RuntimeException exception) {
-                    error = String.valueOf(exception.getMessage());
+                    error = Notify.describe(exception);
                 }
                 SchematicMetadata result = loaded;
-                String message = error;
+                Component message = error;
                 this.minecraft.execute(() -> {
                     if (this.selected == entry) {
                         this.metadata = result;
@@ -207,7 +214,7 @@ final class SchematicsView extends TabView {
                 });
             });
         } catch (RejectedExecutionException exception) {
-            this.metadataError = String.valueOf(exception.getMessage());
+            this.metadataError = Notify.describe(exception);
         }
     }
 
@@ -290,7 +297,7 @@ final class SchematicsView extends TabView {
                 : SchematicIo.baseName(this.selected.path());
         Ui.clipped(graphics, this.font, title, x, y, inner, Theme.TEXT_BRIGHT);
         y += 13;
-        if (!this.metadataError.isEmpty()) {
+        if (this.metadataError != null) {
             graphics.textWithWordWrap(this.font, tr("litematicaplus.schematics.unreadable", this.metadataError), x, y,
                     inner, Theme.DANGER, false);
             return;
@@ -335,7 +342,7 @@ final class SchematicsView extends TabView {
         graphics.text(this.font, label, x, y, Theme.TEXT_DIM, false);
         int labelWidth = this.font.width(label) + 6;
         String shown = this.font.width(value) > inner - labelWidth
-                ? this.font.plainSubstrByWidth(value, inner - labelWidth) : value;
+                ? this.font.plainSubstrByWidth(value, Math.max(0, inner - labelWidth - 6)) + ".." : value;
         Ui.right(graphics, this.font, shown, x + inner, y, Theme.TEXT);
         return y + 12;
     }

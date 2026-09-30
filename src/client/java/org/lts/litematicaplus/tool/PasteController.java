@@ -4,14 +4,17 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.permissions.Permissions;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -29,11 +32,16 @@ import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class PasteController {
+    public static final long MAX_DELETE_VOLUME = 64L * 1024L * 1024L;
     private static final int DIRECT_BLOCKS_PER_TICK = 4096;
+    private static final int DIRECT_DELETE_BLOCKS_PER_TICK = 16384;
     private static final int MAX_COMMAND_LENGTH = 255;
     private static final int MAX_FILL_VOLUME = 32768;
+    private static final int UNPRIVILEGED_COMMAND_INTERVAL = 22;
+    private static final int FILL_COMMAND_INTERVAL = 4;
     private static final int PLACE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE
             | Block.UPDATE_SUPPRESS_DROPS | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS | Block.UPDATE_SKIP_ON_PLACE;
+    private static final AtomicInteger IN_FLIGHT = new AtomicInteger();
 
     private record Operation(BlockPos pos, BlockState state, CompoundTag data) {
     }
@@ -44,8 +52,9 @@ public final class PasteController {
         int keyIndex;
         int cell;
         ArrayDeque<int[]> deleteBoxes = new ArrayDeque<>();
-        int[] deleteCursor;
         boolean direct;
+        boolean privileged;
+        int commandCooldown;
         ResourceKey<Level> dimension;
         LitematicaPlusConfig.PasteReplace replace;
         boolean withData;
@@ -84,15 +93,16 @@ public final class PasteController {
     }
 
     public static void startPaste(Minecraft minecraft, PlacementRuntime runtime, boolean direct) {
-        if (!allowed(minecraft) || runtime == null || runtime.volume() == null) {
-            if (runtime == null || runtime.volume() == null) {
-                Notify.actionBar("litematicaplus.message.no_placement");
-            }
+        if (runtime == null || runtime.volume() == null) {
+            Notify.actionBar("litematicaplus.message.no_placement");
+            return;
+        }
+        boolean useDirect = direct && minecraft.hasSingleplayerServer();
+        if (!allowed(minecraft, useDirect, "setblock")) {
             return;
         }
         PlacementVolume volume = runtime.volume();
-        Job created = baseJob(minecraft);
-        created.direct = direct && minecraft.hasSingleplayerServer();
+        Job created = baseJob(minecraft, useDirect);
         created.volume = volume;
         long[] keys = volume.sections().keySet().toLongArray();
         Long[] boxed = new Long[keys.length];
@@ -107,19 +117,38 @@ public final class PasteController {
         created.total = (long) keys.length * GhostSection.VOLUME;
         job = created;
         Notify.actionBar("litematicaplus.message.paste_started", runtime.placement().name());
+        if (!useDirect && created.withData && !volume.blockEntities().isEmpty()) {
+            Notify.chat(Component.translatable("litematicaplus.message.paste_no_data"));
+        }
+        if (!useDirect && !created.privileged) {
+            Notify.chat(Component.translatable("litematicaplus.message.paste_slow"));
+        }
     }
 
     public static void startDelete(Minecraft minecraft, List<AreaBox> boxes) {
-        if (!allowed(minecraft)) {
+        boolean direct = minecraft.hasSingleplayerServer();
+        if (!allowed(minecraft, direct, "fill")) {
             return;
         }
-        if (boxes.isEmpty()) {
+        List<AreaBox> complete = new ArrayList<>();
+        long volume = 0L;
+        for (AreaBox box : boxes) {
+            if (box.isComplete()) {
+                complete.add(box);
+                volume += box.volume();
+            }
+        }
+        if (complete.isEmpty()) {
             Notify.actionBar("litematicaplus.message.no_selection");
             return;
         }
-        Job created = baseJob(minecraft);
+        if (volume > MAX_DELETE_VOLUME) {
+            Notify.actionBar("litematicaplus.message.delete_too_large", volume, MAX_DELETE_VOLUME);
+            return;
+        }
+        Job created = baseJob(minecraft, direct);
         long total = 0L;
-        for (AreaBox box : boxes) {
+        for (AreaBox box : complete) {
             for (int[] part : split(box)) {
                 created.deleteBoxes.add(part);
                 total += (long) (part[3] - part[0] + 1) * (part[4] - part[1] + 1) * (part[5] - part[2] + 1);
@@ -128,9 +157,12 @@ public final class PasteController {
         created.total = total;
         job = created;
         Notify.actionBar("litematicaplus.message.delete_started");
+        if (!direct && !created.privileged) {
+            Notify.chat(Component.translatable("litematicaplus.message.paste_slow"));
+        }
     }
 
-    private static boolean allowed(Minecraft minecraft) {
+    private static boolean allowed(Minecraft minecraft, boolean direct, String command) {
         if (minecraft.player == null || minecraft.level == null) {
             return false;
         }
@@ -142,13 +174,20 @@ public final class PasteController {
             Notify.actionBar("litematicaplus.message.paste_busy");
             return false;
         }
+        if (!direct && minecraft.player.connection.getCommands().getRoot().getChild(command) == null) {
+            Notify.actionBar("litematicaplus.message.no_command_permission", "/" + command);
+            return false;
+        }
         return true;
     }
 
-    private static Job baseJob(Minecraft minecraft) {
+    private static Job baseJob(Minecraft minecraft, boolean direct) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         Job created = new Job();
-        created.direct = minecraft.hasSingleplayerServer();
+        IN_FLIGHT.set(0);
+        created.direct = direct;
+        created.privileged = minecraft.hasSingleplayerServer()
+                || minecraft.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
         created.dimension = minecraft.level.dimension();
         created.replace = config.pasteReplace;
         created.withData = config.pasteBlockEntityData;
@@ -178,6 +217,14 @@ public final class PasteController {
             job = null;
             return;
         }
+        if (!minecraft.player.hasInfiniteMaterials()) {
+            job = null;
+            Notify.actionBar("litematicaplus.message.creative_required");
+            return;
+        }
+        if (current.direct && IN_FLIGHT.get() > 0) {
+            return;
+        }
         try {
             boolean finished = current.volume != null ? tickPaste(minecraft, current) : tickDelete(minecraft, current);
             if (finished) {
@@ -191,11 +238,25 @@ public final class PasteController {
         }
     }
 
+    private static int commandBudget(Job current, int perTick, int privilegedInterval) {
+        if (current.commandCooldown > 0) {
+            current.commandCooldown--;
+            return 0;
+        }
+        if (!current.privileged) {
+            current.commandCooldown = UNPRIVILEGED_COMMAND_INTERVAL;
+            return 1;
+        }
+        current.commandCooldown = privilegedInterval;
+        return perTick;
+    }
+
     private static boolean tickPaste(Minecraft minecraft, Job current) {
         ClientLevel level = minecraft.level;
         PlacementVolume volume = current.volume;
         BlockState[] palette = volume.palette();
-        int budget = current.direct ? DIRECT_BLOCKS_PER_TICK : LitematicaPlusConfig.current().pasteCommandsPerTick;
+        int budget = current.direct ? DIRECT_BLOCKS_PER_TICK
+                : commandBudget(current, LitematicaPlusConfig.current().pasteCommandsPerTick, 0);
         List<Operation> operations = current.direct ? new ArrayList<>() : null;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int scanned = 0;
@@ -229,19 +290,29 @@ public final class PasteController {
                 int y = originY + (index >> 8);
                 int z = originZ + (index >> 4 & 15);
                 cursor.set(x, y, z);
-                if (!wanted(level.getBlockState(cursor), state, current.replace)) {
+                BlockState world = level.getBlockState(cursor);
+                if (current.direct) {
+                    CompoundTag data = current.withData && state.hasBlockEntity()
+                            ? volume.blockEntities().get(cursor.asLong()) : null;
+                    if (data != null) {
+                        data = BlockStateNbt.fixBlockEntity(data, volume.dataVersion());
+                    }
+                    boolean refreshData = data != null && world == state
+                            && current.replace != LitematicaPlusConfig.PasteReplace.INTO_AIR_ONLY;
+                    if (refreshData || wanted(world, state, current.replace)) {
+                        operations.add(new Operation(cursor.immutable(), state, data));
+                        current.changed++;
+                        budget--;
+                    }
                     current.cell++;
                     current.visited++;
                     scanned++;
                     continue;
                 }
-                if (current.direct) {
-                    CompoundTag data = current.withData ? volume.blockEntities().get(cursor.asLong()) : null;
-                    operations.add(new Operation(cursor.immutable(), state, data));
+                if (!wanted(world, state, current.replace)) {
                     current.cell++;
                     current.visited++;
-                    current.changed++;
-                    budget--;
+                    scanned++;
                     continue;
                 }
                 int run = 1;
@@ -293,40 +364,56 @@ public final class PasteController {
         };
     }
 
+    private static boolean chunksLoaded(ClientLevel level, int[] box) {
+        for (int chunkX = box[0] >> 4; chunkX <= box[3] >> 4; chunkX++) {
+            for (int chunkZ = box[2] >> 4; chunkZ <= box[5] >> 4; chunkZ++) {
+                if (!level.hasChunk(chunkX, chunkZ)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static boolean tickDelete(Minecraft minecraft, Job current) {
         ClientLevel level = minecraft.level;
-        int budget = current.direct ? 8 : Math.max(1, LitematicaPlusConfig.current().pasteCommandsPerTick / 8);
-        while (budget-- > 0 && !current.deleteBoxes.isEmpty()) {
+        int commands = current.direct ? 0 : Math.min(1, commandBudget(current, 1, FILL_COMMAND_INTERVAL));
+        int blockBudget = DIRECT_DELETE_BLOCKS_PER_TICK;
+        List<Operation> operations = current.direct ? new ArrayList<>() : null;
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int scannedBoxes = 0;
+        while (!current.deleteBoxes.isEmpty() && (current.direct ? blockBudget > 0 && scannedBoxes < 4 : commands > 0)) {
             int[] box = current.deleteBoxes.poll();
             long volume = (long) (box[3] - box[0] + 1) * (box[4] - box[1] + 1) * (box[5] - box[2] + 1);
             current.visited += volume;
-            if (!level.hasChunk(box[0] >> 4, box[2] >> 4) || volume > MAX_FILL_VOLUME) {
+            if (volume > MAX_FILL_VOLUME || !chunksLoaded(level, box)) {
                 current.skipped += volume;
                 continue;
             }
-            if (current.direct) {
-                List<Operation> operations = new ArrayList<>();
-                BlockState air = Blocks.AIR.defaultBlockState();
-                BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-                for (int y = box[4]; y >= box[1]; y--) {
-                    for (int z = box[2]; z <= box[5]; z++) {
-                        for (int x = box[0]; x <= box[3]; x++) {
-                            cursor.set(x, y, z);
-                            if (!level.getBlockState(cursor).isAir()) {
-                                operations.add(new Operation(cursor.immutable(), air, null));
-                            }
-                        }
-                    }
-                }
-                current.changed += operations.size();
-                if (!operations.isEmpty()) {
-                    dispatch(minecraft, current.dimension, operations);
-                }
-            } else {
+            if (!current.direct) {
                 minecraft.player.connection.sendCommand("fill " + box[0] + " " + box[1] + " " + box[2] + " "
                         + box[3] + " " + box[4] + " " + box[5] + " minecraft:air strict");
                 current.changed += volume;
+                commands--;
+                continue;
             }
+            scannedBoxes++;
+            for (int y = box[4]; y >= box[1]; y--) {
+                for (int z = box[2]; z <= box[5]; z++) {
+                    for (int x = box[0]; x <= box[3]; x++) {
+                        cursor.set(x, y, z);
+                        if (!level.getBlockState(cursor).isAir()) {
+                            operations.add(new Operation(cursor.immutable(), air, null));
+                            blockBudget--;
+                        }
+                    }
+                }
+            }
+        }
+        if (operations != null && !operations.isEmpty()) {
+            current.changed += operations.size();
+            dispatch(minecraft, current.dimension, operations);
         }
         return current.deleteBoxes.isEmpty();
     }
@@ -336,25 +423,32 @@ public final class PasteController {
         if (server == null) {
             return;
         }
+        IN_FLIGHT.incrementAndGet();
         server.execute(() -> {
-            ServerLevel level = server.getLevel(dimension);
-            if (level == null) {
-                return;
-            }
-            for (Operation operation : operations) {
-                try {
-                    level.setBlock(operation.pos(), operation.state(), PLACE_FLAGS);
-                    if (operation.data() != null) {
-                        BlockEntity blockEntity = level.getBlockEntity(operation.pos());
-                        if (blockEntity != null) {
-                            blockEntity.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING,
-                                    level.registryAccess(), operation.data()));
-                            blockEntity.setChanged();
-                        }
-                    }
-                } catch (RuntimeException exception) {
-                    LitematicaPlusClient.LOGGER.warn("Could not paste block at {}", operation.pos(), exception);
+            try {
+                ServerLevel level = server.getLevel(dimension);
+                if (level == null) {
+                    return;
                 }
+                for (Operation operation : operations) {
+                    try {
+                        if (level.getBlockState(operation.pos()) != operation.state()) {
+                            level.setBlock(operation.pos(), operation.state(), PLACE_FLAGS);
+                        }
+                        if (operation.data() != null) {
+                            BlockEntity blockEntity = level.getBlockEntity(operation.pos());
+                            if (blockEntity != null) {
+                                blockEntity.loadWithComponents(TagValueInput.create(ProblemReporter.DISCARDING,
+                                        level.registryAccess(), operation.data()));
+                                blockEntity.setChanged();
+                            }
+                        }
+                    } catch (RuntimeException exception) {
+                        LitematicaPlusClient.LOGGER.warn("Could not paste block at {}", operation.pos(), exception);
+                    }
+                }
+            } finally {
+                IN_FLIGHT.decrementAndGet();
             }
         });
     }

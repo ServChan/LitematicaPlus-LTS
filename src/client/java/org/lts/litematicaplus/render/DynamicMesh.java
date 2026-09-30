@@ -35,6 +35,15 @@ final class DynamicMesh {
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(this.buffer.slice(0L, size), data);
     }
 
+    void close() {
+        if (this.buffer != null) {
+            this.buffer.close();
+            this.buffer = null;
+        }
+        this.capacity = 0;
+        this.vertices = 0;
+    }
+
     GpuBufferSlice slice() {
         return this.buffer.slice(0L, (long) this.vertices * this.vertexSize);
     }

@@ -13,9 +13,11 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.visitors.CollectFields;
 import net.minecraft.nbt.visitors.FieldSelector;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class SchematicIo {
     public static final String LITEMATIC_EXTENSION = ".litematic";
+    private static final long NBT_QUOTA = 1L << 30;
 
     private SchematicIo() {
     }
@@ -34,9 +36,9 @@ public final class SchematicIo {
     public static Schematic read(Path path) throws IOException {
         CompoundTag root;
         try {
-            root = NbtIo.readCompressed(path, NbtAccounter.unlimitedHeap());
+            root = NbtIo.readCompressed(path, NbtAccounter.create(NBT_QUOTA));
         } catch (RuntimeException exception) {
-            throw new IOException("Unreadable NBT in " + path.getFileName(), exception);
+            throw new LocalizedException("litematicaplus.error.unreadable", "Unreadable NBT in " + path.getFileName(), exception);
         }
         String fallback = baseName(path);
         Schematic schematic;
@@ -48,10 +50,10 @@ public final class SchematicIo {
             } else if (VanillaStructureCodec.matches(root)) {
                 schematic = VanillaStructureCodec.read(root, fallback);
             } else {
-                throw new IOException("Unsupported schematic format: " + path.getFileName());
+                throw new LocalizedException("litematicaplus.error.not_schematic", "Unsupported schematic format: " + path.getFileName());
             }
         } catch (RuntimeException exception) {
-            throw new IOException("Corrupt schematic " + path.getFileName() + ": " + exception.getMessage(), exception);
+            throw new LocalizedException("litematicaplus.error.corrupt", "Corrupt schematic " + path.getFileName() + ": " + exception.getMessage(), exception);
         }
         if (schematic.metadata().name.isBlank()) {
             schematic.metadata().name = fallback;
@@ -72,13 +74,13 @@ public final class SchematicIo {
                 new FieldSelector(IntTag.TYPE, "Version"),
                 new FieldSelector(IntTag.TYPE, "MinecraftDataVersion"));
         try {
-            NbtIo.parseCompressed(path, visitor, NbtAccounter.unlimitedHeap());
+            NbtIo.parseCompressed(path, visitor, NbtAccounter.create(NBT_QUOTA));
         } catch (RuntimeException exception) {
-            throw new IOException("Unreadable NBT in " + path.getFileName(), exception);
+            throw new LocalizedException("litematicaplus.error.unreadable", "Unreadable NBT in " + path.getFileName(), exception);
         }
         Tag result = visitor.getResult();
         if (!(result instanceof CompoundTag root)) {
-            throw new IOException("Not a litematic file: " + path.getFileName());
+            throw new LocalizedException("litematicaplus.error.not_schematic", "Not a litematic file: " + path.getFileName());
         }
         SchematicMetadata metadata = LitematicCodec.readMetadataOnly(root);
         if (metadata.name.isBlank()) {
@@ -93,11 +95,15 @@ public final class SchematicIo {
             Files.createDirectories(parent);
         }
         Path temp = path.resolveSibling(path.getFileName() + ".tmp");
-        NbtIo.writeCompressed(LitematicCodec.write(schematic), temp);
         try {
-            Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException exception) {
-            Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
+            NbtIo.writeCompressed(LitematicCodec.write(schematic), temp);
+            try {
+                Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException exception) {
+                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
         }
     }
 }

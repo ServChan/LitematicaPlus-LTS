@@ -2,15 +2,22 @@ package org.lts.litematicaplus.verify;
 
 import java.util.Set;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.AbstractCandleBlock;
+import net.minecraft.world.level.block.BarrelBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.CampfireBlock;
+import net.minecraft.world.level.block.ComposterBlock;
+import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
 public final class StateComparator {
     private static final Set<String> VOLATILE_PROPERTIES = Set.of(
-            "distance", "persistent", "power", "powered", "lit", "triggered", "enabled", "snowy", "unstable",
+            "distance", "persistent", "power", "triggered", "enabled", "snowy", "unstable",
             "locked", "occupied", "has_record", "has_book", "has_bottle_0", "has_bottle_1", "has_bottle_2",
-            "bloom", "shrieking", "can_summon", "crafting", "age", "stage", "moisture", "honey_level", "dusted");
+            "bloom", "shrieking", "can_summon", "crafting", "age", "stage", "moisture", "honey_level", "dusted",
+            "extended", "sculk_sensor_phase", "tilt", "attached", "disarmed", "vault_state", "trial_spawner_state",
+            "ominous", "drag", "cracked", "hatch");
 
     private static volatile StateComparator instance;
 
@@ -34,12 +41,22 @@ public final class StateComparator {
             BlockState defaults = state.getBlock().defaultBlockState();
             BlockState normalized = state;
             for (Property<?> property : state.getProperties()) {
-                if (VOLATILE_PROPERTIES.contains(property.getName())) {
+                if (isVolatile(state.getBlock(), property.getName())) {
                     normalized = copyDefault(normalized, defaults, property);
                 }
             }
             this.canonical[id] = Block.getId(normalized);
         }
+    }
+
+    static boolean isVolatile(Block block, String property) {
+        return switch (property) {
+            case "powered" -> !(block instanceof LeverBlock);
+            case "lit" -> !(block instanceof AbstractCandleBlock) && !(block instanceof CampfireBlock);
+            case "open" -> block instanceof BarrelBlock;
+            case "level" -> block instanceof ComposterBlock;
+            default -> VOLATILE_PROPERTIES.contains(property);
+        };
     }
 
     public static StateComparator get() {

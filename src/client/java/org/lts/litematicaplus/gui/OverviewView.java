@@ -21,6 +21,7 @@ final class OverviewView extends TabView {
     private int togglesTop;
     private int layerTop;
     private int maxToggles;
+    private int toggleCount;
 
     OverviewView(HubScreen screen) {
         super(screen);
@@ -45,7 +46,8 @@ final class OverviewView extends TabView {
                     button -> this.screen.switchTab(HubScreen.Tab.PLACEMENTS)));
         }
         this.togglesTop = this.top + CARD_HEIGHT + 18;
-        int columns = this.width >= 260 ? 2 : 1;
+        this.toggleCount = 0;
+        int columns = this.width >= 400 ? 3 : this.width >= 200 ? 2 : 1;
         int columnWidth = (this.width - (columns - 1) * Theme.GAP) / columns;
         int rowStep = Theme.CONTROL_HEIGHT + 4;
         this.maxToggles = Math.max(1, (this.top + this.height - this.togglesTop - 36 - Theme.CONTROL_HEIGHT) / rowStep) * columns;
@@ -83,7 +85,7 @@ final class OverviewView extends TabView {
                 value -> {
                     LayerRange layer = GhostEngine.get().layer();
                     ToolController.get().applyLayer(layer.shifted(value - layer.single()));
-                }, -2048, 2048, 1).compact();
+                }, -30000000, 30000000, 1).compact();
         stepper.active = !GhostEngine.get().layer().isAll();
         add(stepper);
     }
@@ -93,6 +95,7 @@ final class OverviewView extends TabView {
         if (index >= this.maxToggles) {
             return index;
         }
+        this.toggleCount = index + 1;
         int x = this.left + index % columns * (columnWidth + Theme.GAP);
         int y = this.togglesTop + index / columns * (Theme.CONTROL_HEIGHT + 4);
         add(FlatButton.toggle(x, y, columnWidth, tr(key), () -> getter.test(LitematicaPlusConfig.current()), button -> {
@@ -122,16 +125,16 @@ final class OverviewView extends TabView {
         if (placement == null) {
             Ui.heading(graphics, this.font, tr("litematicaplus.overview.empty_title"), x, this.top + 8, 1.5F,
                     Theme.TEXT_BRIGHT);
-            Ui.clipped(graphics, this.font, tr("litematicaplus.overview.empty_hint").getString(), x, this.top + 25,
-                    this.width - 24, Theme.TEXT_DIM);
+            Ui.wrapped(graphics, this.font, tr("litematicaplus.overview.empty_hint"), x, this.top + 25,
+                    this.width - 180, 2, Theme.TEXT_DIM, mouseX, mouseY);
         } else {
             PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
             PlacementVolume volume = runtime == null ? null : runtime.volume();
             String name = this.font.plainSubstrByWidth(placement.name(), (int) ((this.width - 126) / 1.5F));
             Ui.heading(graphics, this.font, Component.literal(name), x, this.top + 8, 1.5F, Theme.TEXT_BRIGHT);
             if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
-                graphics.textWithWordWrap(this.font, tr("litematicaplus.placement.failed", placement.error()), x,
-                        this.top + 26, this.width - 24, Theme.DANGER, false);
+                Ui.wrapped(graphics, this.font, tr("litematicaplus.placement.failed", placement.error()), x,
+                        this.top + 26, this.width - 24, 3, Theme.DANGER, mouseX, mouseY);
             } else if (volume == null) {
                 graphics.text(this.font, tr(placement.enabled() ? "litematicaplus.hud.loading"
                         : "litematicaplus.hud.disabled"), x, this.top + 28, Theme.TEXT_DIM, false);
@@ -151,11 +154,17 @@ final class OverviewView extends TabView {
             }
         }
         Ui.label(graphics, this.font, tr("litematicaplus.overview.quick_toggles"), this.left, this.togglesTop - 11);
+        if (this.toggleCount < 6) {
+            Ui.right(graphics, this.font, tr("litematicaplus.overview.more_toggles").getString(), this.left + this.width,
+                    this.togglesTop - 11, Theme.TEXT_DIM);
+        }
         Ui.label(graphics, this.font, tr("litematicaplus.overview.layers"), this.left, this.layerTop - 11);
-        int footerY = this.top + this.height - 10;
-        if (footerY > this.layerTop + Theme.CONTROL_HEIGHT + 6) {
-            Ui.clipped(graphics, this.font, tr("litematicaplus.overview.footer",
-                    LitematicaPlusConfig.current().toolItem).getString(), this.left, footerY, this.width, Theme.TEXT_DIM);
+        int footerTop = this.layerTop + Theme.CONTROL_HEIGHT + 6;
+        int footerLines = Math.min(3, (this.top + this.height - footerTop) / 10);
+        if (footerLines > 0) {
+            Ui.wrapped(graphics, this.font, tr("litematicaplus.overview.footer", LitematicaPlusConfig.current().toolItem),
+                    this.left, this.top + this.height - footerLines * 10, this.width, footerLines, Theme.TEXT_DIM,
+                    mouseX, mouseY);
         }
     }
 
@@ -165,6 +174,7 @@ final class OverviewView extends TabView {
         if (x + this.font.width(text) + 12 > this.left + this.width - 8) {
             return x;
         }
-        return Ui.chip(graphics, this.font, x, y, text, count > 0L ? type.color() : Theme.TEXT_DIM);
+        return Ui.chip(graphics, this.font, x, y, text, count > 0L ? type.color() : Theme.TEXT_DIM,
+                count > 0L ? type.textColor() : Theme.TEXT_DIM);
     }
 }

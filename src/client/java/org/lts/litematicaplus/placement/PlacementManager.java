@@ -1,10 +1,10 @@
 package org.lts.litematicaplus.placement;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -13,14 +13,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.SessionStore;
 import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.schematic.BlockStateNbt;
+import org.lts.litematicaplus.schematic.LitematicCodec;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 
 public final class PlacementManager {
@@ -48,8 +52,16 @@ public final class PlacementManager {
     }
 
     public static Path resolve(String file) {
-        Path path = Path.of(file);
-        return path.isAbsolute() ? path.normalize() : schematicsDirectory().resolve(file).normalize();
+        try {
+            Path path = Path.of(file);
+            return path.isAbsolute() ? path.normalize() : schematicsDirectory().resolve(file).normalize();
+        } catch (InvalidPathException exception) {
+            return schematicsDirectory().resolve("invalid-path");
+        }
+    }
+
+    public void invalidate(Path file) {
+        this.cache.remove(cacheKey(file));
     }
 
     public static String relativize(Path file) {
@@ -181,7 +193,7 @@ public final class PlacementManager {
         if (force) {
             this.cache.remove(key);
         }
-        placement.markLoading();
+        int generation = placement.markLoading();
         CompletableFuture<Schematic> future = this.cache.computeIfAbsent(key, ignored -> CompletableFuture.supplyAsync(() -> {
             try {
                 return SchematicIo.read(path);
@@ -191,22 +203,34 @@ public final class PlacementManager {
         }, Workers.io()));
         Minecraft minecraft = Minecraft.getInstance();
         future.whenComplete((schematic, failure) -> minecraft.execute(() -> {
-            if (!this.placements.contains(placement)) {
+            if (!this.placements.contains(placement) || placement.loadGeneration() != generation) {
                 return;
             }
             if (failure != null || schematic == null) {
-                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
-                        ? failure.getCause() : failure;
-                String message = cause == null ? "unknown error" : String.valueOf(cause.getMessage());
-                LitematicaPlusClient.LOGGER.warn("Could not load schematic {}: {}", path, message);
+                LitematicaPlusClient.LOGGER.warn("Could not load schematic {}: {}", path,
+                        failure == null ? "no data" : String.valueOf(failure.getMessage()));
                 this.cache.remove(key, future);
-                placement.markFailed(message);
+                placement.markFailed(Notify.describe(failure));
             } else {
                 placement.markReady(schematic);
+                warnAboutContent(placement, schematic);
             }
             GhostEngine.get().rebuild(placement);
             this.changeListener.run();
         }));
+    }
+
+    private static void warnAboutContent(SchematicPlacement placement, Schematic schematic) {
+        int unknown = schematic.metadata().unknownStates;
+        if (unknown > 0) {
+            LitematicaPlusClient.LOGGER.warn("Schematic {} has {} block states this game version does not know",
+                    placement.file(), unknown);
+            Notify.chat(Component.translatable("litematicaplus.message.unknown_blocks", placement.name(), unknown));
+        } else if (schematic.metadata().dataVersion > BlockStateNbt.currentDataVersion()
+                || "litematic".equals(schematic.metadata().format)
+                && schematic.metadata().schematicVersion > LitematicCodec.SCHEMATIC_VERSION) {
+            Notify.chat(Component.translatable("litematicaplus.message.newer_schematic", placement.name()));
+        }
     }
 
     private void pruneCache() {
@@ -218,7 +242,7 @@ public final class PlacementManager {
     }
 
     private static String cacheKey(Path path) {
-        return path.toAbsolutePath().normalize().toString().toLowerCase(Locale.ROOT);
+        return path.toAbsolutePath().normalize().toString();
     }
 
     private String uniqueName(String base) {

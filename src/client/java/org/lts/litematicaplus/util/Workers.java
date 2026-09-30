@@ -12,6 +12,7 @@ public final class Workers {
     private static final AtomicInteger COUNTER = new AtomicInteger();
     private static volatile ThreadPoolExecutor mesh;
     private static volatile ExecutorService io;
+    private static volatile ExecutorService writer;
 
     private Workers() {
     }
@@ -22,9 +23,8 @@ public final class Workers {
             synchronized (Workers.class) {
                 current = mesh;
                 if (current == null || current.isShutdown()) {
-                    current = new ThreadPoolExecutor(threads, threads, 30L, TimeUnit.SECONDS,
+                    current = new ThreadPoolExecutor(threads, threads, 0L, TimeUnit.SECONDS,
                             new LinkedBlockingQueue<>(), factory("LitematicaPlus-Mesh", Thread.NORM_PRIORITY - 2));
-                    current.allowCoreThreadTimeOut(true);
                     mesh = current;
                 }
             }
@@ -55,8 +55,31 @@ public final class Workers {
         return current;
     }
 
+    public static ExecutorService writer() {
+        ExecutorService current = writer;
+        if (current == null || current.isShutdown()) {
+            synchronized (Workers.class) {
+                current = writer;
+                if (current == null || current.isShutdown()) {
+                    current = Executors.newSingleThreadExecutor(factory("LitematicaPlus-Writer", Thread.NORM_PRIORITY - 1));
+                    writer = current;
+                }
+            }
+        }
+        return current;
+    }
+
     public static void shutdown() {
         synchronized (Workers.class) {
+            if (writer != null) {
+                writer.shutdown();
+                try {
+                    writer.awaitTermination(5L, TimeUnit.SECONDS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+                writer = null;
+            }
             if (mesh != null) {
                 mesh.shutdownNow();
                 mesh = null;

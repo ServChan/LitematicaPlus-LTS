@@ -58,6 +58,8 @@ final class VerifierView extends TabView {
         int listBottom = this.top + this.height - Theme.CONTROL_HEIGHT - 4;
         this.list = add(new ListPanel<GhostEngine.Mismatch>(this.left, listTop, this.width, listBottom - listTop,
                 Theme.ROW_HEIGHT, tr("litematicaplus.tab.verifier"), this::renderRow)
+                .describe(mismatch -> tr("litematicaplus.mismatch." + mismatch.type().key()).getString() + " "
+                        + mismatch.pos().toShortString())
                 .onSelect(mismatch -> BoxRenderer.setFocus(mismatch.pos(), mismatch.type().color()))
                 .empty(tr("litematicaplus.verifier.empty_title"), tr("litematicaplus.verifier.empty_hint")));
         FlatButton clear = add(FlatButton.secondary(this.left + this.width - 150, listBottom + 4, 150,
@@ -92,6 +94,16 @@ final class VerifierView extends TabView {
         enabled[MismatchType.WRONG_BLOCK.ordinal()] = config.showWrongBlock;
         enabled[MismatchType.WRONG_STATE.ordinal()] = config.showWrongState;
         enabled[MismatchType.EXTRA.ordinal()] = config.showExtra;
+        PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+        if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
+            this.list.empty(tr("litematicaplus.state.failed_title"), tr("litematicaplus.state.failed_hint"));
+        } else if (!placement.enabled()) {
+            this.list.empty(tr("litematicaplus.state.hidden_title"), tr("litematicaplus.state.hidden_hint"));
+        } else if (runtime == null || runtime.volume() == null || runtime.pendingSections() > 0 && runtime.verifiedSections() == 0) {
+            this.list.empty(tr("litematicaplus.state.loading_title"), tr("litematicaplus.state.loading_hint"));
+        } else {
+            this.list.empty(tr("litematicaplus.verifier.empty_title"), tr("litematicaplus.verifier.empty_hint"));
+        }
         GhostEngine.Mismatch previous = this.list.selectedItem();
         this.mismatches = GhostEngine.get().nearestMismatches(GhostEngine.get().runtime(placement.id()),
                 this.minecraft.player.position(), LIMIT, enabled);
@@ -123,10 +135,9 @@ final class VerifierView extends TabView {
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, GhostEngine.Mismatch mismatch, int x, int y,
             int rowWidth, int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
-        int color = mismatch.type().color();
-        graphics.fill(x + 7, y + 7, x + 15, y + rowHeight - 7, color);
+        graphics.fill(x + 7, y + 7, x + 15, y + rowHeight - 7, mismatch.type().color());
         String type = tr("litematicaplus.mismatch." + mismatch.type().key()).getString();
-        graphics.text(rowFont, type, x + 21, textY, color, false);
+        graphics.text(rowFont, type, x + 21, textY, mismatch.type().textColor(), false);
         int typeWidth = Math.max(78, rowFont.width(type) + 8);
         BlockPos pos = mismatch.pos();
         String where = pos.getX() + " " + pos.getY() + " " + pos.getZ() + "  "
@@ -178,11 +189,11 @@ final class VerifierView extends TabView {
         if (runtime == null) {
             return;
         }
-        int y = this.top + this.height - Theme.CONTROL_HEIGHT + 6;
+        int y = this.top + this.height - Theme.CONTROL_HEIGHT + 1;
         long unknown = runtime.count(MismatchType.UNKNOWN);
         Component line = unknown > 0L ? tr("litematicaplus.verifier.unknown", unknown)
                 : tr("litematicaplus.verifier.shown", this.mismatches.size());
-        Ui.clipped(graphics, this.font, line.getString(), this.left, y, this.width - 160,
-                unknown > 0L ? Theme.WARNING : Theme.TEXT_DIM);
+        Ui.wrapped(graphics, this.font, line, this.left, y, this.width - 160, 2,
+                unknown > 0L ? Theme.WARNING : Theme.TEXT_DIM, mouseX, mouseY);
     }
 }

@@ -12,9 +12,21 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.PlaceOnWaterBlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ButtonBlock;
+import net.minecraft.world.level.block.CakeBlock;
+import net.minecraft.world.level.block.CandleCakeBlock;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.DragonEggBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.NoteBlock;
+import net.minecraft.world.level.block.RepeaterBlock;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -24,8 +36,10 @@ import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.mixin.BlockItemInvoker;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.verify.MismatchType;
 
@@ -34,6 +48,12 @@ public final class EasyPlace {
             "face", "hinge", "attachment", "orientation", "vertical_direction", "hanging");
     private static final Direction[] DIRECTIONS = Direction.values();
     private static final double[] HEIGHTS = {0.25, 0.75};
+    private static final double[] LATERAL = {0.5, 0.25, 0.75};
+    private static final double[][] FLAT = {{0.5, 0.5}, {0.25, 0.25}, {0.75, 0.75}, {0.25, 0.75}, {0.75, 0.25}};
+    private static final double REACH_TOLERANCE = 0.5;
+    private static final int MATCH_NONE = 0;
+    private static final int MATCH_PLACEABLE = 1;
+    private static final int MATCH_EXACT = 2;
     private static int cooldown;
 
     private EasyPlace() {
@@ -47,11 +67,15 @@ public final class EasyPlace {
 
     public static boolean onUse(Minecraft minecraft) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.level == null || minecraft.gameMode == null) {
+            return false;
+        }
+        if (player.isSpectator() || !player.mayBuild()) {
             return false;
         }
         if (config.easyPlaceEnabled && config.renderEnabled) {
-            GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isPlaceable(minecraft.level, candidate));
+            GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isPlaceable(minecraft, candidate));
             if (hit != null) {
                 if (cooldown <= 0) {
                     place(minecraft, hit, config);
@@ -64,7 +88,8 @@ public final class EasyPlace {
 
     public static boolean onPick(Minecraft minecraft) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!config.pickBlockEnabled || !config.renderEnabled || minecraft.player == null) {
+        if (!config.pickBlockEnabled || !config.renderEnabled || minecraft.player == null
+                || minecraft.player.isSpectator()) {
             return false;
         }
         GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> candidate.type() == MismatchType.MISSING
@@ -79,9 +104,14 @@ public final class EasyPlace {
         return true;
     }
 
-    public static boolean isPlaceable(ClientLevel level, GhostRaycast.Hit hit) {
+    public static boolean isPlaceable(Minecraft minecraft, GhostRaycast.Hit hit) {
+        ClientLevel level = minecraft.level;
+        if (level == null) {
+            return false;
+        }
         BlockState target = hit.state();
-        if (!(InventoryHelper.itemFor(target) instanceof BlockItem)) {
+        Item item = InventoryHelper.itemFor(target);
+        if (!(item instanceof BlockItem) || item instanceof PlaceOnWaterBlockItem) {
             return false;
         }
         if (target.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
@@ -96,7 +126,17 @@ public final class EasyPlace {
         if (hit.type() == MismatchType.WRONG_STATE) {
             return isSlabCompletion(world, target);
         }
-        return world.canBeReplaced();
+        return world.canBeReplaced()
+                && level.isUnobstructed(target, hit.pos(), CollisionContext.placementContext(minecraft.player));
+    }
+
+    public static boolean isInteractable(ClientLevel level, BlockPos pos, BlockState state) {
+        Block block = state.getBlock();
+        return state.hasBlockEntity() || state.getMenuProvider(level, pos) != null
+                || block instanceof DoorBlock || block instanceof TrapDoorBlock || block instanceof FenceGateBlock
+                || block instanceof LeverBlock || block instanceof ButtonBlock || block instanceof NoteBlock
+                || block instanceof RespawnAnchorBlock || block instanceof CakeBlock || block instanceof CandleCakeBlock
+                || block instanceof RepeaterBlock || block instanceof DragonEggBlock;
     }
 
     private static boolean isSlabCompletion(BlockState world, BlockState target) {
@@ -119,6 +159,10 @@ public final class EasyPlace {
             return;
         }
         ItemStack stack = player.getMainHandItem();
+        if (!(stack.getItem() instanceof BlockItem)) {
+            cooldown = 2;
+            return;
+        }
         BlockPos pos = hit.pos();
         BlockHitResult click;
         BlockState world = level.getBlockState(pos);
@@ -143,36 +187,48 @@ public final class EasyPlace {
 
     private static BlockHitResult findClick(LocalPlayer player, ClientLevel level, ItemStack stack, BlockPos pos,
             BlockState target, LitematicaPlusConfig config) {
+        Vec3 eye = player.getEyePosition(1.0F);
+        boolean sneaking = player.isShiftKeyDown();
         BlockHitResult fallback = null;
-        for (Direction side : DIRECTIONS) {
-            BlockPos neighbor = pos.relative(side.getOpposite());
-            BlockState neighborState = level.getBlockState(neighbor);
-            if (!isPlainSupport(level, neighbor, neighborState)) {
-                continue;
+        for (int pass = 0; pass < 2; pass++) {
+            boolean wantVisible = pass == 0;
+            if (!wantVisible && !config.easyPlaceAirPlacement) {
+                break;
             }
-            for (double height : HEIGHTS) {
-                BlockHitResult click = new BlockHitResult(faceLocation(neighbor, side, height), side, neighbor, false);
-                if (fallback == null) {
-                    fallback = click;
+            for (Direction side : DIRECTIONS) {
+                BlockPos neighbor = pos.relative(side.getOpposite());
+                BlockState neighborState = level.getBlockState(neighbor);
+                if (!isSupport(level, neighbor, neighborState, sneaking)
+                        || !player.isWithinBlockInteractionRange(neighbor, REACH_TOLERANCE)
+                        || faceVisible(eye, neighbor, side) != wantVisible) {
+                    continue;
                 }
-                if (matches(player, level, stack, click, pos, target)) {
-                    return click;
-                }
-                if (side.getAxis() == Direction.Axis.Y) {
-                    break;
+                int samples = side.getAxis() == Direction.Axis.Y ? FLAT.length : LATERAL.length * HEIGHTS.length;
+                for (int sample = 0; sample < samples; sample++) {
+                    BlockHitResult click = new BlockHitResult(faceLocation(neighbor, side, sample), side, neighbor, false);
+                    int match = match(player, stack, click, pos, target);
+                    if (match == MATCH_EXACT) {
+                        return click;
+                    }
+                    if (match == MATCH_PLACEABLE && fallback == null) {
+                        fallback = click;
+                    }
                 }
             }
         }
         if (config.easyPlaceAirPlacement) {
             for (Direction side : DIRECTIONS) {
-                for (double height : HEIGHTS) {
-                    BlockHitResult click = new BlockHitResult(
-                            new Vec3(pos.getX() + 0.5, pos.getY() + height, pos.getZ() + 0.5), side, pos, false);
-                    if (fallback == null) {
-                        fallback = click;
-                    }
-                    if (matches(player, level, stack, click, pos, target)) {
-                        return click;
+                for (double[] offset : FLAT) {
+                    for (double height : HEIGHTS) {
+                        BlockHitResult click = new BlockHitResult(new Vec3(pos.getX() + offset[0], pos.getY() + height,
+                                pos.getZ() + offset[1]), side, pos, false);
+                        int match = match(player, stack, click, pos, target);
+                        if (match == MATCH_EXACT) {
+                            return click;
+                        }
+                        if (match == MATCH_PLACEABLE && fallback == null) {
+                            fallback = click;
+                        }
                     }
                 }
             }
@@ -180,33 +236,49 @@ public final class EasyPlace {
         return config.easyPlaceStrictOrientation ? null : fallback;
     }
 
-    private static boolean isPlainSupport(ClientLevel level, BlockPos pos, BlockState state) {
-        if (state.canBeReplaced() || state.hasBlockEntity() || state.getBlock() instanceof NoteBlock) {
+    private static boolean isSupport(ClientLevel level, BlockPos pos, BlockState state, boolean sneaking) {
+        if (state.canBeReplaced() || !state.isCollisionShapeFullBlock(level, pos)) {
             return false;
         }
-        return state.isCollisionShapeFullBlock(level, pos) && state.getMenuProvider(level, pos) == null;
+        return sneaking || !isInteractable(level, pos, state);
     }
 
-    private static Vec3 faceLocation(BlockPos block, Direction side, double height) {
-        double x = block.getX() + 0.5 + side.getStepX() * 0.5;
-        double z = block.getZ() + 0.5 + side.getStepZ() * 0.5;
-        double y = side.getAxis() == Direction.Axis.Y
-                ? block.getY() + 0.5 + side.getStepY() * 0.5
-                : block.getY() + height;
-        return new Vec3(x, y, z);
+    private static boolean faceVisible(Vec3 eye, BlockPos block, Direction side) {
+        double centerX = block.getX() + 0.5 + side.getStepX() * 0.5;
+        double centerY = block.getY() + 0.5 + side.getStepY() * 0.5;
+        double centerZ = block.getZ() + 0.5 + side.getStepZ() * 0.5;
+        return (eye.x - centerX) * side.getStepX() + (eye.y - centerY) * side.getStepY()
+                + (eye.z - centerZ) * side.getStepZ() > 0.0;
     }
 
-    private static boolean matches(LocalPlayer player, ClientLevel level, ItemStack stack, BlockHitResult click,
-            BlockPos pos, BlockState target) {
+    private static Vec3 faceLocation(BlockPos block, Direction side, int sample) {
+        if (side.getAxis() == Direction.Axis.Y) {
+            return new Vec3(block.getX() + FLAT[sample][0], block.getY() + 0.5 + side.getStepY() * 0.5,
+                    block.getZ() + FLAT[sample][1]);
+        }
+        double lateral = LATERAL[sample / HEIGHTS.length];
+        double height = HEIGHTS[sample % HEIGHTS.length];
+        if (side.getAxis() == Direction.Axis.X) {
+            return new Vec3(block.getX() + 0.5 + side.getStepX() * 0.5, block.getY() + height, block.getZ() + lateral);
+        }
+        return new Vec3(block.getX() + lateral, block.getY() + height, block.getZ() + 0.5 + side.getStepZ() * 0.5);
+    }
+
+    private static int match(LocalPlayer player, ItemStack stack, BlockHitResult click, BlockPos pos, BlockState target) {
         try {
-            BlockPlaceContext context = new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, click);
-            if (!context.getClickedPos().equals(pos) || !context.canPlace()) {
-                return false;
+            BlockItem item = (BlockItem) stack.getItem();
+            BlockPlaceContext context = item.updatePlacementContext(
+                    new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, click));
+            if (context == null || !context.getClickedPos().equals(pos) || !context.canPlace()) {
+                return MATCH_NONE;
             }
-            BlockState placed = target.getBlock().getStateForPlacement(context);
-            return placed != null && placed.canSurvive(level, pos) && orientationMatches(placed, target);
+            BlockState placed = ((BlockItemInvoker) item).litematicaplus$getPlacementState(context);
+            if (placed == null) {
+                return MATCH_NONE;
+            }
+            return orientationMatches(placed, target) ? MATCH_EXACT : MATCH_PLACEABLE;
         } catch (RuntimeException exception) {
-            return false;
+            return MATCH_NONE;
         }
     }
 
@@ -233,11 +305,14 @@ public final class EasyPlace {
         }
         ItemStack stack = minecraft.player.getMainHandItem();
         if (!(stack.getItem() instanceof BlockItem)) {
-            return false;
+            stack = minecraft.player.getOffhandItem();
+            if (!(stack.getItem() instanceof BlockItem)) {
+                return false;
+            }
         }
         BlockPos clicked = blockHit.getBlockPos();
         BlockState clickedState = minecraft.level.getBlockState(clicked);
-        if (clickedState.hasBlockEntity() && !minecraft.player.isShiftKeyDown()) {
+        if (!minecraft.player.isShiftKeyDown() && isInteractable(minecraft.level, clicked, clickedState)) {
             return false;
         }
         BlockPos target = clickedState.canBeReplaced() ? clicked : clicked.relative(blockHit.getDirection());

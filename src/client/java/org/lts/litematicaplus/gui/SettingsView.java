@@ -39,8 +39,13 @@ final class SettingsView extends TabView {
     private FlatButton revertButton;
     private boolean dirty;
     private boolean toolItemValid = true;
+    private String toolItemText = this.working.toolItem;
     private int page;
     private int pages = 1;
+    private int toolItemX;
+    private int toolItemY;
+    private int authorX;
+    private int authorY;
     private Component status = Component.empty();
     private int statusColor = Theme.TEXT_DIM;
 
@@ -64,14 +69,14 @@ final class SettingsView extends TabView {
                         category = entry;
                         this.page = 0;
                         this.screen.refresh();
-                    }));
+                    }).withState(() -> category == entry));
         }
         List<Row> rows = rows();
         int rowsTop = this.top + Theme.CONTROL_HEIGHT + 8;
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
         int columns = this.width >= 380 ? 2 : 1;
         int columnWidth = (this.width - Theme.GAP * (columns - 1)) / columns;
-        int visibleRows = Math.max(1, (bottomY - 6 - rowsTop) / (Theme.CONTROL_HEIGHT + 4));
+        int visibleRows = Math.max(1, (bottomY - 14 - rowsTop) / (Theme.CONTROL_HEIGHT + 4));
         int perPage = visibleRows * columns;
         this.pages = Math.max(1, (rows.size() + perPage - 1) / perPage);
         this.page = Math.max(0, Math.min(this.page, this.pages - 1));
@@ -98,6 +103,7 @@ final class SettingsView extends TabView {
                     this.working = LitematicaPlusConfig.currentCopy();
                     this.dirty = false;
                     this.toolItemValid = true;
+                    this.toolItemText = this.working.toolItem;
                     this.status = Component.empty();
                     this.screen.refresh();
                 }));
@@ -115,23 +121,29 @@ final class SettingsView extends TabView {
 
     private void changed() {
         this.dirty = true;
-        this.status = Component.empty();
+        this.status = tr("litematicaplus.settings.unsaved");
+        this.statusColor = Theme.WARNING;
         updateSave();
+    }
+
+    @Override
+    void closed() {
+        if (this.dirty && this.toolItemValid) {
+            LitematicaPlusConfig.save(this.working);
+            this.dirty = false;
+        }
     }
 
     private void save() {
         if (!this.toolItemValid) {
             return;
         }
-        if (LitematicaPlusConfig.save(this.working)) {
-            this.working = LitematicaPlusConfig.currentCopy();
-            this.dirty = false;
-            this.status = tr("litematicaplus.settings.saved");
-            this.statusColor = Theme.SUCCESS;
-        } else {
-            this.status = tr("litematicaplus.error.save_failed");
-            this.statusColor = Theme.DANGER;
-        }
+        LitematicaPlusConfig.save(this.working);
+        this.working = LitematicaPlusConfig.currentCopy();
+        this.toolItemText = this.working.toolItem;
+        this.dirty = false;
+        this.status = tr("litematicaplus.settings.saved");
+        this.statusColor = Theme.SUCCESS;
         this.screen.refresh();
     }
 
@@ -142,7 +154,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("render_enabled", c -> c.renderEnabled, (c, v) -> c.renderEnabled = v));
                 rows.add(toggle("render_ghost", c -> c.renderGhostBlocks, (c, v) -> c.renderGhostBlocks = v));
                 rows.add(percent("ghost_alpha", () -> Math.round(this.working.ghostAlpha * 100.0F),
-                        v -> this.working.ghostAlpha = v / 100.0F, 10));
+                        v -> this.working.ghostAlpha = v / 100.0F, 20));
                 rows.add(toggle("render_overlay", c -> c.renderOverlay, (c, v) -> c.renderOverlay = v));
                 rows.add(percent("overlay_fill_alpha", () -> Math.round(this.working.overlayFillAlpha * 100.0F),
                         v -> this.working.overlayFillAlpha = v / 100.0F, 0));
@@ -162,6 +174,7 @@ final class SettingsView extends TabView {
                         v -> this.working.hudMaterialLines = v, 0, 16, 1));
             }
             case TOOLS -> {
+                rows.add(toggle("tool_enabled", c -> c.toolEnabled, (c, v) -> c.toolEnabled = v));
                 rows.add(this::toolItemRow);
                 rows.add(this::authorRow);
                 rows.add(toggle("easy_place", c -> c.easyPlaceEnabled, (c, v) -> c.easyPlaceEnabled = v));
@@ -175,7 +188,7 @@ final class SettingsView extends TabView {
                 rows.add(this::pasteReplaceRow);
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
-                        v -> this.working.pasteCommandsPerTick = v, 1, 400, 5));
+                        v -> this.working.pasteCommandsPerTick = v, 1, 16, 1));
             }
             case PERFORMANCE -> {
                 rows.add((x, y, width) -> add(new Stepper(x, y, width, tr("litematicaplus.option.worker_threads"),
@@ -219,10 +232,13 @@ final class SettingsView extends TabView {
 
     private void toolItemRow(int x, int y, int width) {
         int labelWidth = Math.min(width / 2, this.font.width(tr("litematicaplus.option.tool_item")) + 12);
-        EditBox box = field(x + labelWidth, y, width - labelWidth, this.working.toolItem,
+        this.toolItemX = x;
+        this.toolItemY = y;
+        EditBox box = field(x + labelWidth, y, width - labelWidth, this.toolItemText,
                 tr("litematicaplus.option.tool_item"), 96);
         box.setTextColor(this.toolItemValid ? Theme.TEXT : Theme.DANGER);
         box.setResponder(value -> {
+            this.toolItemText = value;
             String clean = value.strip().toLowerCase(Locale.ROOT);
             Identifier id = Identifier.tryParse(clean);
             boolean valid = id != null && BuiltInRegistries.ITEM.getOptional(id).isPresent();
@@ -242,12 +258,13 @@ final class SettingsView extends TabView {
 
     private void authorRow(int x, int y, int width) {
         int labelWidth = Math.min(width / 2, this.font.width(tr("litematicaplus.option.default_author")) + 12);
+        this.authorX = x;
+        this.authorY = y;
         EditBox box = field(x + labelWidth, y, width - labelWidth, this.working.defaultAuthor,
                 tr("litematicaplus.option.default_author"), 64);
         box.setResponder(value -> {
             this.working.defaultAuthor = value;
-            this.dirty = true;
-            updateSave();
+            changed();
         });
     }
 
@@ -255,31 +272,22 @@ final class SettingsView extends TabView {
         add(FlatButton.secondary(x, y, width, tr("litematicaplus.option.paste_replace",
                 tr("litematicaplus.paste_replace." + this.working.pasteReplace.name().toLowerCase(Locale.ROOT))), button -> {
                     this.working.pasteReplace = this.working.pasteReplace.next();
-                    this.dirty = true;
+                    changed();
                     this.screen.refresh();
                 }));
     }
 
     @Override
     void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        Category[] categories = Category.values();
-        int tabWidth = (this.width - Theme.GAP * (categories.length - 1)) / categories.length;
-        int markerX = this.left + category.ordinal() * (tabWidth + Theme.GAP);
-        graphics.fill(markerX, this.top + Theme.CONTROL_HEIGHT + 1, markerX + tabWidth, this.top + Theme.CONTROL_HEIGHT + 3,
-                Theme.ACCENT);
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
         graphics.centeredText(this.font, (this.page + 1) + " / " + this.pages, this.left + 47, bottomY + 6, Theme.TEXT_DIM);
         if (category == Category.TOOLS && this.page == 0) {
-            int rowsTop = this.top + Theme.CONTROL_HEIGHT + 8;
-            int columns = this.width >= 380 ? 2 : 1;
-            int columnWidth = (this.width - Theme.GAP * (columns - 1)) / columns;
-            graphics.text(this.font, tr("litematicaplus.option.tool_item"), this.left, rowsTop + 6, Theme.ACCENT, false);
-            int authorX = columns == 2 ? this.left + columnWidth + Theme.GAP : this.left;
-            int authorY = columns == 2 ? rowsTop : rowsTop + Theme.CONTROL_HEIGHT + 4;
-            graphics.text(this.font, tr("litematicaplus.option.default_author"), authorX, authorY + 6, Theme.ACCENT, false);
+            graphics.text(this.font, tr("litematicaplus.option.tool_item"), this.toolItemX, this.toolItemY + 6,
+                    Theme.ACCENT, false);
+            graphics.text(this.font, tr("litematicaplus.option.default_author"), this.authorX, this.authorY + 6,
+                    Theme.ACCENT, false);
         }
-        int statusX = this.left + 102;
-        int statusWidth = this.width - 102 - 90 - Theme.GAP - 80 - 8;
-        Ui.clipped(graphics, this.font, this.status.getString(), statusX, bottomY + 6, statusWidth, this.statusColor);
+        Ui.wrapped(graphics, this.font, this.status, this.left, bottomY - 12, this.width, 1, this.statusColor,
+                mouseX, mouseY);
     }
 }

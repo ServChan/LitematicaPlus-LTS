@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +18,7 @@ import org.lts.litematicaplus.placement.PlacementTransform;
 import org.lts.litematicaplus.schematic.BitPackedArray;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicRegion;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class PlacementVolume {
     public static final int MAX_PALETTE = 0xFFFE;
@@ -35,13 +37,15 @@ public final class PlacementVolume {
     private final int maxZ;
     private final long totalBlocks;
     private final long[] totalByPalette;
+    private final int dataVersion;
 
     public record RegionBox(String name, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
     }
 
     private PlacementVolume(BlockState[] palette, Long2ObjectOpenHashMap<GhostSection> sections,
-            Long2ObjectOpenHashMap<CompoundTag> blockEntities, List<RegionBox> regionBoxes) {
+            Long2ObjectOpenHashMap<CompoundTag> blockEntities, List<RegionBox> regionBoxes, int dataVersion) {
         this.palette = palette;
+        this.dataVersion = dataVersion;
         this.globalIds = new int[palette.length];
         this.solid = new boolean[palette.length];
         for (int i = 0; i < palette.length; i++) {
@@ -73,8 +77,13 @@ public final class PlacementVolume {
         this.maxZ = highZ;
         long blocks = 0L;
         this.totalByPalette = new long[palette.length];
-        for (GhostSection section : sections.values()) {
+        for (Long2ObjectMap.Entry<GhostSection> entry : sections.long2ObjectEntrySet()) {
+            GhostSection section = entry.getValue();
             section.recount(this.solid);
+            if (section.isFullAir()) {
+                entry.setValue(GhostSection.sharedFullAir());
+                continue;
+            }
             blocks += section.solidCount();
             if (section.solidCount() > 0) {
                 for (short value : section.raw()) {
@@ -86,6 +95,10 @@ public final class PlacementVolume {
         }
         this.totalByPalette[0] = 0L;
         this.totalBlocks = blocks;
+    }
+
+    public int dataVersion() {
+        return this.dataVersion;
     }
 
     public long[] totalByPalette() {
@@ -118,7 +131,8 @@ public final class PlacementVolume {
                 int index = lookup.getInt(state);
                 if (index < 0) {
                     if (palette.size() >= MAX_PALETTE) {
-                        throw new IllegalStateException("Placement uses more than " + MAX_PALETTE + " block states");
+                        throw new UncheckedIOException(new LocalizedException("litematicaplus.error.too_many_states",
+                                "Placement uses more than " + MAX_PALETTE + " block states"));
                     }
                     index = palette.size();
                     palette.add(state);
@@ -178,7 +192,8 @@ public final class PlacementVolume {
             boxes.add(new RegionBox("", transform.originX(), transform.originY(), transform.originZ(),
                     transform.originX(), transform.originY(), transform.originZ()));
         }
-        return new PlacementVolume(palette.toArray(BlockState[]::new), sections, blockEntities, boxes);
+        return new PlacementVolume(palette.toArray(BlockState[]::new), sections, blockEntities, boxes,
+                schematic.metadata().dataVersion);
     }
 
     public BlockState[] palette() {

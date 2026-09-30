@@ -5,13 +5,22 @@ import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CandleCakeBlock;
+import net.minecraft.world.level.block.FlowerPotBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -47,7 +56,65 @@ public final class MaterialList {
         BlockStateProperties.LAYERS, BlockStateProperties.FLOWER_AMOUNT, BlockStateProperties.SEGMENT_AMOUNT
     };
 
+    @FunctionalInterface
+    public interface Sink {
+        void add(Item item, int count);
+    }
+
+    private static volatile Map<Block, Item> overrides;
+
     private MaterialList() {
+    }
+
+    private static Map<Block, Item> overrides() {
+        Map<Block, Item> current = overrides;
+        if (current == null) {
+            current = new IdentityHashMap<>();
+            current.put(Blocks.KELP_PLANT, Items.KELP);
+            current.put(Blocks.TALL_SEAGRASS, Items.SEAGRASS);
+            current.put(Blocks.BAMBOO_SAPLING, Items.BAMBOO);
+            current.put(Blocks.CAVE_VINES_PLANT, Items.GLOW_BERRIES);
+            current.put(Blocks.WEEPING_VINES_PLANT, Items.WEEPING_VINES);
+            current.put(Blocks.TWISTING_VINES_PLANT, Items.TWISTING_VINES);
+            current.put(Blocks.ATTACHED_MELON_STEM, Items.MELON_SEEDS);
+            current.put(Blocks.ATTACHED_PUMPKIN_STEM, Items.PUMPKIN_SEEDS);
+            current.put(Blocks.BIG_DRIPLEAF_STEM, Items.BIG_DRIPLEAF);
+            current.put(Blocks.WATER_CAULDRON, Items.CAULDRON);
+            current.put(Blocks.LAVA_CAULDRON, Items.CAULDRON);
+            current.put(Blocks.POWDER_SNOW_CAULDRON, Items.CAULDRON);
+            overrides = current;
+        }
+        return current;
+    }
+
+    public static void requirements(BlockState state, Sink sink) {
+        Block block = state.getBlock();
+        if (block instanceof FlowerPotBlock pot) {
+            sink.add(Items.FLOWER_POT, 1);
+            Item content = pot.getPotted().asItem();
+            if (content != Items.AIR) {
+                sink.add(content, 1);
+            }
+            return;
+        }
+        if (block instanceof CandleCakeBlock) {
+            sink.add(Items.CAKE, 1);
+            Identifier id = BuiltInRegistries.BLOCK.getKey(block);
+            String path = id.getPath();
+            if (path.endsWith("_cake")) {
+                Item candle = BuiltInRegistries.ITEM.getOptional(
+                        Identifier.fromNamespaceAndPath(id.getNamespace(), path.substring(0, path.length() - 5)))
+                        .orElse(Items.AIR);
+                if (candle != Items.AIR) {
+                    sink.add(candle, 1);
+                }
+            }
+            return;
+        }
+        Item item = itemOf(state);
+        if (item != Items.AIR) {
+            sink.add(item, block == Blocks.TALL_SEAGRASS ? 2 : countOf(state));
+        }
     }
 
     public static Item itemOf(BlockState state) {
@@ -66,8 +133,12 @@ public final class MaterialList {
         if (item != Items.AIR) {
             return item;
         }
+        Item override = overrides().get(state.getBlock());
+        if (override != null) {
+            return override;
+        }
         FluidState fluid = state.getFluidState();
-        if (fluid.isSource()) {
+        if (state.getBlock() instanceof LiquidBlock && fluid.isSource()) {
             if (fluid.getType() == Fluids.WATER) {
                 return Items.WATER_BUCKET;
             }
@@ -106,14 +177,11 @@ public final class MaterialList {
             if (total <= 0L) {
                 continue;
             }
-            Item item = itemOf(palette[i]);
-            if (item == Items.AIR) {
-                continue;
-            }
-            int multiplier = countOf(palette[i]);
             long done = i < correct.length ? Math.max(0L, Math.min(total, correct[i])) : 0L;
-            totalByItem.addTo(item, total * multiplier);
-            missingByItem.addTo(item, (total - done) * multiplier);
+            requirements(palette[i], (item, multiplier) -> {
+                totalByItem.addTo(item, total * multiplier);
+                missingByItem.addTo(item, (total - done) * multiplier);
+            });
         }
         Reference2LongMap<Item> available = inventory == null ? new Reference2LongOpenHashMap<>() : countInventory(inventory);
         List<Entry> entries = new ArrayList<>(totalByItem.size());

@@ -24,6 +24,7 @@ import net.minecraft.client.renderer.block.BlockStateModelSet;
 import net.minecraft.client.renderer.block.FluidStateModelSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -39,6 +40,7 @@ import org.lts.litematicaplus.render.SectionJob;
 import org.lts.litematicaplus.render.SectionMesher;
 import org.lts.litematicaplus.render.SpecialBlocks;
 import org.lts.litematicaplus.schematic.Schematic;
+import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.GhostSection;
@@ -48,6 +50,10 @@ import org.lts.litematicaplus.world.PlacementVolume;
 public final class GhostEngine {
     private static final GhostEngine INSTANCE = new GhostEngine();
     private static final int SELECT_LIMIT = 48;
+    private static final int QUEUE_LIMIT = 512;
+    private static final double QUEUE_STALE_DISTANCE_SQUARED = 24.0 * 24.0;
+    private static final int MAX_SLOT_FAILURES = 3;
+    private static final int MAX_FAILURE_LOGS = 5;
     private static final int UNLOAD_MARGIN = 48;
 
     private record Completed(PlacementRuntime runtime, MeshResult result, BlockState[] world) {
@@ -68,7 +74,10 @@ public final class GhostEngine {
     private int maxGhostIndices;
     private int maxFillIndices;
     private int maxLineIndices;
-    private boolean failureLogged;
+    private int failureLogs;
+    private Vec3 cameraPosition;
+    private final double[] heapDistances = new double[QUEUE_LIMIT];
+    private final long[] heapKeys = new long[QUEUE_LIMIT];
 
     private GhostEngine() {
     }
@@ -228,6 +237,14 @@ public final class GhostEngine {
         }
     }
 
+    public void shutdown() {
+        clear();
+        Completed entry;
+        while ((entry = this.completed.poll()) != null) {
+            entry.result().free();
+        }
+    }
+
     public void rebuild(SchematicPlacement placement) {
         PlacementRuntime runtime = this.runtimes.get(placement.id());
         if (runtime == null) {
@@ -251,12 +268,15 @@ public final class GhostEngine {
         Minecraft minecraft = Minecraft.getInstance();
         try {
             Workers.io().execute(() -> {
+                if (target.buildToken != token) {
+                    return;
+                }
                 try {
                     PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled);
                     minecraft.execute(() -> install(target, token, volume));
                 } catch (RuntimeException | OutOfMemoryError exception) {
                     LitematicaPlusClient.LOGGER.error("Could not build placement '{}'", placement.name(), exception);
-                    String reason = exception instanceof OutOfMemoryError ? "not enough memory" : String.valueOf(exception.getMessage());
+                    Component reason = Notify.describe(exception);
                     minecraft.execute(() -> {
                         if (target.buildToken == token) {
                             target.building = false;
@@ -315,6 +335,30 @@ public final class GhostEngine {
         }
         runtime.slots.clear();
         runtime.dirty.clear();
+        runtime.drawable.clear();
+        runtime.urgent.clear();
+        runtime.queueSize = 0;
+        runtime.queuePos = 0;
+    }
+
+    private static void track(PlacementRuntime runtime, SectionSlot slot) {
+        boolean wanted = slot.ghost != null || slot.fill != null || slot.lines != null || slot.specials.length > 0;
+        if (wanted && slot.drawIndex < 0) {
+            slot.drawIndex = runtime.drawable.size();
+            runtime.drawable.add(slot);
+        } else if (!wanted && slot.drawIndex >= 0) {
+            int last = runtime.drawable.size() - 1;
+            SectionSlot moved = runtime.drawable.get(last);
+            runtime.drawable.set(slot.drawIndex, moved);
+            moved.drawIndex = slot.drawIndex;
+            runtime.drawable.remove(last);
+            slot.drawIndex = -1;
+        }
+    }
+
+    private static void closeSlot(PlacementRuntime runtime, SectionSlot slot) {
+        slot.closeBuffers();
+        track(runtime, slot);
     }
 
     public void onBlockChanged(BlockPos pos) {
@@ -328,7 +372,11 @@ public final class GhostEngine {
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
             if (volume != null && volume.contains(x, y, z)) {
-                markDirty(runtime, runtime.slots.get(key));
+                SectionSlot slot = runtime.slots.get(key);
+                if (slot != null) {
+                    markDirty(runtime, slot);
+                    runtime.urgent.enqueue(key);
+                }
             }
         }
     }
@@ -369,6 +417,7 @@ public final class GhostEngine {
         ClientLevel current = minecraft.level;
         if (current != this.level) {
             this.level = current;
+            this.cameraPosition = null;
             markEverythingDirty();
         }
         drain(LitematicaPlusConfig.current().meshUploadsPerFrame);
@@ -388,14 +437,15 @@ public final class GhostEngine {
             }
         }
         refreshOptions();
-        Vec3 camera = minecraft.player.position();
+        Vec3 camera = this.cameraPosition != null ? this.cameraPosition : minecraft.player.position();
         if (this.ticks % 10L == 0L) {
-            sweep(camera);
+            sweep(current, camera);
         }
         schedule(minecraft, current, camera, models);
     }
 
-    public void frame(Minecraft minecraft) {
+    public void frame(Minecraft minecraft, Vec3 camera) {
+        this.cameraPosition = camera;
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         drain(config.meshUploadsPerFrame);
         ClientLevel current = minecraft.level;
@@ -403,7 +453,7 @@ public final class GhostEngine {
                 || this.modelIdentity == null || this.runtimes.isEmpty()) {
             return;
         }
-        schedule(minecraft, current, minecraft.player.position(), this.modelIdentity);
+        schedule(minecraft, current, camera, this.modelIdentity);
     }
 
     private void refreshOptions() {
@@ -428,7 +478,7 @@ public final class GhostEngine {
         }
     }
 
-    private void sweep(Vec3 camera) {
+    private void sweep(ClientLevel current, Vec3 camera) {
         int distance = LitematicaPlusConfig.current().renderDistance;
         double near = (double) distance * distance;
         double far = (double) (distance + UNLOAD_MARGIN) * (distance + UNLOAD_MARGIN);
@@ -437,10 +487,15 @@ public final class GhostEngine {
                 double range = distanceSquared(slot, camera);
                 if (slot.ghostBuilt) {
                     if (range > far) {
-                        slot.closeBuffers();
+                        closeSlot(runtime, slot);
                         slot.ghostBuilt = false;
                     }
-                } else if (slot.built && slot.hasSolid && !slot.inFlight && range <= near
+                } else if (slot.built && !slot.inFlight && range <= near && !runtime.dirty.contains(slot.key)
+                        && (slot.hasSolid || slot.verdict != null && slot.verdict.errors() > 0)) {
+                    markDirty(runtime, slot);
+                }
+                if (slot.verdict != null && slot.verdict.worldKnown() && !slot.inFlight
+                        && !current.hasChunk(slot.originX >> 4, slot.originZ >> 4)
                         && !runtime.dirty.contains(slot.key)) {
                     markDirty(runtime, slot);
                 }
@@ -482,6 +537,9 @@ public final class GhostEngine {
                     runtime.dirty.remove(this.selectedKeys[i]);
                     continue;
                 }
+                if (slot.inFlight || !runtime.dirty.contains(slot.key)) {
+                    continue;
+                }
                 GhostSection section = volume.section(slot.key);
                 if (section == null) {
                     runtime.dirty.remove(slot.key);
@@ -515,6 +573,36 @@ public final class GhostEngine {
 
     private int selectNearest(PlacementRuntime runtime, Vec3 camera, int want) {
         int found = 0;
+        while (found < want && !runtime.urgent.isEmpty()) {
+            found = select(runtime, runtime.urgent.dequeueLong(), camera, found);
+        }
+        if (found >= want) {
+            return found;
+        }
+        double dx = camera.x - runtime.queueX;
+        double dy = camera.y - runtime.queueY;
+        double dz = camera.z - runtime.queueZ;
+        if (runtime.queuePos >= runtime.queueSize || dx * dx + dy * dy + dz * dz > QUEUE_STALE_DISTANCE_SQUARED) {
+            refillQueue(runtime, camera);
+        }
+        while (found < want && runtime.queuePos < runtime.queueSize) {
+            found = select(runtime, runtime.queue[runtime.queuePos++], camera, found);
+        }
+        return found;
+    }
+
+    private int select(PlacementRuntime runtime, long key, Vec3 camera, int found) {
+        SectionSlot slot = runtime.slots.get(key);
+        if (slot == null || slot.inFlight || !runtime.dirty.contains(key)) {
+            return found;
+        }
+        this.selectedKeys[found] = key;
+        this.selectedDistances[found] = distanceSquared(slot, camera);
+        return found + 1;
+    }
+
+    private void refillQueue(PlacementRuntime runtime, Vec3 camera) {
+        int size = 0;
         LongIterator iterator = runtime.dirty.iterator();
         while (iterator.hasNext()) {
             long key = iterator.nextLong();
@@ -527,22 +615,56 @@ public final class GhostEngine {
                 continue;
             }
             double range = distanceSquared(slot, camera);
-            if (found == want && range >= this.selectedDistances[found - 1]) {
-                continue;
-            }
-            int position = found < want ? found : found - 1;
-            while (position > 0 && this.selectedDistances[position - 1] > range) {
-                this.selectedDistances[position] = this.selectedDistances[position - 1];
-                this.selectedKeys[position] = this.selectedKeys[position - 1];
-                position--;
-            }
-            this.selectedDistances[position] = range;
-            this.selectedKeys[position] = key;
-            if (found < want) {
-                found++;
+            if (size < QUEUE_LIMIT) {
+                int position = size++;
+                while (position > 0 && this.heapDistances[(position - 1) >> 1] < range) {
+                    int parent = (position - 1) >> 1;
+                    this.heapDistances[position] = this.heapDistances[parent];
+                    this.heapKeys[position] = this.heapKeys[parent];
+                    position = parent;
+                }
+                this.heapDistances[position] = range;
+                this.heapKeys[position] = key;
+            } else if (range < this.heapDistances[0]) {
+                siftDown(range, key, size);
             }
         }
-        return found;
+        if (runtime.queue.length < size) {
+            runtime.queue = new long[QUEUE_LIMIT];
+        }
+        runtime.queueSize = size;
+        runtime.queuePos = 0;
+        runtime.queueX = camera.x;
+        runtime.queueY = camera.y;
+        runtime.queueZ = camera.z;
+        for (int remaining = size; remaining > 0; remaining--) {
+            runtime.queue[remaining - 1] = this.heapKeys[0];
+            int last = remaining - 1;
+            if (last > 0) {
+                siftDown(this.heapDistances[last], this.heapKeys[last], last);
+            }
+        }
+    }
+
+    private void siftDown(double range, long key, int size) {
+        int position = 0;
+        while (true) {
+            int child = position * 2 + 1;
+            if (child >= size) {
+                break;
+            }
+            if (child + 1 < size && this.heapDistances[child + 1] > this.heapDistances[child]) {
+                child++;
+            }
+            if (this.heapDistances[child] <= range) {
+                break;
+            }
+            this.heapDistances[position] = this.heapDistances[child];
+            this.heapKeys[position] = this.heapKeys[child];
+            position = child;
+        }
+        this.heapDistances[position] = range;
+        this.heapKeys[position] = key;
     }
 
     private BlockState[] snapshot(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
@@ -597,18 +719,31 @@ public final class GhostEngine {
             }
             slot.inFlight = false;
             if (result.failure != null) {
-                if (!this.failureLogged) {
-                    this.failureLogged = true;
+                if (this.failureLogs < MAX_FAILURE_LOGS) {
+                    this.failureLogs++;
                     LitematicaPlusClient.LOGGER.error("Schematic section meshing failed", result.failure);
                 }
                 result.free();
+                if (++slot.failures <= MAX_SLOT_FAILURES) {
+                    runtime.dirty.add(slot.key);
+                }
                 continue;
             }
             if (result.revision != slot.revision) {
                 result.free();
+                runtime.urgent.enqueue(slot.key);
                 continue;
             }
-            apply(runtime, slot, result);
+            slot.failures = 0;
+            try {
+                apply(runtime, slot, result);
+            } catch (RuntimeException exception) {
+                closeSlot(runtime, slot);
+                if (this.failureLogs < MAX_FAILURE_LOGS) {
+                    this.failureLogs++;
+                    LitematicaPlusClient.LOGGER.error("Could not upload a schematic section", exception);
+                }
+            }
         }
     }
 
@@ -645,5 +780,6 @@ public final class GhostEngine {
         }
         slot.built = true;
         slot.ghostBuilt = slot.pendingGhost;
+        track(runtime, slot);
     }
 }

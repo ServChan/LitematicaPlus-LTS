@@ -5,12 +5,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.DoubleTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.ProblemReporter;
@@ -25,9 +27,11 @@ import org.lts.litematicaplus.schematic.RegionBuilder;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
 import org.lts.litematicaplus.schematic.SchematicRegion;
+import org.lts.litematicaplus.util.LocalizedException;
 
 public final class SchematicCapture {
     public static final long MAX_CLIENT_VOLUME = 16L * 1024L * 1024L;
+    public static final long MAX_SERVER_VOLUME = 128L * 1024L * 1024L;
 
     public record Box(String name, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         long volume() {
@@ -35,7 +39,7 @@ public final class SchematicCapture {
         }
     }
 
-    public record Result(Schematic schematic, BlockPos origin) {
+    public record Result(Schematic schematic, BlockPos origin, int unloadedChunks) {
     }
 
     private SchematicCapture() {
@@ -48,7 +52,8 @@ public final class SchematicCapture {
             if (box.isEmpty()) {
                 continue;
             }
-            String name = box.name().isBlank() ? "Region " + counter : box.name();
+            String name = box.name().isBlank()
+                    ? Component.translatable("litematicaplus.area.default_box", counter).getString() : box.name();
             String unique = name;
             int suffix = 2;
             while (contains(frozen, unique)) {
@@ -80,21 +85,28 @@ public final class SchematicCapture {
     public static CompletableFuture<Result> capture(Minecraft minecraft, List<Box> boxes, String name, String author,
             String description) {
         if (boxes.isEmpty() || minecraft.level == null) {
-            return CompletableFuture.failedFuture(new IllegalStateException("Nothing selected"));
+            return CompletableFuture.failedFuture(new LocalizedException("litematicaplus.area.error_nothing",
+                    "Nothing selected"));
         }
         IntegratedServer server = minecraft.getSingleplayerServer();
         if (server != null) {
+            if (volume(boxes) > MAX_SERVER_VOLUME) {
+                return CompletableFuture.failedFuture(new LocalizedException(
+                        "litematicaplus.error.selection_too_large", "Selection is too large"));
+            }
             ResourceKey<Level> dimension = minecraft.level.dimension();
             return server.submit(() -> {
                 ServerLevel level = server.getLevel(dimension);
                 if (level == null) {
-                    throw new IllegalStateException("Dimension is not loaded");
+                    throw new CompletionException(new LocalizedException(
+                            "litematicaplus.error.dimension_unloaded", "Dimension is not loaded"));
                 }
                 return read(level, boxes, name, author, description, true);
             });
         }
         if (volume(boxes) > MAX_CLIENT_VOLUME) {
-            return CompletableFuture.failedFuture(new IllegalStateException("Selection is too large"));
+            return CompletableFuture.failedFuture(new LocalizedException(
+                    "litematicaplus.error.selection_too_large", "Selection is too large"));
         }
         try {
             return CompletableFuture.completedFuture(read(minecraft.level, boxes, name, author, description, false));
@@ -116,15 +128,34 @@ public final class SchematicCapture {
         Map<String, SchematicRegion> regions = new LinkedHashMap<>();
         long blocks = 0L;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int unloaded = 0;
         for (Box box : boxes) {
             int sizeX = box.maxX() - box.minX() + 1;
             int sizeY = box.maxY() - box.minY() + 1;
             int sizeZ = box.maxZ() - box.minZ() + 1;
+            int chunkMinX = box.minX() >> 4;
+            int chunkMinZ = box.minZ() >> 4;
+            int chunksX = (box.maxX() >> 4) - chunkMinX + 1;
+            int chunksZ = (box.maxZ() >> 4) - chunkMinZ + 1;
+            boolean[] loaded = new boolean[chunksX * chunksZ];
+            for (int chunkZ = 0; chunkZ < chunksZ; chunkZ++) {
+                for (int chunkX = 0; chunkX < chunksX; chunkX++) {
+                    boolean present = level.hasChunk(chunkMinX + chunkX, chunkMinZ + chunkZ);
+                    loaded[chunkZ * chunksX + chunkX] = present;
+                    if (!present) {
+                        unloaded++;
+                    }
+                }
+            }
             RegionBuilder builder = new RegionBuilder(box.name(), box.minX() - originX, box.minY() - originY,
                     box.minZ() - originZ, sizeX, sizeY, sizeZ);
             for (int y = 0; y < sizeY; y++) {
                 for (int z = 0; z < sizeZ; z++) {
+                    int chunkRow = ((box.minZ() + z >> 4) - chunkMinZ) * chunksX - chunkMinX;
                     for (int x = 0; x < sizeX; x++) {
+                        if (!loaded[chunkRow + (box.minX() + x >> 4)]) {
+                            continue;
+                        }
                         cursor.set(box.minX() + x, box.minY() + y, box.minZ() + z);
                         BlockState state = level.getBlockState(cursor);
                         if (state.isAir()) {
@@ -176,6 +207,6 @@ public final class SchematicCapture {
         metadata.timeModified = metadata.timeCreated;
         metadata.totalBlocks = Math.max(blocks, 0L);
         metadata.format = "litematic";
-        return new Result(new Schematic(metadata, regions), new BlockPos(originX, originY, originZ));
+        return new Result(new Schematic(metadata, regions), new BlockPos(originX, originY, originZ), unloaded);
     }
 }
