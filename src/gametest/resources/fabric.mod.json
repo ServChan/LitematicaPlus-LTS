@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "litematicaplus_gametest",
+  "version": "1.0.0",
+  "name": "Litematica Plus LTS Game Tests",
+  "environment": "client",
+  "license": "MIT",
+  "entrypoints": {
+    "fabric-client-gametest": ["org.lts.litematicaplus.gametest.LitematicaPlusGameTest"]
+  },
+  "depends": {
+    "litematicaplus": "*",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

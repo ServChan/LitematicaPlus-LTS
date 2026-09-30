@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "org.lts.litematicaplus.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "BlockModelRenderStateAccessor",
+    "ClientLevelMixin",
+    "MinecraftMixin",
+    "MouseHandlerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "litematicaplus",
+  "version": "${version}",
+  "name": "Litematica Plus LTS",
+  "description": "Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes .litematic files.",
+  "authors": ["LTS_Server"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["org.lts.litematicaplus.LitematicaPlusClient"],
+    "modmenu": ["org.lts.litematicaplus.compat.LitematicaPlusModMenu"]
+  },
+  "mixins": ["litematicaplus.client.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-key-mapping-api-v1": "*",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-rendering-v1": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

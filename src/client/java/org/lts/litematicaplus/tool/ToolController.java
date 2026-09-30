@@ -1,0 +1,237 @@
+package org.lts.litematicaplus.tool;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
+import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.placement.PlacementManager;
+import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.selection.SelectionManager;
+import org.lts.litematicaplus.util.Notify;
+import org.lts.litematicaplus.world.LayerRange;
+
+public final class ToolController {
+    private static final ToolController INSTANCE = new ToolController();
+    private static final double TARGET_RANGE = 160.0;
+
+    private ToolMode mode = ToolMode.AREA_SELECTION;
+    private int clickCooldown;
+
+    private ToolController() {
+    }
+
+    public static ToolController get() {
+        return INSTANCE;
+    }
+
+    public ToolMode mode() {
+        return this.mode;
+    }
+
+    public void setMode(ToolMode next) {
+        this.mode = next == null ? ToolMode.AREA_SELECTION : next;
+    }
+
+    public void cycleMode(boolean forward) {
+        this.mode = this.mode.cycle(forward);
+        Session.markDirty();
+        Notify.actionBar(Component.translatable("litematicaplus.message.tool_mode",
+                Component.translatable(this.mode.translationKey())));
+    }
+
+    public void tick(Minecraft minecraft) {
+        if (this.clickCooldown > 0) {
+            this.clickCooldown--;
+        }
+        EasyPlace.tick();
+        PasteController.tick(minecraft);
+    }
+
+    public boolean holdingTool(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return false;
+        }
+        ItemStack stack = player.getMainHandItem();
+        if (stack.isEmpty()) {
+            return false;
+        }
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(LitematicaPlusConfig.current().toolItem);
+    }
+
+    public boolean onAttack(Minecraft minecraft) {
+        if (!holdingTool(minecraft)) {
+            return false;
+        }
+        if (this.clickCooldown > 0) {
+            return true;
+        }
+        this.clickCooldown = 4;
+        switch (this.mode) {
+            case AREA_SELECTION -> setCorner(minecraft, true);
+            case PLACEMENT -> movePlacement(minecraft);
+            case PASTE -> {
+                SchematicPlacement placement = PlacementManager.get().selected();
+                PasteController.startPaste(minecraft, placement == null ? null : GhostEngine.get().runtime(placement.id()));
+            }
+            case DELETE -> PasteController.startDelete(minecraft, SelectionManager.get().completeBoxes());
+        }
+        return true;
+    }
+
+    public boolean onUse(Minecraft minecraft) {
+        if (!holdingTool(minecraft)) {
+            return EasyPlace.onUse(minecraft);
+        }
+        if (this.clickCooldown > 0) {
+            return true;
+        }
+        this.clickCooldown = 4;
+        switch (this.mode) {
+            case AREA_SELECTION -> setCorner(minecraft, false);
+            case PLACEMENT -> rotatePlacement();
+            case PASTE, DELETE -> PasteController.cancel();
+        }
+        return true;
+    }
+
+    public boolean onPick(Minecraft minecraft) {
+        if (holdingTool(minecraft)) {
+            cycleMode(!minecraft.hasShiftDown());
+            return true;
+        }
+        return EasyPlace.onPick(minecraft);
+    }
+
+    public boolean onScroll(Minecraft minecraft, double amount) {
+        if (amount == 0.0 || minecraft.player == null || !holdingTool(minecraft)) {
+            return false;
+        }
+        boolean forward = amount > 0.0;
+        if (minecraft.hasControlDown()) {
+            cycleMode(forward);
+            return true;
+        }
+        if (!minecraft.hasAltDown()) {
+            return false;
+        }
+        Direction direction = Direction.getApproximateNearest(minecraft.player.getViewVector(1.0F));
+        int step = forward ? 1 : -1;
+        if (this.mode == ToolMode.AREA_SELECTION || this.mode == ToolMode.DELETE) {
+            boolean sneaking = minecraft.player.isShiftKeyDown();
+            SelectionManager.get().nudge(true, !sneaking, direction, step);
+        } else {
+            SchematicPlacement placement = PlacementManager.get().selected();
+            if (placement == null) {
+                Notify.actionBar("litematicaplus.message.no_placement");
+            } else if (placement.locked()) {
+                Notify.actionBar("litematicaplus.message.placement_locked");
+            } else {
+                PlacementManager.get().move(placement, placement.x() + direction.getStepX() * step,
+                        placement.y() + direction.getStepY() * step, placement.z() + direction.getStepZ() * step);
+            }
+        }
+        return true;
+    }
+
+    public void shiftLayer(Minecraft minecraft, int delta) {
+        LayerRange layer = GhostEngine.get().layer();
+        if (layer.isAll()) {
+            if (minecraft.player == null) {
+                return;
+            }
+            BlockPos pos = minecraft.player.blockPosition();
+            int value = pos.get(layer.axis());
+            layer = new LayerRange(LayerRange.Mode.SINGLE, layer.axis(), value, value, value);
+        } else {
+            layer = layer.shifted(delta);
+        }
+        applyLayer(layer);
+    }
+
+    public void cycleLayerMode(Minecraft minecraft) {
+        LayerRange layer = GhostEngine.get().layer();
+        LayerRange.Mode next = layer.mode().next();
+        if (layer.isAll() && minecraft.player != null) {
+            int value = minecraft.player.blockPosition().get(layer.axis());
+            layer = new LayerRange(next, layer.axis(), value, value - 2, value + 2);
+        } else {
+            layer = layer.withMode(next);
+        }
+        applyLayer(layer);
+    }
+
+    public void applyLayer(LayerRange layer) {
+        GhostEngine.get().setLayer(layer);
+        Session.markDirty();
+        if (layer.isAll()) {
+            Notify.actionBar("litematicaplus.message.layer_all");
+        } else if (layer.mode() == LayerRange.Mode.RANGE) {
+            Notify.actionBar("litematicaplus.message.layer_range", layer.axis().getName().toUpperCase(java.util.Locale.ROOT),
+                    layer.min(), layer.max());
+        } else {
+            Notify.actionBar("litematicaplus.message.layer_single",
+                    Component.translatable("litematicaplus.layer.mode." + layer.mode().name().toLowerCase(java.util.Locale.ROOT)),
+                    layer.axis().getName().toUpperCase(java.util.Locale.ROOT), layer.single());
+        }
+    }
+
+    private BlockPos target(Minecraft minecraft, boolean adjacent) {
+        LocalPlayer player = minecraft.player;
+        if (minecraft.hasAltDown()) {
+            return player.blockPosition();
+        }
+        HitResult hit = player.pick(TARGET_RANGE, 1.0F, false);
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
+            return adjacent ? blockHit.getBlockPos().relative(blockHit.getDirection()) : blockHit.getBlockPos();
+        }
+        return player.blockPosition();
+    }
+
+    private void setCorner(Minecraft minecraft, boolean first) {
+        BlockPos pos = target(minecraft, false);
+        SelectionManager.get().setCorner(first, pos);
+        Notify.actionBar(first ? "litematicaplus.message.corner_first" : "litematicaplus.message.corner_second",
+                pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private void movePlacement(Minecraft minecraft) {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        if (placement == null) {
+            Notify.actionBar("litematicaplus.message.no_placement");
+            return;
+        }
+        if (placement.locked()) {
+            Notify.actionBar("litematicaplus.message.placement_locked");
+            return;
+        }
+        BlockPos pos = target(minecraft, true);
+        PlacementManager.get().move(placement, pos.getX(), pos.getY(), pos.getZ());
+        Notify.actionBar("litematicaplus.message.placement_moved", pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private void rotatePlacement() {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        if (placement == null) {
+            Notify.actionBar("litematicaplus.message.no_placement");
+            return;
+        }
+        if (placement.locked()) {
+            Notify.actionBar("litematicaplus.message.placement_locked");
+            return;
+        }
+        Rotation next = placement.rotation().getRotated(Rotation.CLOCKWISE_90);
+        PlacementManager.get().rotate(placement, next);
+        Notify.actionBar("litematicaplus.message.placement_rotated",
+                Component.translatable("litematicaplus.rotation." + next.name().toLowerCase(java.util.Locale.ROOT)));
+    }
+}
