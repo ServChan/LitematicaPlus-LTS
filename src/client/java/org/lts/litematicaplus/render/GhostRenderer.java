@@ -52,14 +52,19 @@ public final class GhostRenderer {
     private static final FrustumIntersection FRUSTUM = new FrustumIntersection();
     private static boolean drawFailed;
     private static int lastDrawn;
-    private static int lastUnready;
+    private static int lastHidden;
+    private static int lastDepth;
     private static boolean submitFailed;
 
     private GhostRenderer() {
     }
 
-    public static int lastUnready() {
-        return lastUnready;
+    public static int lastHidden() {
+        return lastHidden;
+    }
+
+    public static int lastDepth() {
+        return lastDepth;
     }
 
     public static int lastDrawn() {
@@ -105,7 +110,9 @@ public final class GhostRenderer {
         FRUSTUM.set(FRUSTUM_MATRIX);
         int configuredRange = TopView.ghostRange(config.renderDistance);
         double range = (double) configuredRange * configuredRange;
-        int unready = 0;
+        VoxyLod.Frame lod = VoxyLod.frame();
+        boolean hideOverLod = lod != null && LodDepth.failed();
+        int hidden = 0;
         for (PlacementRuntime runtime : engine.runtimes()) {
             if (!runtime.placement().enabled() || runtime.volume() == null) {
                 continue;
@@ -138,9 +145,9 @@ public final class GhostRenderer {
                 if (side != FrustumIntersection.INTERSECT && side != FrustumIntersection.INSIDE) {
                     continue;
                 }
-                if (slot.chunkLoaded() && (ghost && !anywhere || overlay && !config.overlayThroughWalls)
+                if (hideOverLod && slot.chunkLoaded() && (ghost && !anywhere || overlay && !config.overlayThroughWalls)
                         && !SectionReady.ready(slot.originX >> 4, slot.originY >> 4, slot.originZ >> 4)) {
-                    unready++;
+                    hidden++;
                     ghost = ghost && anywhere;
                     overlay = overlay && config.overlayThroughWalls;
                     if (!ghost && !overlay) {
@@ -157,16 +164,21 @@ public final class GhostRenderer {
         }
         GHOSTS.sort(NEAR_TO_FAR);
         lastDrawn = GHOSTS.size();
-        lastUnready = unready;
+        lastHidden = hidden;
+        lastDepth = lod == null ? 0 : hideOverLod ? 2 : 1;
         boolean boxes = BoxRenderer.prepare(minecraft, cameraPos);
         if (GHOSTS.isEmpty() && OVERLAYS.isEmpty() && !boxes) {
             return;
         }
         RenderTarget target = minecraft.gameRenderer.mainRenderTarget();
         GpuTextureView colorView = target.getColorTextureView();
-        GpuTextureView depthView = target.getDepthTextureView();
-        if (colorView == null || depthView == null) {
+        if (colorView == null || target.getDepthTextureView() == null) {
             return;
+        }
+        GpuTextureView depthView = lod == null ? target.getDepthTextureView()
+                : LodDepth.merge(target, lod, camera.projectionMatrix, camera.viewRotationMatrix);
+        if (lod != null && LodDepth.failed()) {
+            lastDepth = 2;
         }
         RenderSystem.AutoStorageIndexBuffer quadIndices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
         GpuBuffer quadBuffer = quadIndices.getBuffer(Math.max(6,

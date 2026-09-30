@@ -69,10 +69,19 @@ public final class SectionVerdict {
                 || state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
     }
 
+    public static boolean conceals(BlockState state) {
+        return state == null || state.isSolidRender();
+    }
+
+    public static void copyBorderFace(long[] from, long[] to, int face) {
+        System.arraycopy(from, face * 4, to, face * 4, 4);
+        System.arraycopy(from, COVER_OFFSET + face * 4, to, COVER_OFFSET + face * 4, 4);
+    }
+
     public static void markBorder(long[] border, int face, int a, int b, BlockState state) {
         int bit = a + b * 16;
         long mask = 1L << (bit & 63);
-        if (state == null || state.isSolidRender()) {
+        if (conceals(state)) {
             border[face * 4 + (bit >> 6)] |= mask;
         }
         if (coversState(state)) {
@@ -131,7 +140,7 @@ public final class SectionVerdict {
 
     private static boolean occluding(BlockState[] world, int index) {
         BlockState state = world[index];
-        return state != null && state.isSolidRender();
+        return state != null && conceals(state);
     }
 
     static boolean hidden(BlockState[] world, int index) {

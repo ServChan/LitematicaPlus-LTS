@@ -60,6 +60,7 @@ public final class GhostEngine {
     private static final int UNLOAD_MARGIN = 96;
     private static final long UPLOAD_BUDGET_NANOS = 1_000_000L;
     private long jobsStarted;
+    private final ChangeCounter changes = new ChangeCounter();
 
     private record Completed(PlacementRuntime runtime, MeshResult result, BlockState[] world) {
     }
@@ -378,6 +379,10 @@ public final class GhostEngine {
         track(runtime, slot);
     }
 
+    public int changesLastMinute() {
+        return this.changes.total(System.nanoTime() / 1_000_000_000L);
+    }
+
     public void onBlockChanged(BlockPos pos) {
         if (this.runtimes.isEmpty()) {
             return;
@@ -386,9 +391,14 @@ public final class GhostEngine {
         int y = pos.getY();
         int z = pos.getZ();
         long key = SectionPos.asLong(x >> 4, y >> 4, z >> 4);
+        boolean counted = false;
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
             if (volume != null && volume.contains(x, y, z)) {
+                if (!counted) {
+                    counted = true;
+                    this.changes.record(System.nanoTime() / 1_000_000_000L);
+                }
                 SectionSlot slot = runtime.slots.get(key);
                 if (slot != null) {
                     markDirty(runtime, slot);
@@ -586,6 +596,7 @@ public final class GhostEngine {
                 long[] border = world == null ? null : borders(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
                         SectionPos.z(slot.key));
                 slot.borderIncomplete = world != null && this.borderIncomplete;
+                int unknownFaces = world == null ? 0 : this.unknownFaces;
                 runtime.dirty.remove(slot.key);
                 slot.inFlight = true;
                 slot.pendingGhost = ghost;
@@ -594,7 +605,8 @@ public final class GhostEngine {
                 SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
                         ? slot.verdict : null;
                 SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                        runtime.specialByPalette, world, border, remembered, this.layer, current, models, fluids,
+                        runtime.specialByPalette, world, border, unknownFaces, remembered, this.layer, current, models,
+                        fluids,
                         minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
                 try {
                     executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
@@ -709,6 +721,7 @@ public final class GhostEngine {
     }
 
     private boolean borderIncomplete;
+    private int unknownFaces;
 
     private LevelChunkSection neighbor(ClientLevel current, long[] bits, int face, int sectionX, int sectionY,
             int sectionZ) {
@@ -716,6 +729,7 @@ public final class GhostEngine {
         if (chunk == null) {
             SectionVerdict.closeBorderFace(bits, face);
             this.borderIncomplete = true;
+            this.unknownFaces |= 1 << face;
             return null;
         }
         if (sectionY < chunk.getMinSectionY()) {
@@ -732,6 +746,7 @@ public final class GhostEngine {
     private long[] borders(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
         long[] bits = new long[SectionVerdict.BORDER_LONGS];
         this.borderIncomplete = false;
+        this.unknownFaces = 0;
         for (int face = 0; face < 6; face++) {
             LevelChunkSection section = switch (face) {
                 case SectionVerdict.FACE_DOWN -> neighbor(current, bits, face, sectionX, sectionY - 1, sectionZ);

@@ -19,6 +19,7 @@ public record SectionJob(
         boolean[] specialByPalette,
         BlockState[] world,
         long[] border,
+        int unknownFaces,
         SectionVerdict remembered,
         LayerRange layer,
         ClientLevel level,

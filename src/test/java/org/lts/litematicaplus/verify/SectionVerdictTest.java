@@ -87,6 +87,32 @@ class SectionVerdictTest {
     }
 
     @Test
+    void onlyOpaqueFullBlocksHideTheirNeighbours() {
+        assertTrue(SectionVerdict.conceals(null));
+        assertTrue(SectionVerdict.conceals(STONE));
+        assertTrue(SectionVerdict.conceals(Blocks.SNOW_BLOCK.defaultBlockState()));
+        assertFalse(SectionVerdict.conceals(AIR));
+        assertFalse(SectionVerdict.conceals(Blocks.GLASS.defaultBlockState()));
+        assertFalse(SectionVerdict.conceals(Blocks.ICE.defaultBlockState()));
+        assertFalse(SectionVerdict.conceals(Blocks.WATER.defaultBlockState()));
+        assertFalse(SectionVerdict.conceals(Blocks.SNOW.defaultBlockState()));
+    }
+
+    @Test
+    void unknownFacesCanBeFilledFromAnotherBorder() {
+        long[] live = new long[SectionVerdict.BORDER_LONGS];
+        SectionVerdict.closeBorderFace(live, SectionVerdict.FACE_EAST);
+        long[] cached = new long[SectionVerdict.BORDER_LONGS];
+        SectionVerdict.markBorder(cached, SectionVerdict.FACE_EAST, 3, 4, STONE);
+        SectionVerdict.markBorder(cached, SectionVerdict.FACE_WEST, 3, 4, STONE);
+        SectionVerdict.copyBorderFace(cached, live, SectionVerdict.FACE_EAST);
+        assertTrue(SectionVerdict.borderSolid(live, SectionVerdict.FACE_EAST, 3, 4));
+        assertFalse(SectionVerdict.borderSolid(live, SectionVerdict.FACE_EAST, 5, 4));
+        assertFalse(SectionVerdict.borderCovers(live, SectionVerdict.FACE_EAST, 5, 4));
+        assertFalse(SectionVerdict.borderSolid(live, SectionVerdict.FACE_WEST, 3, 4));
+    }
+
+    @Test
     void comparatorClassifiesEveryCase() {
         StateComparator comparator = StateComparator.get();
         BlockState north = Blocks.OAK_STAIRS.defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);

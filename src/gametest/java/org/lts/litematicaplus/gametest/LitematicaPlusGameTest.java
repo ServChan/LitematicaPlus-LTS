@@ -70,6 +70,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 mapView(context, world);
                 return;
             }
+            if (System.getProperty("litematicaplus.lodOnly") != null) {
+                lodDepth(context, world);
+                return;
+            }
             if (System.getProperty("litematicaplus.stressOnly") != null) {
                 stress(context, world, null);
                 return;
@@ -374,6 +378,73 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         context.takeScreenshot("gui_two_placements");
         context.setScreen(() -> null);
         context.waitTicks(2);
+    }
+
+    private static void lodDepth(ClientGameTestContext context, TestSingleplayerContext world) throws IOException {
+        context.runOnClient(client -> {
+            client.options.renderDistance().set(12);
+            client.player.getAbilities().flying = true;
+            client.player.onUpdateAbilities();
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.ghostsOnlyLoaded = false;
+            LitematicaPlusConfig.save(config);
+        });
+        world.getServer().runCommand("tp @p 20.5 -40 0.5 -90 0");
+        world.getConnection().waitForChunksRender();
+        world.getServer().runCommand("fill 60 -60 -24 62 -10 24 stone");
+        Schematic cube = goldCube();
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/gold_cube.litematic");
+            SchematicIo.write(target, cube);
+            return target;
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file,
+                new BlockPos(84, -45, -12)));
+        settle(context, placement);
+        context.waitTicks(200);
+        world.getServer().runCommand("tp @p -120.5 -30 0.5 -90 0");
+        context.runOnClient(client -> client.options.renderDistance().set(4));
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(300);
+        int depth = context.computeOnClient(client -> GhostRenderer.lastDepth());
+        int drawn = context.computeOnClient(client -> GhostRenderer.lastDrawn());
+        boolean failed = context.computeOnClient(client -> org.lts.litematicaplus.render.LodDepth.failed());
+        boolean loaded = context.computeOnClient(client -> client.level.hasChunk(5, 0));
+        System.out.println("LODDEPTH state=" + depth + " failed=" + failed + " drawn=" + drawn + " cubeChunkLoaded=" + loaded);
+        context.takeScreenshot("lod_0_merged");
+        context.runOnClient(client -> {
+            try {
+                java.lang.reflect.Field field = org.lts.litematicaplus.render.LodDepth.class.getDeclaredField("failed");
+                field.setAccessible(true);
+                field.setBoolean(null, true);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException(exception);
+            }
+        });
+        context.waitTicks(20);
+        System.out.println("LODDEPTH unmerged state=" + context.computeOnClient(client -> GhostRenderer.lastDepth())
+                + " drawn=" + context.computeOnClient(client -> GhostRenderer.lastDrawn()));
+        context.takeScreenshot("lod_1_unmerged");
+        checkHealthy();
+    }
+
+    private static Schematic goldCube() {
+        RegionBuilder builder = new RegionBuilder("Cube", 0, 0, 0, 24, 24, 24);
+        BlockState gold = Blocks.GOLD_BLOCK.defaultBlockState();
+        for (int x = 0; x < 24; x++) {
+            for (int y = 0; y < 24; y++) {
+                for (int z = 0; z < 24; z++) {
+                    builder.set(x, y, z, gold);
+                }
+            }
+        }
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Gold cube";
+        metadata.author = "gametest";
+        metadata.description = "A floating cube behind a wall that Voxy draws as distant terrain.";
+        metadata.timeCreated = System.currentTimeMillis();
+        metadata.totalBlocks = 24L * 24L * 24L;
+        return new Schematic(metadata, Map.of("Cube", builder.build()));
     }
 
     private static void mapView(ClientGameTestContext context, TestSingleplayerContext world) throws IOException {

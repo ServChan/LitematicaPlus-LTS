@@ -141,7 +141,7 @@ public final class InfoHud {
             lines++;
         }
         if (config.hudDiagnostics) {
-            lines += 2;
+            lines += 4;
         }
         Component targeted = target;
         if (targeted != null) {
@@ -205,10 +205,21 @@ public final class InfoHud {
                 ready += each.drawable().size();
             }
             graphics.text(font, Component.translatable("litematicaplus.hud.diag_sections", GhostRenderer.lastDrawn(), ready,
-                    total, GhostRenderer.lastUnready()), textX, cursor, Theme.TEXT_DIM, false);
+                    total), textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
             graphics.text(font, Component.translatable("litematicaplus.hud.diag_work", engine.pending(), engine.inFlight(),
                     jobsPerSecond), textX, cursor, Theme.TEXT_DIM, false);
+            cursor += LINE;
+            Component depth = switch (GhostRenderer.lastDepth()) {
+                case 1 -> Component.translatable("litematicaplus.hud.diag_depth.voxy");
+                case 2 -> Component.translatable("litematicaplus.hud.diag_depth.hidden", GhostRenderer.lastHidden());
+                default -> Component.translatable("litematicaplus.hud.diag_depth.game");
+            };
+            graphics.text(font, Component.translatable("litematicaplus.hud.diag_depth", depth), textX, cursor,
+                    GhostRenderer.lastDepth() == 2 ? Theme.WARNING : Theme.TEXT_DIM, false);
+            cursor += LINE;
+            graphics.text(font, Component.translatable("litematicaplus.hud.diag_changes", engine.changesLastMinute()),
+                    textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (!materials.isEmpty()) {

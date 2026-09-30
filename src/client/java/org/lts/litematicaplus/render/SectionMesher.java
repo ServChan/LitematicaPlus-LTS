@@ -62,7 +62,21 @@ public final class SectionMesher {
                     SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
             if (cached != null) {
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), cached.world(), cached.border(), null, live.layer(), live.level(),
+                        live.specialByPalette(), cached.world(), cached.border(), 0, null, live.layer(), live.level(),
+                        live.blockModels(), live.fluidModels(), live.blockColors(), options);
+            }
+        } else if (live.world() != null && live.border() != null && live.unknownFaces() != 0 && options.worldCache()) {
+            WorldCache.Snapshot around = WorldCache.section(live.level(), SectionPos.x(live.sectionKey()),
+                    SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
+            if (around != null) {
+                long[] border = live.border().clone();
+                for (int face = 0; face < 6; face++) {
+                    if ((live.unknownFaces() & 1 << face) != 0) {
+                        SectionVerdict.copyBorderFace(around.border(), border, face);
+                    }
+                }
+                job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
+                        live.specialByPalette(), live.world(), border, 0, null, live.layer(), live.level(),
                         live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         }
