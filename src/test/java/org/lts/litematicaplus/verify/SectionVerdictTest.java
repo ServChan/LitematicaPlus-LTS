@@ -52,6 +52,41 @@ class SectionVerdictTest {
     }
 
     @Test
+    void coveringNeighboursHideOverlayFacesWhileOnlyOpaqueOnesHideBlocks() {
+        assertTrue(SectionVerdict.coversState(null));
+        assertTrue(SectionVerdict.coversState(STONE));
+        assertTrue(SectionVerdict.coversState(Blocks.WATER.defaultBlockState()));
+        assertTrue(SectionVerdict.coversState(Blocks.ICE.defaultBlockState()));
+        assertTrue(SectionVerdict.coversState(Blocks.GLASS.defaultBlockState()));
+        assertTrue(SectionVerdict.coversState(Blocks.OAK_LEAVES.defaultBlockState()));
+        assertFalse(SectionVerdict.coversState(AIR));
+        assertFalse(SectionVerdict.coversState(Blocks.SNOW.defaultBlockState()));
+        assertFalse(SectionVerdict.coversState(Blocks.OAK_SLAB.defaultBlockState()));
+        long[] border = new long[SectionVerdict.BORDER_LONGS];
+        SectionVerdict.markBorder(border, SectionVerdict.FACE_UP, 2, 3, Blocks.WATER.defaultBlockState());
+        SectionVerdict.markBorder(border, SectionVerdict.FACE_UP, 4, 3, STONE);
+        SectionVerdict.markBorder(border, SectionVerdict.FACE_UP, 6, 3, null);
+        assertFalse(SectionVerdict.borderSolid(border, SectionVerdict.FACE_UP, 2, 3));
+        assertTrue(SectionVerdict.borderCovers(border, SectionVerdict.FACE_UP, 2, 3));
+        assertTrue(SectionVerdict.borderSolid(border, SectionVerdict.FACE_UP, 4, 3));
+        assertTrue(SectionVerdict.borderCovers(border, SectionVerdict.FACE_UP, 4, 3));
+        assertTrue(SectionVerdict.borderSolid(border, SectionVerdict.FACE_UP, 6, 3));
+        assertTrue(SectionVerdict.borderCovers(border, SectionVerdict.FACE_UP, 6, 3));
+        assertFalse(SectionVerdict.borderCovers(border, SectionVerdict.FACE_UP, 8, 3));
+        SectionVerdict.closeBorderFace(border, SectionVerdict.FACE_DOWN);
+        assertTrue(SectionVerdict.borderSolid(border, SectionVerdict.FACE_DOWN, 15, 15));
+        assertTrue(SectionVerdict.borderCovers(border, SectionVerdict.FACE_DOWN, 15, 15));
+        BlockState[] world = new BlockState[GhostSection.VOLUME];
+        Arrays.fill(world, AIR);
+        world[GhostSection.index(5, 5, 5)] = Blocks.WATER.defaultBlockState();
+        assertTrue(SectionVerdict.covers(world, border, 5, 5, 5));
+        assertFalse(SectionVerdict.occludes(world, border, 5, 5, 5));
+        assertTrue(SectionVerdict.covers(world, border, 2, 16, 3));
+        assertFalse(SectionVerdict.covers(world, border, 8, 16, 3));
+        assertTrue(SectionVerdict.covers(world, border, 8, -1, 3));
+    }
+
+    @Test
     void comparatorClassifiesEveryCase() {
         StateComparator comparator = StateComparator.get();
         BlockState north = Blocks.OAK_STAIRS.defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);

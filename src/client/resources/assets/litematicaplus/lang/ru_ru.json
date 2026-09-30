@@ -380,7 +380,7 @@
   "litematicaplus.option.hud_diagnostics": "Диагностика отрисовки на панели",
   "litematicaplus.option.hud_diagnostics.tip": "Две строки: секций нарисовано / готово / всего, затем в очереди, в работе и перестроено за последнюю секунду.",
   "litematicaplus.option.render_distance.tip": "Как далеко от камеры рисуются блоки-призраки, в блоках. Не зависит от прогруженных чанков.",
-  "litematicaplus.hud.diag_sections": "Секции %1$s / %2$s / %3$s",
+  "litematicaplus.hud.diag_sections": "Секции %1$s / %2$s / %3$s, без рельефа %4$s",
   "litematicaplus.hud.diag_work": "Очередь %1$s, в работе %2$s, за сек %3$s",
   "litematicaplus.option.trust_hidden": "Скрытые блоки считать верными",
   "litematicaplus.option.trust_hidden.tip": "На серверах с антирентгеном клиент получает поддельные блоки вместо всего, что закрыто со всех сторон. Поэтому «не тот блок», закрытый с шести сторон, ошибкой не считается. В одиночной игре не действует.",

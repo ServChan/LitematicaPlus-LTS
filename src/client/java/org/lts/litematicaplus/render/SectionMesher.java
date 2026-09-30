@@ -209,22 +209,22 @@ public final class SectionMesher {
                 exposed |= EAST;
             }
             if (exposed != 0 && surfaceOnly) {
-                if ((exposed & DOWN) != 0 && SectionVerdict.occludes(world, border, x, y - 1, z)) {
+                if ((exposed & DOWN) != 0 && SectionVerdict.covers(world, border, x, y - 1, z)) {
                     exposed &= ~DOWN;
                 }
-                if ((exposed & UP) != 0 && SectionVerdict.occludes(world, border, x, y + 1, z)) {
+                if ((exposed & UP) != 0 && SectionVerdict.covers(world, border, x, y + 1, z)) {
                     exposed &= ~UP;
                 }
-                if ((exposed & NORTH) != 0 && SectionVerdict.occludes(world, border, x, y, z - 1)) {
+                if ((exposed & NORTH) != 0 && SectionVerdict.covers(world, border, x, y, z - 1)) {
                     exposed &= ~NORTH;
                 }
-                if ((exposed & SOUTH) != 0 && SectionVerdict.occludes(world, border, x, y, z + 1)) {
+                if ((exposed & SOUTH) != 0 && SectionVerdict.covers(world, border, x, y, z + 1)) {
                     exposed &= ~SOUTH;
                 }
-                if ((exposed & WEST) != 0 && SectionVerdict.occludes(world, border, x - 1, y, z)) {
+                if ((exposed & WEST) != 0 && SectionVerdict.covers(world, border, x - 1, y, z)) {
                     exposed &= ~WEST;
                 }
-                if ((exposed & EAST) != 0 && SectionVerdict.occludes(world, border, x + 1, y, z)) {
+                if ((exposed & EAST) != 0 && SectionVerdict.covers(world, border, x + 1, y, z)) {
                     exposed &= ~EAST;
                 }
             }

@@ -714,12 +714,12 @@ public final class GhostEngine {
             int sectionZ) {
         LevelChunk chunk = current.getChunkSource().getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
         if (chunk == null) {
-            Arrays.fill(bits, face * 4, face * 4 + 4, -1L);
+            SectionVerdict.closeBorderFace(bits, face);
             this.borderIncomplete = true;
             return null;
         }
         if (sectionY < chunk.getMinSectionY()) {
-            Arrays.fill(bits, face * 4, face * 4 + 4, -1L);
+            SectionVerdict.closeBorderFace(bits, face);
             return null;
         }
         if (sectionY > chunk.getMaxSectionY()) {
@@ -749,10 +749,7 @@ public final class GhostEngine {
                 for (int a = 0; a < 16; a++) {
                     BlockState state = face < 2 ? section.getBlockState(a, fixed, b)
                             : face < 4 ? section.getBlockState(a, b, fixed) : section.getBlockState(fixed, b, a);
-                    if (state.isSolidRender()) {
-                        int bit = a + b * 16;
-                        bits[face * 4 + (bit >> 6)] |= 1L << (bit & 63);
-                    }
+                    SectionVerdict.markBorder(bits, face, a, b, state);
                 }
             }
         }

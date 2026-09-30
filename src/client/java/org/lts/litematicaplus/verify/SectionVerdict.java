@@ -1,5 +1,8 @@
 package org.lts.litematicaplus.verify;
 
+import java.util.Arrays;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.world.GhostSection;
@@ -13,7 +16,8 @@ public final class SectionVerdict {
     public static final int FACE_SOUTH = 3;
     public static final int FACE_WEST = 4;
     public static final int FACE_EAST = 5;
-    public static final int BORDER_LONGS = 24;
+    public static final int COVER_OFFSET = 24;
+    public static final int BORDER_LONGS = 48;
     private static final int[] NO_INTS = new int[0];
     private static final byte[] ALL_NONE = uniform(MismatchType.NONE);
     private static final byte[] ALL_CORRECT = uniform(MismatchType.CORRECT);
@@ -50,6 +54,57 @@ public final class SectionVerdict {
         }
         int bit = a + b * 16;
         return (border[face * 4 + (bit >> 6)] >>> (bit & 63) & 1L) != 0L;
+    }
+
+    public static boolean borderCovers(long[] border, int face, int a, int b) {
+        if (border == null) {
+            return true;
+        }
+        int bit = a + b * 16;
+        return (border[COVER_OFFSET + face * 4 + (bit >> 6)] >>> (bit & 63) & 1L) != 0L;
+    }
+
+    public static boolean coversState(BlockState state) {
+        return state == null || state.isSolidRender() || !state.getFluidState().isEmpty()
+                || state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+    }
+
+    public static void markBorder(long[] border, int face, int a, int b, BlockState state) {
+        int bit = a + b * 16;
+        long mask = 1L << (bit & 63);
+        if (state == null || state.isSolidRender()) {
+            border[face * 4 + (bit >> 6)] |= mask;
+        }
+        if (coversState(state)) {
+            border[COVER_OFFSET + face * 4 + (bit >> 6)] |= mask;
+        }
+    }
+
+    public static void closeBorderFace(long[] border, int face) {
+        Arrays.fill(border, face * 4, face * 4 + 4, -1L);
+        Arrays.fill(border, COVER_OFFSET + face * 4, COVER_OFFSET + face * 4 + 4, -1L);
+    }
+
+    public static boolean covers(BlockState[] world, long[] border, int x, int y, int z) {
+        if (y < 0) {
+            return borderCovers(border, FACE_DOWN, x, z);
+        }
+        if (y > 15) {
+            return borderCovers(border, FACE_UP, x, z);
+        }
+        if (z < 0) {
+            return borderCovers(border, FACE_NORTH, x, y);
+        }
+        if (z > 15) {
+            return borderCovers(border, FACE_SOUTH, x, y);
+        }
+        if (x < 0) {
+            return borderCovers(border, FACE_WEST, z, y);
+        }
+        if (x > 15) {
+            return borderCovers(border, FACE_EAST, z, y);
+        }
+        return coversState(world[x | z << 4 | y << 8]);
     }
 
     public static boolean occludes(BlockState[] world, long[] border, int x, int y, int z) {

@@ -78,9 +78,6 @@ public final class WorldCache {
     }
 
     private static void mark(long[] border, int face, int a, int b, BlockState state) {
-        if (state == null || state.isSolidRender()) {
-            int bit = a + b * 16;
-            border[face * 4 + (bit >> 6)] |= 1L << (bit & 63);
-        }
+        SectionVerdict.markBorder(border, face, a, b, state);
     }
 }

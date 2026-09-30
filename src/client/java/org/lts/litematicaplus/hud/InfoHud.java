@@ -205,7 +205,7 @@ public final class InfoHud {
                 ready += each.drawable().size();
             }
             graphics.text(font, Component.translatable("litematicaplus.hud.diag_sections", GhostRenderer.lastDrawn(), ready,
-                    total), textX, cursor, Theme.TEXT_DIM, false);
+                    total, GhostRenderer.lastUnready()), textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
             graphics.text(font, Component.translatable("litematicaplus.hud.diag_work", engine.pending(), engine.inFlight(),
                     jobsPerSecond), textX, cursor, Theme.TEXT_DIM, false);

@@ -380,7 +380,7 @@
   "litematicaplus.option.hud_diagnostics": "Diagnóstico en el panel",
   "litematicaplus.option.hud_diagnostics.tip": "Dos líneas: secciones dibujadas / listas / totales, luego en cola, en proceso y rehechas en el último segundo.",
   "litematicaplus.option.render_distance.tip": "Hasta qué distancia de la cámara se dibujan los bloques fantasma, en bloques. No depende de los chunks cargados.",
-  "litematicaplus.hud.diag_sections": "Secciones %1$s / %2$s / %3$s",
+  "litematicaplus.hud.diag_sections": "Secciones %1$s / %2$s / %3$s, sin terreno %4$s",
   "litematicaplus.hud.diag_work": "Cola %1$s, en curso %2$s, por s %3$s",
   "litematicaplus.option.trust_hidden": "Bloques ocultos como correctos",
   "litematicaplus.option.trust_hidden.tip": "En servidores con anti-rayos X el cliente recibe bloques falsos para todo lo que está enterrado. Por eso un bloque erróneo cubierto por sus seis lados no se marca. No se aplica en un jugador.",
