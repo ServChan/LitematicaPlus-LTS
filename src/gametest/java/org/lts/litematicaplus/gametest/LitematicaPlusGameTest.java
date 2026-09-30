@@ -66,6 +66,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 .adjustSettings(settings -> settings.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE))
                 .create()) {
             world.getConnection().waitForChunksRender();
+            if (System.getProperty("litematicaplus.stressOnly") != null) {
+                stress(context, world, null);
+                return;
+            }
             world.getServer().runCommand("tp @p -2.5 -59 -2.5 -45 12");
             context.waitTicks(10);
             Schematic house = house();
@@ -400,7 +404,9 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             return;
         }
         Path source = Path.of(sample);
-        context.runOnClient(client -> PlacementManager.get().remove(previous));
+        if (previous != null) {
+            context.runOnClient(client -> PlacementManager.get().remove(previous));
+        }
         world.getServer().runCommand("tp @p 200.5 -20 200.5 -45 35");
         world.getConnection().waitForClientboundPackets();
         world.getConnection().waitForChunksRender();
@@ -424,6 +430,29 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         context.waitTicks(80);
         int fpsInside = context.computeOnClient(Minecraft::getFps);
         context.takeScreenshot("08_stress_inside");
+        context.runOnClient(client -> {
+            client.player.getAbilities().flying = true;
+            client.player.onUpdateAbilities();
+        });
+        world.getServer().runCommand("tp @p 330.5 0 330.5 45 10");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(100);
+        for (int turn = 0; turn < 4; turn++) {
+            long before = GhostEngine.get().jobsStarted();
+            float yaw = turn * 120 + 165;
+            context.runOnClient(client -> {
+                client.player.setYRot(yaw);
+                client.player.setDeltaMovement(0.0, 0.0, 0.0);
+            });
+            context.waitTicks(1);
+            int early = GhostRenderer.lastDrawn();
+            context.takeScreenshot("turn_" + turn + "_a");
+            context.waitTicks(50);
+            context.takeScreenshot("turn_" + turn + "_b");
+            System.out.println("TURN " + turn + " jobs=" + (GhostEngine.get().jobsStarted() - before) + " drawnEarly=" + early
+                    + " drawnLate=" + GhostRenderer.lastDrawn() + " drawable=" + runtime.drawable().size()
+                    + " pos=" + context.computeOnClient(client -> client.player.position()));
+        }
         System.out.println("STRESS blocks=" + runtime.volume().totalBlocks() + " sections=" + runtime.slotCount()
                 + " volumeMs=" + volumeMillis + " allSectionsMs=" + meshMillis + " fpsBefore=" + baseline + " fps=" + fps
                 + " fpsInside=" + fpsInside + " missing=" + runtime.count(MismatchType.MISSING)
