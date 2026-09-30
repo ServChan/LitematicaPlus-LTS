@@ -70,6 +70,7 @@ public final class BlockStateNbt {
         if (block.isEmpty()) {
             if (unresolved != null && !name.isBlank()) {
                 unresolved.add();
+                return Blocks.STRUCTURE_VOID.defaultBlockState();
             }
             return Blocks.AIR.defaultBlockState();
         }

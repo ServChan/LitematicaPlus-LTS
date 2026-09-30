@@ -25,7 +25,7 @@ public final class VanillaStructureCodec {
             throw new LocalizedException("litematicaplus.error.empty_schematic", "Structure file has an empty size");
         }
         long volume = (long) sizeX * sizeY * sizeZ;
-        if (volume > LitematicCodec.MAX_REGION_VOLUME) {
+        if (volume > LitematicCodec.MAX_REGION_VOLUME || LitematicCodec.tooLong(sizeX, sizeY, sizeZ)) {
             throw new LocalizedException("litematicaplus.error.too_large", "Structure file is too large: " + volume + " blocks");
         }
         int dataVersion = root.getIntOr("DataVersion", 0);
@@ -39,6 +39,7 @@ public final class VanillaStructureCodec {
             palette[i] = BlockStateNbt.read(paletteTag.getCompoundOrEmpty(i), dataVersion, unresolved);
         }
         RegionBuilder builder = new RegionBuilder(fallbackName, 0, 0, 0, sizeX, sizeY, sizeZ);
+        builder.fill(Blocks.STRUCTURE_VOID.defaultBlockState());
         ListTag blocks = root.getListOrEmpty("blocks");
         long count = 0L;
         for (int i = 0; i < blocks.size(); i++) {

@@ -156,7 +156,7 @@ final class SettingsView extends TabView {
 
     @Override
     void closed() {
-        if (this.dirty && this.toolItemValid) {
+        if (this.dirty) {
             LitematicaPlusConfig.save(this.working);
             this.dirty = false;
         }
@@ -405,6 +405,11 @@ final class SettingsView extends TabView {
         if (this.listening == null) {
             return false;
         }
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+            this.listening = null;
+            this.screen.refresh();
+            return true;
+        }
         bind(InputConstants.Type.MOUSE.getOrCreate(event.button()));
         return true;
     }
@@ -420,7 +425,8 @@ final class SettingsView extends TabView {
             this.toolItemText = value;
             String clean = value.strip().toLowerCase(Locale.ROOT);
             Identifier id = Identifier.tryParse(clean);
-            boolean valid = id != null && BuiltInRegistries.ITEM.getOptional(id).isPresent();
+            boolean valid = id != null && BuiltInRegistries.ITEM.getOptional(id)
+                    .filter(item -> item != net.minecraft.world.item.Items.AIR).isPresent();
             this.toolItemValid = valid;
             box.setTextColor(valid ? Theme.TEXT : Theme.DANGER);
             if (valid) {

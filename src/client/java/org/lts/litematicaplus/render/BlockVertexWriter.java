@@ -124,4 +124,8 @@ final class BlockVertexWriter implements VertexConsumer {
     public VertexConsumer setLineWidth(float width) {
         return this;
     }
+
+    void free() {
+        MemoryUtil.memFree(this.buffer);
+    }
 }

@@ -75,7 +75,9 @@ public final class GhostEngine {
     private LayerRange layer = LayerRange.ALL;
     private SectionJob.Options options;
     private SectionJob.Options optionsWithoutGhost;
+    private SectionJob.Options optionsOverlayOnly;
     private int inFlight;
+    private boolean blockEntities;
     private long ticks;
     private int maxGhostIndices;
     private int maxFillIndices;
@@ -390,21 +392,48 @@ public final class GhostEngine {
         int x = pos.getX();
         int y = pos.getY();
         int z = pos.getZ();
-        long key = SectionPos.asLong(x >> 4, y >> 4, z >> 4);
+        int sectionX = x >> 4;
+        int sectionY = y >> 4;
+        int sectionZ = z >> 4;
+        int localX = x & 15;
+        int localY = y & 15;
+        int localZ = z & 15;
         boolean counted = false;
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
-            if (volume != null && volume.contains(x, y, z)) {
-                if (!counted) {
-                    counted = true;
-                    this.changes.record(System.nanoTime() / 1_000_000_000L);
-                }
-                SectionSlot slot = runtime.slots.get(key);
-                if (slot != null) {
-                    markDirty(runtime, slot);
-                    runtime.urgent.enqueue(key);
-                }
+            if (volume == null || x < volume.minX() - 1 || x > volume.maxX() + 1 || y < volume.minY() - 1
+                    || y > volume.maxY() + 1 || z < volume.minZ() - 1 || z > volume.maxZ() + 1) {
+                continue;
             }
+            if (!counted && volume.contains(x, y, z)) {
+                counted = true;
+                this.changes.record(System.nanoTime() / 1_000_000_000L);
+            }
+            touch(runtime, sectionX, sectionY, sectionZ);
+            if (localX == 0) {
+                touch(runtime, sectionX - 1, sectionY, sectionZ);
+            } else if (localX == 15) {
+                touch(runtime, sectionX + 1, sectionY, sectionZ);
+            }
+            if (localY == 0) {
+                touch(runtime, sectionX, sectionY - 1, sectionZ);
+            } else if (localY == 15) {
+                touch(runtime, sectionX, sectionY + 1, sectionZ);
+            }
+            if (localZ == 0) {
+                touch(runtime, sectionX, sectionY, sectionZ - 1);
+            } else if (localZ == 15) {
+                touch(runtime, sectionX, sectionY, sectionZ + 1);
+            }
+        }
+    }
+
+    private static void touch(PlacementRuntime runtime, int sectionX, int sectionY, int sectionZ) {
+        long key = SectionPos.asLong(sectionX, sectionY, sectionZ);
+        SectionSlot slot = runtime.slots.get(key);
+        if (slot != null) {
+            markDirty(runtime, slot);
+            runtime.urgent.enqueue(key);
         }
     }
 
@@ -455,6 +484,7 @@ public final class GhostEngine {
         if (current != this.level) {
             this.level = current;
             this.cameraPosition = null;
+            forgetWorld();
             markEverythingDirty();
         }
         drain(LitematicaPlusConfig.current().meshUploadsPerFrame);
@@ -481,6 +511,25 @@ public final class GhostEngine {
         schedule(minecraft, current, camera, models);
     }
 
+    private void forgetWorld() {
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            runtime.generation++;
+            if (runtime.volume != null) {
+                runtime.resetTotals(runtime.volume.palette().length);
+            }
+            for (SectionSlot slot : runtime.slots.values()) {
+                slot.verdict = null;
+                slot.verdictRules = -1;
+                slot.inFlight = false;
+                slot.built = false;
+                slot.ghostBuilt = false;
+                slot.chunkLoaded = false;
+                slot.borderIncomplete = false;
+                closeSlot(runtime, slot);
+            }
+        }
+    }
+
     public void frame(Minecraft minecraft, Vec3 camera) {
         this.cameraPosition = camera;
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
@@ -502,12 +551,18 @@ public final class GhostEngine {
                 config.overlayThroughWalls, config.useWorldCache,
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
                 config.overlayFillAlpha, config.overlayLineAlpha);
-        if (!next.equals(this.options)) {
+        boolean blockEntities = config.renderBlockEntities;
+        if (!next.equals(this.options) || blockEntities != this.blockEntities) {
             boolean changed = this.options != null;
             this.options = next;
+            this.blockEntities = blockEntities;
             this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(),
                     next.lenientStates(), next.trustHidden(), next.throughWalls(), next.worldCache(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
                     next.showWrongState(), next.fillAlpha(), next.lineAlpha());
+            this.optionsOverlayOnly = new SectionJob.Options(false, next.overlay() && next.throughWalls(),
+                    next.renderColliding(), next.lenientStates(), next.trustHidden(), next.throughWalls(), next.worldCache(),
+                    next.showMissing(), next.showExtra(), next.showWrongBlock(), next.showWrongState(), next.fillAlpha(),
+                    next.lineAlpha());
             if (changed) {
                 for (PlacementRuntime runtime : this.runtimes.values()) {
                     computeSpecials(runtime);
@@ -518,7 +573,7 @@ public final class GhostEngine {
     }
 
     public static boolean ghostsAnywhere() {
-        return !LitematicaPlusConfig.current().ghostsOnlyLoaded || TopView.active();
+        return !LitematicaPlusConfig.current().ghostsOnlyLoaded || TopView.active() || ExternalMap.active();
     }
 
     private void sweep(ClientLevel current, Vec3 camera) {
@@ -565,63 +620,159 @@ public final class GhostEngine {
         int configuredRange = TopView.ghostRange(config.renderDistance);
         double ghostRange = (double) configuredRange * configuredRange;
         boolean anywhere = ghostsAnywhere();
+        int rules = rules(this.options);
+        int active = 0;
         for (PlacementRuntime runtime : this.runtimes.values()) {
-            PlacementVolume volume = runtime.volume;
-            if (volume == null || runtime.dirty.isEmpty() || !runtime.placement().enabled()) {
-                continue;
+            if (runtime.volume != null && !runtime.dirty.isEmpty() && runtime.placement().enabled()) {
+                active++;
             }
-            int want = Math.min(SELECT_LIMIT, capacity - this.inFlight);
-            if (want <= 0) {
-                return;
-            }
-            int found = selectNearest(runtime, camera, want);
-            for (int i = 0; i < found; i++) {
-                SectionSlot slot = runtime.slots.get(this.selectedKeys[i]);
-                if (slot == null) {
-                    runtime.dirty.remove(this.selectedKeys[i]);
+        }
+        for (int pass = 0; pass < 2; pass++) {
+            boolean urgentOnly = pass == 0;
+            int remaining = active;
+            for (PlacementRuntime runtime : this.runtimes.values()) {
+                PlacementVolume volume = runtime.volume;
+                if (volume == null || runtime.dirty.isEmpty() || !runtime.placement().enabled()) {
                     continue;
                 }
-                if (slot.inFlight || !runtime.dirty.contains(slot.key)) {
-                    continue;
+                int free = capacity - this.inFlight;
+                if (free <= 0) {
+                    return;
                 }
-                GhostSection section = volume.section(slot.key);
-                if (section == null) {
+                int share = urgentOnly ? free : Math.max(1, (free + remaining - 1) / Math.max(1, remaining));
+                remaining--;
+                int want = Math.min(SELECT_LIMIT, share);
+                int found = urgentOnly ? selectUrgent(runtime, camera, want) : selectNearest(runtime, camera, want);
+                for (int i = 0; i < found; i++) {
+                    SectionSlot slot = runtime.slots.get(this.selectedKeys[i]);
+                    if (slot == null) {
+                        runtime.dirty.remove(this.selectedKeys[i]);
+                        continue;
+                    }
+                    if (slot.inFlight || !runtime.dirty.contains(slot.key)) {
+                        continue;
+                    }
+                    GhostSection section = volume.section(slot.key);
+                    if (section == null) {
+                        runtime.dirty.remove(slot.key);
+                        continue;
+                    }
+                    BlockState[] world = snapshot(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
+                            SectionPos.z(slot.key));
+                    boolean inRange = this.selectedDistances[i] <= ghostRange;
+                    boolean ghost = inRange && (world != null || anywhere);
+                    slot.chunkLoaded = world != null;
+                    long[] border = world == null ? null : borders(current, SectionPos.x(slot.key),
+                            SectionPos.y(slot.key), SectionPos.z(slot.key));
+                    slot.borderIncomplete = world != null && this.borderIncomplete;
+                    int unknownFaces = world == null ? 0 : this.unknownFaces;
                     runtime.dirty.remove(slot.key);
-                    continue;
-                }
-                BlockState[] world = snapshot(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
-                        SectionPos.z(slot.key));
-                boolean ghost = this.selectedDistances[i] <= ghostRange && (world != null || anywhere);
-                slot.chunkLoaded = world != null;
-                long[] border = world == null ? null : borders(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
-                        SectionPos.z(slot.key));
-                slot.borderIncomplete = world != null && this.borderIncomplete;
-                int unknownFaces = world == null ? 0 : this.unknownFaces;
-                runtime.dirty.remove(slot.key);
-                slot.inFlight = true;
-                slot.pendingGhost = ghost;
-                this.inFlight++;
-                this.jobsStarted++;
-                SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
-                        ? slot.verdict : null;
-                SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                        runtime.specialByPalette, world, border, unknownFaces, remembered, this.layer, current, models,
-                        fluids,
-                        minecraft.getBlockColors(), ghost ? this.options : this.optionsWithoutGhost);
-                try {
-                    executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
-                } catch (RejectedExecutionException exception) {
-                    this.inFlight--;
-                    slot.inFlight = false;
-                    runtime.dirty.add(slot.key);
-                    release(world);
-                    return;
-                }
-                if (this.inFlight >= capacity || System.nanoTime() > deadline) {
-                    return;
+                    slot.inFlight = true;
+                    slot.pendingGhost = ghost;
+                    slot.pendingRules = rules;
+                    this.inFlight++;
+                    this.jobsStarted++;
+                    SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
+                            && slot.verdictRules == rules ? slot.verdict : null;
+                    SectionJob.Options jobOptions = ghost ? this.options
+                            : inRange ? this.optionsOverlayOnly : this.optionsWithoutGhost;
+                    byte[][] neighbours = jobOptions.overlay() ? neighbourPlanes(runtime, slot.key) : null;
+                    SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
+                            runtime.specialByPalette, world, border, unknownFaces, neighbours, remembered, this.layer,
+                            current, models, fluids, minecraft.getBlockColors(), jobOptions);
+                    try {
+                        executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
+                    } catch (RejectedExecutionException exception) {
+                        this.inFlight--;
+                        slot.inFlight = false;
+                        runtime.dirty.add(slot.key);
+                        release(world);
+                        requeue(runtime, i, found);
+                        return;
+                    }
+                    if (this.inFlight >= capacity || System.nanoTime() > deadline) {
+                        requeue(runtime, i + 1, found);
+                        return;
+                    }
                 }
             }
         }
+    }
+
+    private static byte[][] neighbourPlanes(PlacementRuntime runtime, long key) {
+        int sectionX = SectionPos.x(key);
+        int sectionY = SectionPos.y(key);
+        int sectionZ = SectionPos.z(key);
+        byte[][] planes = null;
+        for (int face = 0; face < 6; face++) {
+            long neighbourKey = switch (face) {
+                case SectionVerdict.FACE_DOWN -> SectionPos.asLong(sectionX, sectionY - 1, sectionZ);
+                case SectionVerdict.FACE_UP -> SectionPos.asLong(sectionX, sectionY + 1, sectionZ);
+                case SectionVerdict.FACE_NORTH -> SectionPos.asLong(sectionX, sectionY, sectionZ - 1);
+                case SectionVerdict.FACE_SOUTH -> SectionPos.asLong(sectionX, sectionY, sectionZ + 1);
+                case SectionVerdict.FACE_WEST -> SectionPos.asLong(sectionX - 1, sectionY, sectionZ);
+                default -> SectionPos.asLong(sectionX + 1, sectionY, sectionZ);
+            };
+            SectionSlot neighbour = runtime.slots.get(neighbourKey);
+            if (neighbour == null || neighbour.verdict == null) {
+                continue;
+            }
+            byte[] categories = neighbour.verdict.categories();
+            byte[] plane = new byte[256];
+            for (int b = 0; b < 16; b++) {
+                for (int a = 0; a < 16; a++) {
+                    int index = switch (face) {
+                        case SectionVerdict.FACE_DOWN -> GhostSection.index(a, 15, b);
+                        case SectionVerdict.FACE_UP -> GhostSection.index(a, 0, b);
+                        case SectionVerdict.FACE_NORTH -> GhostSection.index(a, b, 15);
+                        case SectionVerdict.FACE_SOUTH -> GhostSection.index(a, b, 0);
+                        case SectionVerdict.FACE_WEST -> GhostSection.index(15, b, a);
+                        default -> GhostSection.index(0, b, a);
+                    };
+                    plane[a + b * 16] = categories[index];
+                }
+            }
+            if (planes == null) {
+                planes = new byte[6][];
+            }
+            planes[face] = plane;
+        }
+        return planes;
+    }
+
+    private static void refreshNeighbourOverlays(PlacementRuntime runtime, long key) {
+        int sectionX = SectionPos.x(key);
+        int sectionY = SectionPos.y(key);
+        int sectionZ = SectionPos.z(key);
+        long[] keys = {SectionPos.asLong(sectionX, sectionY - 1, sectionZ), SectionPos.asLong(sectionX, sectionY + 1, sectionZ),
+                SectionPos.asLong(sectionX, sectionY, sectionZ - 1), SectionPos.asLong(sectionX, sectionY, sectionZ + 1),
+                SectionPos.asLong(sectionX - 1, sectionY, sectionZ), SectionPos.asLong(sectionX + 1, sectionY, sectionZ)};
+        for (long neighbourKey : keys) {
+            SectionSlot neighbour = runtime.slots.get(neighbourKey);
+            if (neighbour != null && (neighbour.fill != null || neighbour.lines != null)) {
+                markDirty(runtime, neighbour);
+            }
+        }
+    }
+
+    private static int rules(SectionJob.Options options) {
+        return options == null ? 0 : (options.lenientStates() ? 1 : 0) | (options.trustHidden() ? 2 : 0);
+    }
+
+    private void requeue(PlacementRuntime runtime, int from, int found) {
+        for (int i = from; i < found; i++) {
+            if (runtime.dirty.contains(this.selectedKeys[i])) {
+                runtime.urgent.enqueue(this.selectedKeys[i]);
+            }
+        }
+    }
+
+    private int selectUrgent(PlacementRuntime runtime, Vec3 camera, int want) {
+        int found = 0;
+        while (found < want && !runtime.urgent.isEmpty()) {
+            found = select(runtime, runtime.urgent.dequeueLong(), camera, found);
+        }
+        return found;
     }
 
     private int selectNearest(PlacementRuntime runtime, Vec3 camera, int want) {
@@ -836,9 +987,12 @@ public final class GhostEngine {
                 continue;
             }
             if (result.revision != slot.revision) {
-                result.free();
                 runtime.urgent.enqueue(slot.key);
-                continue;
+                runtime.dirty.add(slot.key);
+                if (result.revision <= slot.appliedRevision) {
+                    result.free();
+                    continue;
+                }
             }
             slot.failures = 0;
             try {
@@ -854,10 +1008,16 @@ public final class GhostEngine {
     }
 
     private void apply(PlacementRuntime runtime, SectionSlot slot, MeshResult result) {
+        boolean first = slot.verdict == null;
         if (slot.verdict != null) {
             runtime.subtract(slot.verdict);
         }
+        if (first && result.verdict != null && result.verdict.errors() > 0) {
+            refreshNeighbourOverlays(runtime, slot.key);
+        }
         slot.verdict = result.verdict;
+        slot.verdictRules = slot.pendingRules;
+        slot.appliedRevision = result.revision;
         runtime.add(result.verdict);
         slot.closeBuffers();
         GpuDevice device = RenderSystem.getDevice();

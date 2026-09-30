@@ -167,7 +167,7 @@ public final class SchematicRegion {
     public long countNonAir() {
         boolean[] air = new boolean[this.palette.length];
         for (int i = 0; i < this.palette.length; i++) {
-            air[i] = this.palette[i].isAir();
+            air[i] = this.palette[i].isAir() || this.palette[i].is(net.minecraft.world.level.block.Blocks.STRUCTURE_VOID);
         }
         long volume = volume();
         long count = 0L;

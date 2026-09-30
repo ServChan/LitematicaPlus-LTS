@@ -259,7 +259,7 @@
   "litematicaplus.hotkeys.row": "%1$s: %2$s",
   "litematicaplus.hotkeys.listening": "press a key...",
   "litematicaplus.hotkeys.unbound": "not set",
-  "litematicaplus.hotkeys.tip": "Click, then press a key or a mouse button. Esc clears the binding.",
+  "litematicaplus.hotkeys.tip": "Click, then press a key or a mouse button other than the left one. Esc clears the binding, a left click cancels.",
   "litematicaplus.hotkeys.conflict": "Also used by: %s",
   "litematicaplus.message.toggled": "%1$s: %2$s",
   "litematicaplus.message.easy_place_restricted": "Easy place is on: blocks go only where the schematic wants them. Aim at a ghost block.",

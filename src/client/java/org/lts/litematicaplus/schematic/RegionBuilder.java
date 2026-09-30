@@ -39,7 +39,7 @@ public final class RegionBuilder {
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
         this.volume = (long) sizeX * sizeY * sizeZ;
-        if (this.volume > LitematicCodec.MAX_REGION_VOLUME) {
+        if (this.volume > LitematicCodec.MAX_REGION_VOLUME || LitematicCodec.tooLong(sizeX, sizeY, sizeZ)) {
             throw new IllegalArgumentException("Region is too large: " + this.volume + " blocks");
         }
         this.lookup.defaultReturnValue(-1);
@@ -70,6 +70,14 @@ public final class RegionBuilder {
             this.lastIndex = index;
         }
         this.states.set(((long) y * this.sizeZ + z) * this.sizeX + x, index);
+    }
+
+    public void fill(BlockState state) {
+        set(0, 0, 0, state);
+        int index = this.lastIndex;
+        for (long i = 1L; i < this.volume; i++) {
+            this.states.set(i, index);
+        }
     }
 
     public void blockEntity(int x, int y, int z, CompoundTag tag) {

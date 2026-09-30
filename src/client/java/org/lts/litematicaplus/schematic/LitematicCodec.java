@@ -18,6 +18,7 @@ public final class LitematicCodec {
     public static final int SCHEMATIC_VERSION = 7;
     public static final int SCHEMATIC_SUBVERSION = 1;
     public static final long MAX_REGION_VOLUME = 1L << 28;
+    public static final long MAX_REGION_AXIS = 1L << 21;
     public static final long MAX_TOTAL_VOLUME = 1L << 28;
 
     private LitematicCodec() {
@@ -127,7 +128,7 @@ public final class LitematicCodec {
             return null;
         }
         long volume = Math.abs((long) sizeX) * Math.abs((long) sizeY) * Math.abs((long) sizeZ);
-        if (volume > MAX_REGION_VOLUME) {
+        if (volume > MAX_REGION_VOLUME || tooLong(sizeX, sizeY, sizeZ)) {
             throw new LocalizedException("litematicaplus.error.too_large", "Region '" + name + "' is too large: " + volume + " blocks");
         }
         ListTag paletteTag = tag.getListOrEmpty("BlockStatePalette");
@@ -208,5 +209,9 @@ public final class LitematicCodec {
         tag.putInt("y", y);
         tag.putInt("z", z);
         return tag;
+    }
+
+    public static boolean tooLong(long sizeX, long sizeY, long sizeZ) {
+        return Math.abs(sizeX) >= MAX_REGION_AXIS || Math.abs(sizeY) >= MAX_REGION_AXIS || Math.abs(sizeZ) >= MAX_REGION_AXIS;
     }
 }

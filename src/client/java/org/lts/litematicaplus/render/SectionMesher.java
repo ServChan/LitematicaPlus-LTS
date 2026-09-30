@@ -11,6 +11,7 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
@@ -34,7 +35,13 @@ public final class SectionMesher {
     private static final int SOUTH = 8;
     private static final int WEST = 16;
     private static final int EAST = 32;
+    private static final int[] DX = {0, 0, 0, 0, -1, 1};
+    private static final int[] DY = {-1, 1, 0, 0, 0, 0};
+    private static final int[] DZ = {0, 0, -1, 1, 0, 0};
+    private static final int[][] EDGE_FACES = {{0, 2}, {0, 3}, {1, 2}, {1, 3}, {4, 2}, {5, 2}, {4, 3}, {5, 3},
+            {4, 0}, {5, 0}, {4, 1}, {5, 1}};
 
+    private static final java.util.concurrent.atomic.AtomicInteger MESH_FAILURES = new java.util.concurrent.atomic.AtomicInteger();
     private final BlockVertexWriter ghost = new BlockVertexWriter(1 << 18);
     private final NativeWriter fill = new NativeWriter(1 << 14);
     private final NativeWriter lines = new NativeWriter(1 << 14);
@@ -42,6 +49,14 @@ public final class SectionMesher {
     private final IntArrayList specials = new IntArrayList();
 
     private SectionMesher() {
+    }
+
+    public static void releaseThread() {
+        SectionMesher mesher = LOCAL.get();
+        LOCAL.remove();
+        mesher.ghost.free();
+        mesher.fill.free();
+        mesher.lines.free();
     }
 
     public static MeshResult run(SectionJob job) {
@@ -62,7 +77,7 @@ public final class SectionMesher {
                     SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
             if (cached != null) {
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), cached.world(), cached.border(), 0, null, live.layer(), live.level(),
+                        live.specialByPalette(), cached.world(), cached.border(), 0, live.neighbours(), null, live.layer(), live.level(),
                         live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         } else if (live.world() != null && live.border() != null && live.unknownFaces() != 0 && options.worldCache()) {
@@ -76,7 +91,7 @@ public final class SectionMesher {
                     }
                 }
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), live.world(), border, 0, null, live.layer(), live.level(),
+                        live.specialByPalette(), live.world(), border, 0, live.neighbours(), null, live.layer(), live.level(),
                         live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         }
@@ -115,6 +130,21 @@ public final class SectionMesher {
                 lineVertices = this.lines.size() / 24;
                 fillData = this.fill.copy();
                 lineData = this.lines.copy();
+            }
+        } catch (RuntimeException | LinkageError exception) {
+            MemoryUtil.memFree(ghostData);
+            MemoryUtil.memFree(fillData);
+            MemoryUtil.memFree(lineData);
+            ghostData = null;
+            fillData = null;
+            lineData = null;
+            ghostVertices = 0;
+            fillVertices = 0;
+            lineVertices = 0;
+            this.specials.clear();
+            if (MESH_FAILURES.getAndIncrement() < 5) {
+                LitematicaPlusClient.LOGGER.error("Schematic section meshing failed, the section keeps its verdict without a mesh",
+                        exception);
             }
         } catch (Throwable throwable) {
             MemoryUtil.memFree(ghostData);
@@ -192,6 +222,7 @@ public final class SectionMesher {
         BlockState[] world = job.world();
         long[] border = job.border();
         boolean surfaceOnly = !options.throughWalls() && world != null;
+        byte[][] planes = job.neighbours();
         for (int index = 0; index < GhostSection.VOLUME; index++) {
             byte category = categories[index];
             if (!shown(category, options)) {
@@ -203,25 +234,14 @@ public final class SectionMesher {
             if (layered && !layer.contains(originX + x, originY + y, originZ + z)) {
                 continue;
             }
-            int exposed = 0;
-            if (!same(categories, view, category, x, y - 1, z, originX, originY, originZ, layer, layered)) {
-                exposed |= DOWN;
+            int sameMask = 0;
+            for (int face = 0; face < 6; face++) {
+                if (same(categories, planes, view, category, x + DX[face], y + DY[face], z + DZ[face], originX, originY,
+                        originZ, layer, layered)) {
+                    sameMask |= 1 << face;
+                }
             }
-            if (!same(categories, view, category, x, y + 1, z, originX, originY, originZ, layer, layered)) {
-                exposed |= UP;
-            }
-            if (!same(categories, view, category, x, y, z - 1, originX, originY, originZ, layer, layered)) {
-                exposed |= NORTH;
-            }
-            if (!same(categories, view, category, x, y, z + 1, originX, originY, originZ, layer, layered)) {
-                exposed |= SOUTH;
-            }
-            if (!same(categories, view, category, x - 1, y, z, originX, originY, originZ, layer, layered)) {
-                exposed |= WEST;
-            }
-            if (!same(categories, view, category, x + 1, y, z, originX, originY, originZ, layer, layered)) {
-                exposed |= EAST;
-            }
+            int exposed = ~sameMask & 63;
             if (exposed != 0 && surfaceOnly) {
                 if ((exposed & DOWN) != 0 && SectionVerdict.covers(world, border, x, y - 1, z)) {
                     exposed &= ~DOWN;
@@ -251,7 +271,21 @@ public final class SectionMesher {
                 emitFill(x, y, z, exposed, abgr(rgb, fillAlpha));
             }
             if (options.lineAlpha() > 0.004F) {
-                emitEdges(x, y, z, exposed, abgr(rgb, options.lineAlpha()));
+                int concave = 0;
+                for (int edge = 0; edge < EDGE_FACES.length; edge++) {
+                    int first = EDGE_FACES[edge][0];
+                    int second = EDGE_FACES[edge][1];
+                    boolean firstSame = (sameMask & 1 << first) != 0;
+                    boolean secondSame = (sameMask & 1 << second) != 0;
+                    if (firstSame == secondSame || (exposed & 1 << (firstSame ? second : first)) == 0) {
+                        continue;
+                    }
+                    if (same(categories, planes, view, category, x + DX[first] + DX[second], y + DY[first] + DY[second],
+                            z + DZ[first] + DZ[second], originX, originY, originZ, layer, layered)) {
+                        concave |= 1 << edge;
+                    }
+                }
+                emitEdges(x, y, z, exposed, concave, abgr(rgb, options.lineAlpha()));
             }
         }
     }
@@ -272,13 +306,25 @@ public final class SectionMesher {
         return false;
     }
 
-    private static boolean same(byte[] categories, GhostBlockView view, byte category, int x, int y, int z,
-            int originX, int originY, int originZ, LayerRange layer, boolean layered) {
+    private static boolean same(byte[] categories, byte[][] planes, GhostBlockView view, byte category, int x, int y,
+            int z, int originX, int originY, int originZ, LayerRange layer, boolean layered) {
         if (layered && !layer.contains(originX + x, originY + y, originZ + z)) {
             return false;
         }
-        if ((x | y | z) >= 0 && x < 16 && y < 16 && z < 16) {
+        boolean outX = x < 0 || x > 15;
+        boolean outY = y < 0 || y > 15;
+        boolean outZ = z < 0 || z > 15;
+        if (!outX && !outY && !outZ) {
             return categories[GhostSection.index(x, y, z)] == category;
+        }
+        if (planes != null && (outX ? 1 : 0) + (outY ? 1 : 0) + (outZ ? 1 : 0) == 1) {
+            int face = outY ? (y < 0 ? 0 : 1) : outZ ? (z < 0 ? 2 : 3) : (x < 0 ? 4 : 5);
+            byte[] plane = planes[face];
+            if (plane != null) {
+                int a = face < 4 ? x : z;
+                int b = face < 2 ? z : y;
+                return plane[a + b * 16] == category;
+            }
         }
         return category == MISSING && !view.stateAt(originX + x, originY + y, originZ + z).isAir();
     }
@@ -334,7 +380,7 @@ public final class SectionMesher {
         }
     }
 
-    private void emitEdges(int x, int y, int z, int exposed, int color) {
+    private void emitEdges(int x, int y, int z, int exposed, int concave, int color) {
         float x0 = x - EXPAND;
         float y0 = y - EXPAND;
         float z0 = z - EXPAND;
@@ -342,22 +388,24 @@ public final class SectionMesher {
         float y1 = y + 1 + EXPAND;
         float z1 = z + 1 + EXPAND;
         this.lines.ensure(12 * 4 * 24);
-        edge(exposed, DOWN | NORTH, x0, y0, z0, x1, y0, z0, color);
-        edge(exposed, DOWN | SOUTH, x0, y0, z1, x1, y0, z1, color);
-        edge(exposed, UP | NORTH, x0, y1, z0, x1, y1, z0, color);
-        edge(exposed, UP | SOUTH, x0, y1, z1, x1, y1, z1, color);
-        edge(exposed, WEST | NORTH, x0, y0, z0, x0, y1, z0, color);
-        edge(exposed, EAST | NORTH, x1, y0, z0, x1, y1, z0, color);
-        edge(exposed, WEST | SOUTH, x0, y0, z1, x0, y1, z1, color);
-        edge(exposed, EAST | SOUTH, x1, y0, z1, x1, y1, z1, color);
-        edge(exposed, WEST | DOWN, x0, y0, z0, x0, y0, z1, color);
-        edge(exposed, EAST | DOWN, x1, y0, z0, x1, y0, z1, color);
-        edge(exposed, WEST | UP, x0, y1, z0, x0, y1, z1, color);
-        edge(exposed, EAST | UP, x1, y1, z0, x1, y1, z1, color);
+        edge(exposed, concave, 0, x0, y0, z0, x1, y0, z0, color);
+        edge(exposed, concave, 1, x0, y0, z1, x1, y0, z1, color);
+        edge(exposed, concave, 2, x0, y1, z0, x1, y1, z0, color);
+        edge(exposed, concave, 3, x0, y1, z1, x1, y1, z1, color);
+        edge(exposed, concave, 4, x0, y0, z0, x0, y1, z0, color);
+        edge(exposed, concave, 5, x1, y0, z0, x1, y1, z0, color);
+        edge(exposed, concave, 6, x0, y0, z1, x0, y1, z1, color);
+        edge(exposed, concave, 7, x1, y0, z1, x1, y1, z1, color);
+        edge(exposed, concave, 8, x0, y0, z0, x0, y0, z1, color);
+        edge(exposed, concave, 9, x1, y0, z0, x1, y0, z1, color);
+        edge(exposed, concave, 10, x0, y1, z0, x0, y1, z1, color);
+        edge(exposed, concave, 11, x1, y1, z0, x1, y1, z1, color);
     }
 
-    private void edge(int exposed, int faces, float ax, float ay, float az, float bx, float by, float bz, int color) {
-        if ((exposed & faces) != faces) {
+    private void edge(int exposed, int concave, int edge, float ax, float ay, float az, float bx, float by, float bz,
+            int color) {
+        int faces = 1 << EDGE_FACES[edge][0] | 1 << EDGE_FACES[edge][1];
+        if ((exposed & faces) != faces && (concave & 1 << edge) == 0) {
             return;
         }
         byte nx = (byte) (bx > ax ? 127 : 0);

@@ -112,7 +112,7 @@ public final class SelectionManager {
     public List<AreaBox> completeBoxes() {
         List<AreaBox> result = new ArrayList<>();
         for (AreaBox box : this.boxes) {
-            if (!box.isEmpty()) {
+            if (box.isComplete()) {
                 result.add(box);
             }
         }

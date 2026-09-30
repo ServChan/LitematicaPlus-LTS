@@ -92,7 +92,7 @@ class AuditRegressionTest {
         BlockStateNbt.Unresolved unresolved = new BlockStateNbt.Unresolved();
         CompoundTag unknown = new CompoundTag();
         unknown.putString("Name", "somemod:missing_block");
-        assertTrue(BlockStateNbt.read(unknown, unresolved).isAir());
+        assertTrue(BlockStateNbt.read(unknown, unresolved).is(Blocks.STRUCTURE_VOID));
         CompoundTag known = new CompoundTag();
         known.putString("Name", "minecraft:stone");
         assertSame(Blocks.STONE.defaultBlockState(), BlockStateNbt.read(known, unresolved));

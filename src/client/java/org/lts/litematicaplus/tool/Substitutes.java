@@ -141,6 +141,22 @@ public final class Substitutes {
         }
     }
 
+    public static boolean accepts(BlockState target, BlockState world) {
+        Block wanted = target.getBlock();
+        Block present = world.getBlock();
+        if (present == wanted) {
+            return false;
+        }
+        if (wanted instanceof WallBlock && present instanceof WallBlock
+                || wanted instanceof FenceGateBlock && present instanceof FenceGateBlock
+                || wanted instanceof TrapDoorBlock && present instanceof TrapDoorBlock
+                || wanted instanceof BaseCoralFanBlock && present instanceof BaseCoralFanBlock) {
+            return true;
+        }
+        Item item = present.asItem();
+        return item != Items.AIR && items().contains(item);
+    }
+
     public static Item find(Inventory inventory, BlockState target) {
         Block wanted = target.getBlock();
         Predicate<Block> family = null;

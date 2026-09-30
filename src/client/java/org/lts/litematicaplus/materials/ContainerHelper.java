@@ -87,6 +87,9 @@ public final class ContainerHelper {
                 }
             });
             ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
+                if (current.getFocused() instanceof net.minecraft.client.gui.components.EditBox) {
+                    return true;
+                }
                 if (Hotkeys.takeMaterials() != null && Hotkeys.takeMaterials().matches(event)) {
                     take(container);
                     return false;

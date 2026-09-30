@@ -107,6 +107,10 @@ public final class NoteTuner {
             clear();
             return;
         }
+        if (!TickQueue.worldReady(minecraft)) {
+            ensurePump(minecraft);
+            return;
+        }
         int pending = QUEUE.size();
         while (pending-- > 0) {
             BlockPos pos = QUEUE.pollFirst();

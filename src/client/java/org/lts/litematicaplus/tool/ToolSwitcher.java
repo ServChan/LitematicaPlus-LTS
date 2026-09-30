@@ -33,6 +33,7 @@ public final class ToolSwitcher {
         }
         if (slot < 9) {
             inventory.setSelectedSlot(slot);
+            player.connection.send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(slot));
         } else if (player.containerMenu == player.inventoryMenu) {
             minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.getSelectedSlot(),
                     ContainerInput.SWAP, player);

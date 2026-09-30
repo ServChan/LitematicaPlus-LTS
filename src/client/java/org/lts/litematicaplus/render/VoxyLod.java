@@ -12,12 +12,12 @@ public final class VoxyLod {
     private static int lastFrameId = Integer.MIN_VALUE;
     private static boolean failureLogged;
 
-    public record Frame(int depthTexture, Matrix4f projectionView) {
+    public record Frame(int depthTexture, Matrix4f projectionView, Matrix4f target) {
     }
 
     private record Bridge(Method system, Field pipeline, Method viewport, Class<?> irisPipeline, Method data,
             Field toVanillaDepth, Field translucent, Method depthTexture, Field textureId, Field projectionView,
-            Field frameId) {
+            Field frameId, Field vanillaProjection, Field modelView) {
         static Bridge resolve() {
             FabricLoader loader = FabricLoader.getInstance();
             if (!loader.isModLoaded("voxy") || !loader.isModLoaded("iris")) {
@@ -37,7 +37,8 @@ public final class VoxyLod {
                         irisPipeline, irisPipeline.getMethod("_getData"),
                         pipelineData.getField("renderToVanillaDepth"), irisPipeline.getField("fbTranslucent"),
                         framebuffer.getMethod("getDepthTex"), texture.getField("id"), viewport.getField("MVP"),
-                        viewport.getField("frameId"));
+                        viewport.getField("frameId"), viewport.getField("vanillaProjection"),
+                        viewport.getField("modelView"));
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
                 LitematicaPlusClient.LOGGER.warn("Voxy terrain depth is not readable, distant schematic parts may be hidden: {}",
                         exception.toString());
@@ -77,11 +78,13 @@ public final class VoxyLod {
             lastFrameId = frameId;
             Object framebuffer = BRIDGE.translucent().get(pipeline);
             Object texture = framebuffer == null ? null : BRIDGE.depthTexture().invoke(framebuffer);
-            if (texture == null || !(BRIDGE.projectionView().get(viewport) instanceof Matrix4fc matrix)) {
+            if (texture == null || !(BRIDGE.projectionView().get(viewport) instanceof Matrix4fc matrix)
+                    || !(BRIDGE.vanillaProjection().get(viewport) instanceof Matrix4fc projection)
+                    || !(BRIDGE.modelView().get(viewport) instanceof Matrix4fc modelView)) {
                 return null;
             }
             int id = BRIDGE.textureId().getInt(texture);
-            return id == 0 ? null : new Frame(id, new Matrix4f(matrix));
+            return id == 0 ? null : new Frame(id, new Matrix4f(matrix), new Matrix4f(projection).mul(modelView));
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             if (!failureLogged) {
                 failureLogged = true;

@@ -244,6 +244,14 @@ public final class FollowUps {
             }
             return;
         }
+        boolean sneakBlocked = player.isSecondaryUseActive() && (action.kind() == Kind.INTERACT
+                || action.kind() == Kind.USE_ITEM && action.item() != net.minecraft.world.item.Items.ENDER_EYE);
+        if (!TickQueue.worldReady(minecraft) || sneakBlocked) {
+            if (!TickQueue.after(STEP_TICKS, () -> step(minecraft, pos, budget - 1))) {
+                ACTIVE.remove(pos);
+            }
+            return;
+        }
         if (!player.isWithinBlockInteractionRange(pos, 1.0) || !perform(minecraft, pos, action)) {
             ACTIVE.remove(pos);
             return;

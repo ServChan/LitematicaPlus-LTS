@@ -156,4 +156,13 @@ class MaterialExportTest {
         factory.setNamespaceAware(false);
         return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml));
     }
+
+    @Test
+    void exportsInTheSameSecondDoNotOverwriteEachOther(@TempDir Path directory) throws IOException {
+        Path first = directory.resolve("house_2026-09-30_20-00-00.csv");
+        assertEquals(first, MaterialExport.unique(first));
+        Files.writeString(first, "a");
+        Path second = MaterialExport.unique(first);
+        assertEquals("house_2026-09-30_20-00-00-2.csv", second.getFileName().toString());
+    }
 }

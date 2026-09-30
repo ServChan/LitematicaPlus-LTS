@@ -259,7 +259,7 @@
   "litematicaplus.hotkeys.row": "%1$s: %2$s",
   "litematicaplus.hotkeys.listening": "нажмите клавишу...",
   "litematicaplus.hotkeys.unbound": "не задано",
-  "litematicaplus.hotkeys.tip": "Нажмите, затем нажмите клавишу или кнопку мыши. Esc снимает назначение.",
+  "litematicaplus.hotkeys.tip": "Нажмите, затем нажмите клавишу или кнопку мыши, кроме левой. Esc снимает назначение, левый клик отменяет.",
   "litematicaplus.hotkeys.conflict": "Также занято: %s",
   "litematicaplus.message.toggled": "%1$s: %2$s",
   "litematicaplus.message.easy_place_restricted": "Лёгкая установка включена: блоки ставятся только по схеме. Наведитесь на блок-призрак.",

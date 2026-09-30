@@ -224,7 +224,7 @@ public final class SessionStore {
         }
         for (PlacementData entry : scope.placements) {
             entry.name = limit(entry.name, 96);
-            entry.file = limit(entry.file, 512);
+            entry.file = limit(entry.file, 4096);
             entry.rotation = entry.rotation == null ? "NONE" : entry.rotation;
             entry.mirror = entry.mirror == null ? "NONE" : entry.mirror;
             if (entry.disabledRegions == null) {

@@ -36,9 +36,11 @@ public final class PlacementEditorScreen extends Screen {
     private static final int ROW = Theme.CONTROL_HEIGHT + 2;
     private static final int ARM_TICKS = 80;
     private static final int[] STEPS = {1, 5, 16, 64};
-    private static final Pattern NUMBER = Pattern.compile("-?\\d{1,9}");
+    private static final Pattern NUMBER = Pattern.compile("-?\\d+(?:\\.\\d+)?");
+    private static final int MAX_COORDINATE = 30_000_000;
     private static final double MAX_DRAG = 512.0;
     private static int stepIndex;
+    private boolean rebuildPending;
 
     private final Screen parent;
     private final SchematicPlacement placement;
@@ -352,7 +354,8 @@ public final class PlacementEditorScreen extends Screen {
         List<Integer> numbers = new ArrayList<>();
         Matcher matcher = NUMBER.matcher(text.length() > 256 ? text.substring(0, 256) : text);
         while (matcher.find() && numbers.size() < 3) {
-            numbers.add(Integer.parseInt(matcher.group()));
+            double value = Double.parseDouble(matcher.group());
+            numbers.add((int) Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, Math.floor(value))));
         }
         if (numbers.isEmpty() || !editable()) {
             return false;
@@ -442,6 +445,10 @@ public final class PlacementEditorScreen extends Screen {
             return;
         }
         if (rebuild) {
+            this.rebuildPending = true;
+        }
+        if (this.rebuildPending && !HubScreen.typing(getFocused())) {
+            this.rebuildPending = false;
             rebuildWidgets();
         }
     }

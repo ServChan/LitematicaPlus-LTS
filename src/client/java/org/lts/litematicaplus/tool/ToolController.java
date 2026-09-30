@@ -36,6 +36,7 @@ public final class ToolController {
     private boolean useReleased = true;
     private double scrollRemainder;
     private ToolMode armedMode;
+    private String armedFingerprint = "";
     private int armedTicks;
     private String toolItemId = "";
     private Item toolItem = Items.AIR;
@@ -126,7 +127,7 @@ public final class ToolController {
             Notify.actionBar("litematicaplus.message.no_placement");
             return;
         }
-        if (!confirmed(ToolMode.PASTE)) {
+        if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.transform() + placement.disabledRegions())) {
             Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
             return;
         }
@@ -150,29 +151,37 @@ public final class ToolController {
             Notify.actionBar("litematicaplus.message.delete_too_large", volume, PasteController.MAX_DELETE_VOLUME);
             return;
         }
-        if (!confirmed(ToolMode.DELETE)) {
+        StringBuilder fingerprint = new StringBuilder();
+        for (AreaBox box : boxes) {
+            fingerprint.append(box.minX()).append(',').append(box.minY()).append(',').append(box.minZ()).append(':')
+                    .append(box.maxX()).append(',').append(box.maxY()).append(',').append(box.maxZ()).append(';');
+        }
+        if (!confirmed(ToolMode.DELETE, fingerprint.toString())) {
             Notify.actionBar("litematicaplus.message.confirm_delete", boxes.size(), volume);
             return;
         }
         PasteController.startDelete(minecraft, boxes);
     }
 
-    private boolean confirmed(ToolMode wanted) {
-        if (this.armedMode == wanted && this.armedTicks > 0) {
+    private boolean confirmed(ToolMode wanted, String fingerprint) {
+        if (this.armedMode == wanted && this.armedTicks > 0 && fingerprint.equals(this.armedFingerprint)) {
             disarm();
             return true;
         }
         this.armedMode = wanted;
         this.armedTicks = CONFIRM_TICKS;
+        this.armedFingerprint = fingerprint;
         return false;
     }
 
     private void disarm() {
         this.armedMode = null;
         this.armedTicks = 0;
+        this.armedFingerprint = "";
     }
 
     public boolean onUse(Minecraft minecraft) {
+        BlockEntityAssist.userInteracted();
         if (!holdingTool(minecraft)) {
             return EasyPlace.onUse(minecraft);
         }
@@ -218,6 +227,7 @@ public final class ToolController {
             return true;
         }
         this.scrollRemainder -= steps;
+        disarm();
         boolean forward = steps > 0;
         if (control) {
             cycleMode(forward);

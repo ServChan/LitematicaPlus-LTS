@@ -23,8 +23,15 @@ public final class Workers {
             synchronized (Workers.class) {
                 current = mesh;
                 if (current == null || current.isShutdown()) {
+                    ThreadFactory base = factory("LitematicaPlus-Mesh", Thread.NORM_PRIORITY - 2);
                     current = new ThreadPoolExecutor(threads, threads, 0L, TimeUnit.SECONDS,
-                            new LinkedBlockingQueue<>(), factory("LitematicaPlus-Mesh", Thread.NORM_PRIORITY - 2));
+                            new LinkedBlockingQueue<>(), runnable -> base.newThread(() -> {
+                                try {
+                                    runnable.run();
+                                } finally {
+                                    org.lts.litematicaplus.render.SectionMesher.releaseThread();
+                                }
+                            }));
                     mesh = current;
                 }
             }

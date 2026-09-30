@@ -76,15 +76,33 @@ public final class MaterialExport {
     }
 
     public static CompletableFuture<Path> export(MaterialReport report, Labels labels, Format format, LocalDateTime now) {
-        Path target = directory().resolve(fileName(report.title(), now, format));
+        Path first = directory().resolve(fileName(report.title(), now, format));
         return CompletableFuture.supplyAsync(() -> {
             try {
+                Path target = unique(first);
                 write(report, labels, format, target);
                 return target;
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
             }
         }, Workers.io());
+    }
+
+    static Path unique(Path target) {
+        if (!java.nio.file.Files.exists(target)) {
+            return target;
+        }
+        String name = target.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String stem = dot < 0 ? name : name.substring(0, dot);
+        String extension = dot < 0 ? "" : name.substring(dot);
+        for (int suffix = 2; suffix < 1000; suffix++) {
+            Path candidate = target.resolveSibling(stem + "-" + suffix + extension);
+            if (!java.nio.file.Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return target;
     }
 
     public static void write(MaterialReport report, Labels labels, Format format, Path target) throws IOException {

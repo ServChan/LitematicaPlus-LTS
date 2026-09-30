@@ -23,7 +23,21 @@ final class TestUi {
 
     static void clickLabel(ClientGameTestContext context, String label) {
         int[] center = center(context, label);
-        LitematicaPlusGameTest.require(center != null, "no control labelled '" + label + "' on the screen");
+        if (center == null) {
+            String visible = context.computeOnClient(client -> {
+                StringBuilder names = new StringBuilder();
+                if (client.gui.screen() != null) {
+                    names.append(client.gui.screen().getClass().getSimpleName()).append(": ");
+                    for (GuiEventListener child : client.gui.screen().children()) {
+                        if (child instanceof AbstractWidget widget && widget.visible) {
+                            names.append('[').append(widget.getMessage().getString()).append("] ");
+                        }
+                    }
+                }
+                return names.toString();
+            });
+            LitematicaPlusGameTest.require(false, "no control labelled '" + label + "' on the screen, visible: " + visible);
+        }
         int scale = context.computeOnClient(client -> client.getWindow().getGuiScale());
         context.getInput().setCursorPos(center[0] * scale, center[1] * scale);
         context.waitTicks(2);

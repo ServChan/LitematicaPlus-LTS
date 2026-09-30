@@ -20,6 +20,7 @@ public record SectionJob(
         BlockState[] world,
         long[] border,
         int unknownFaces,
+        byte[][] neighbours,
         SectionVerdict remembered,
         LayerRange layer,
         ClientLevel level,

@@ -147,7 +147,8 @@ final class EditorSuite {
 
         context.setScreen(() -> new HubScreen(null, HubScreen.Tab.SETTINGS));
         context.waitTicks(8);
-        clickLabel(context, Component.translatable("litematicaplus.hotkeys.row", name, "P").getString());
+        String keyName = context.computeOnClient(client -> Hotkeys.mapping("edit_placement").getTranslatedKeyMessage().getString());
+        clickLabel(context, Component.translatable("litematicaplus.hotkeys.row", name, keyName).getString());
         context.waitTicks(3);
         context.getInput().pressKey(InputConstants.KEY_ESCAPE);
         context.waitTicks(4);

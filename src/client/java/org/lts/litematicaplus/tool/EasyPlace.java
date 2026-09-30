@@ -58,11 +58,19 @@ public final class EasyPlace {
     private static boolean sessionPlaced;
     private static boolean requested;
     private static boolean idle = true;
+    private static long lastFakeTick = Long.MIN_VALUE / 2;
+    private static ClientLevel lastLevel;
 
     private EasyPlace() {
     }
 
     public static void tick(Minecraft minecraft) {
+        if (minecraft.level != lastLevel) {
+            if (lastLevel != null) {
+                reset();
+            }
+            lastLevel = minecraft.level;
+        }
         if (minecraft.level == null || minecraft.player == null) {
             if (!idle) {
                 reset();
@@ -296,7 +304,8 @@ public final class EasyPlace {
         markPlacement(minecraft, pos);
         int lead = plan.rotate() ? config.easyPlaceRotationLeadTicks : 0;
         BlockState base = PlacementSolver.baseState(target);
-        if (plan.rotate() && (base.hasProperty(BlockStateProperties.FACING) || base.hasProperty(BlockStateProperties.ORIENTATION))) {
+        boolean headYaw = base.hasProperty(BlockStateProperties.FACING) || base.hasProperty(BlockStateProperties.ORIENTATION);
+        if (headYaw && (plan.rotate() || TickQueue.now() - lastFakeTick < HEAD_YAW_LEAD_TICKS)) {
             lead = Math.max(lead, HEAD_YAW_LEAD_TICKS);
         }
         if (lead > 0) {
@@ -337,7 +346,7 @@ public final class EasyPlace {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         try {
             if (player == null || minecraft.level == null || minecraft.gameMode == null
-                    || !minecraft.level.getBlockState(pos).canBeReplaced()) {
+                    || !TickQueue.worldReady(minecraft) || !minecraft.level.getBlockState(pos).canBeReplaced()) {
                 return;
             }
             if (!InventoryHelper.ensureInHand(minecraft, item)) {
@@ -364,6 +373,9 @@ public final class EasyPlace {
             }
         } finally {
             LookLock.clear();
+            if (plan.rotate()) {
+                lastFakeTick = TickQueue.now();
+            }
             if (plan.rotate() && config.easyPlaceRotationRevert && minecraft.player != null) {
                 LookLock.sendRealRotation(minecraft);
             }
@@ -372,7 +384,9 @@ public final class EasyPlace {
 
     public static void retry(Minecraft minecraft, BlockPos pos) {
         ClientLevel level = minecraft.level;
-        if (level == null || minecraft.player == null) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (level == null || minecraft.player == null || !active(config) || !TickQueue.worldReady(minecraft)
+                || ToolController.get().holdingTool(minecraft)) {
             return;
         }
         BlockState target = GhostEngine.get().schematicStateAt(pos.getX(), pos.getY(), pos.getZ());
@@ -382,7 +396,7 @@ public final class EasyPlace {
         RECENT.remove(pos);
         GhostRaycast.Hit hit = new GhostRaycast.Hit(pos, target, MismatchType.MISSING);
         if (isActionable(minecraft, hit)) {
-            attempt(minecraft, hit, LitematicaPlusConfig.current());
+            attempt(minecraft, hit, config);
         }
     }
 

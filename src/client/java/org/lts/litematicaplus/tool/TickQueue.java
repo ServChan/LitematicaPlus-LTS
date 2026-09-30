@@ -17,6 +17,11 @@ public final class TickQueue {
     private TickQueue() {
     }
 
+    public static boolean worldReady(Minecraft minecraft) {
+        return minecraft.gui.screen() == null && minecraft.player != null && minecraft.player.isAlive()
+                && !minecraft.player.isSpectator() && minecraft.level != null && minecraft.gameMode != null;
+    }
+
     public static long now() {
         return currentTick;
     }

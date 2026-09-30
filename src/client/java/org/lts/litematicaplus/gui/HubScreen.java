@@ -42,6 +42,7 @@ public final class HubScreen extends Screen {
     private TabView view;
     private int sidebarWidth = Theme.SIDEBAR_WIDTH;
     private List<GuiEventListener> previousChildren = List.of();
+    private boolean refreshPending;
 
     public HubScreen(Screen parent) {
         this(parent, lastTab);
@@ -62,6 +63,7 @@ public final class HubScreen extends Screen {
     }
 
     public void switchTab(Tab next) {
+        setFocused(null);
         if (this.view != null) {
             this.view.closed();
         }
@@ -71,7 +73,17 @@ public final class HubScreen extends Screen {
         rebuildWidgets();
     }
 
+    static boolean typing(GuiEventListener focused) {
+        return focused instanceof Stepper stepper && stepper.editing()
+                || focused instanceof net.minecraft.client.gui.components.EditBox box && box.isFocused();
+    }
+
     public void refresh() {
+        if (typing(getFocused())) {
+            this.refreshPending = true;
+            return;
+        }
+        this.refreshPending = false;
         this.previousChildren = new ArrayList<>(children());
         GuiEventListener focused = getFocused();
         int index = focused == null ? -1 : this.previousChildren.indexOf(focused);
@@ -146,6 +158,17 @@ public final class HubScreen extends Screen {
         if (this.view != null) {
             this.view.tick();
         }
+        if (this.refreshPending && !typing(getFocused())) {
+            refresh();
+        }
+    }
+
+    @Override
+    public void removed() {
+        if (this.view != null) {
+            this.view.closed();
+        }
+        super.removed();
     }
 
     @Override
@@ -202,9 +225,6 @@ public final class HubScreen extends Screen {
 
     @Override
     public void onClose() {
-        if (this.view != null) {
-            this.view.closed();
-        }
         Session.flush();
         this.minecraft.gui.setScreen(this.parent);
     }

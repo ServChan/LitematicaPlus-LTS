@@ -259,7 +259,7 @@
   "litematicaplus.hotkeys.row": "%1$s: %2$s",
   "litematicaplus.hotkeys.listening": "pulsa una tecla...",
   "litematicaplus.hotkeys.unbound": "sin asignar",
-  "litematicaplus.hotkeys.tip": "Haz clic y pulsa una tecla o un botón del ratón. Esc borra la asignación.",
+  "litematicaplus.hotkeys.tip": "Haz clic y pulsa una tecla o un botón del ratón que no sea el izquierdo. Esc borra la asignación, un clic izquierdo cancela.",
   "litematicaplus.hotkeys.conflict": "También la usa: %s",
   "litematicaplus.message.toggled": "%1$s: %2$s",
   "litematicaplus.message.easy_place_restricted": "Colocación fácil activa: los bloques solo van donde pide el esquema. Apunta a un bloque fantasma.",

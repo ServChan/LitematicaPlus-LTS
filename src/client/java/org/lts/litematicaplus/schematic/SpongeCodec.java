@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -36,7 +37,7 @@ public final class SpongeCodec {
             throw new LocalizedException("litematicaplus.error.empty_schematic", "Sponge schematic has no block data");
         }
         long volume = (long) width * height * length;
-        if (volume > LitematicCodec.MAX_REGION_VOLUME) {
+        if (volume > LitematicCodec.MAX_REGION_VOLUME || LitematicCodec.tooLong(width, height, length)) {
             throw new LocalizedException("litematicaplus.error.too_large", "Sponge schematic is too large: " + volume + " blocks");
         }
         if (data.length < volume) {
@@ -77,14 +78,16 @@ public final class SpongeCodec {
                 }
             }
             BlockState state = value >= 0 && value < palette.length ? palette[value] : air;
-            if (state.isAir() || state.is(Blocks.STRUCTURE_VOID)) {
+            if (state.isAir()) {
                 continue;
             }
             int x = (int) (index % width);
             int z = (int) (index / width % length);
             int y = (int) (index / ((long) width * length));
             builder.set(x, y, z, state);
-            count++;
+            if (!state.is(Blocks.STRUCTURE_VOID)) {
+                count++;
+            }
         }
         ListTag tiles = blocks.getList("BlockEntities").or(() -> body.getList("BlockEntities"))
                 .or(() -> body.getList("TileEntities")).orElseGet(ListTag::new);
@@ -106,6 +109,31 @@ public final class SpongeCodec {
                 nbt.putString("id", id);
             }
             builder.blockEntity(pos[0], pos[1], pos[2], nbt);
+        }
+        ListTag entities = body.getListOrEmpty("Entities");
+        for (int i = 0; i < entities.size(); i++) {
+            CompoundTag entry = entities.getCompoundOrEmpty(i);
+            ListTag pos = entry.getListOrEmpty("Pos");
+            double x = pos.getDoubleOr(0, Double.NaN);
+            double y = pos.getDoubleOr(1, Double.NaN);
+            double z = pos.getDoubleOr(2, Double.NaN);
+            String id = entry.getStringOr("Id", entry.getStringOr("id", ""));
+            if (id.isEmpty() || !(x >= 0.0 && x <= width && y >= 0.0 && y <= height && z >= 0.0 && z <= length)) {
+                continue;
+            }
+            CompoundTag nbt = entry.getCompound("Data").map(CompoundTag::copy).orElseGet(() -> {
+                CompoundTag copy = entry.copy();
+                copy.remove("Id");
+                return copy;
+            });
+            nbt.putString("id", id);
+            ListTag relative = new ListTag();
+            relative.add(DoubleTag.valueOf(x));
+            relative.add(DoubleTag.valueOf(y));
+            relative.add(DoubleTag.valueOf(z));
+            nbt.put("Pos", relative);
+            nbt.remove("UUID");
+            builder.entity(nbt);
         }
         SchematicMetadata metadata = new SchematicMetadata();
         CompoundTag meta = body.getCompoundOrEmpty("Metadata");

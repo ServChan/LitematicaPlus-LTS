@@ -9,12 +9,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerMixin {
-    @Inject(method = "sendPosition", at = @At("HEAD"))
+    @Inject(method = "sendChanges", at = @At("HEAD"))
     private void litematicaplus$lockLook(CallbackInfo ci) {
         LookLock.beforeSendPosition((LocalPlayer) (Object) this);
     }
 
-    @Inject(method = "sendPosition", at = @At("RETURN"))
+    @Inject(method = "sendChanges", at = @At("RETURN"))
     private void litematicaplus$unlockLook(CallbackInfo ci) {
         LookLock.afterSendPosition((LocalPlayer) (Object) this);
     }

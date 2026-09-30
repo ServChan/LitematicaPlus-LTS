@@ -81,6 +81,11 @@ public final class GhostRenderer {
 
     public static void renderAfterLevel(CameraRenderState camera) {
         if (drawFailed) {
+            try {
+                GhostEngine.get().frame(Minecraft.getInstance(), ExternalMap.focus(camera.pos));
+            } catch (RuntimeException | LinkageError exception) {
+                LitematicaPlusClient.LOGGER.debug("Schematic engine update failed after a render failure", exception);
+            }
             return;
         }
         try {
@@ -176,7 +181,7 @@ public final class GhostRenderer {
             return;
         }
         GpuTextureView depthView = lod == null ? target.getDepthTextureView()
-                : LodDepth.merge(target, lod, camera.projectionMatrix, camera.viewRotationMatrix);
+                : LodDepth.merge(target, lod);
         if (lod != null && LodDepth.failed()) {
             lastDepth = 2;
         }

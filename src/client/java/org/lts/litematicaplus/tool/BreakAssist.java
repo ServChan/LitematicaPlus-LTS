@@ -50,6 +50,9 @@ public final class BreakAssist {
         if (target.isAir() || world.isAir() || world.getBlock() instanceof LiquidBlock) {
             return false;
         }
+        if (config.easyPlaceSubstitutes && Substitutes.accepts(target, world)) {
+            return false;
+        }
         Block wanted = PlacementSolver.baseState(target).getBlock();
         if (config.terrainAutoReplace && world.getBlock() != wanted && TERRAIN.contains(world.getBlock())
                 && TERRAIN.contains(wanted)) {
@@ -100,7 +103,10 @@ public final class BreakAssist {
         }
         Notify.actionBar("litematicaplus.message.clearing", world.getBlock().getName());
         int budget = maxTicks;
-        TickQueue.after(1, () -> step(minecraft, key, face, budget));
+        if (!TickQueue.after(1, () -> step(minecraft, key, face, budget))) {
+            minecraft.gameMode.stopDestroyBlock();
+            CLEARING.remove(key);
+        }
     }
 
     public static boolean bypassGuard() {
@@ -111,6 +117,12 @@ public final class BreakAssist {
         ClientLevel level = minecraft.level;
         LocalPlayer player = minecraft.player;
         if (level == null || player == null || minecraft.gameMode == null) {
+            CLEARING.remove(pos);
+            return;
+        }
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (!TickQueue.worldReady(minecraft) || !config.easyPlaceEnabled || !config.renderEnabled) {
+            minecraft.gameMode.stopDestroyBlock();
             CLEARING.remove(pos);
             return;
         }

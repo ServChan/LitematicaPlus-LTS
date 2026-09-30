@@ -13,7 +13,6 @@ import com.mojang.renderpearl.backend.opengl.GlTexture;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fc;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL13C;
@@ -77,8 +76,7 @@ public final class LodDepth {
         return failed;
     }
 
-    public static GpuTextureView merge(RenderTarget target, VoxyLod.Frame frame, Matrix4fc projection,
-            Matrix4fc modelView) {
+    public static GpuTextureView merge(RenderTarget target, VoxyLod.Frame frame) {
         GpuTextureView fallback = target.getDepthTextureView();
         GpuTexture depth = target.getDepthTexture();
         if (frame == null || failed || depth == null || !(depth instanceof GlTexture)) {
@@ -92,7 +90,7 @@ public final class LodDepth {
                     height);
             ensureProgram();
             ensureFramebuffer();
-            blit(frame, new Matrix4f(projection).mul(modelView), width, height);
+            blit(frame, frame.target(), width, height);
             return mergedView;
         } catch (RuntimeException | LinkageError exception) {
             failed = true;

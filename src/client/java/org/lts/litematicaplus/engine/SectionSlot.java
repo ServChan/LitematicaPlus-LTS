@@ -26,6 +26,9 @@ public final class SectionSlot {
     SectionVerdict verdict;
     int drawIndex = -1;
     int failures;
+    int appliedRevision = -1;
+    int pendingRules;
+    int verdictRules = -1;
     public float sortDistance;
 
     SectionSlot(long key, int originX, int originY, int originZ, boolean hasSolid) {

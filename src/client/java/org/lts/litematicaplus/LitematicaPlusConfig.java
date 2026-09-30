@@ -257,6 +257,9 @@ public final class LitematicaPlusConfig {
             config.pasteReplace = PasteReplace.ALL;
         }
         config.toolItem = normalizeId(config.toolItem, "minecraft:stick");
+        if (config.toolItem.equals("minecraft:air")) {
+            config.toolItem = "minecraft:stick";
+        }
         config.schematicsDirectory = normalizeDirectory(config.schematicsDirectory);
         config.defaultAuthor = config.defaultAuthor == null ? "" : trim(config.defaultAuthor.strip(), 64);
         return config;

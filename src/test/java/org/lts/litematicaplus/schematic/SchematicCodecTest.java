@@ -170,7 +170,8 @@ class SchematicCodecTest {
         Schematic schematic = VanillaStructureCodec.read(root, "house");
         SchematicRegion region = schematic.regions().get("house");
         assertSame(Blocks.DIRT.defaultBlockState(), region.state(1, 0, 1));
-        assertTrue(region.state(0, 0, 0).isAir());
+        assertTrue(region.state(0, 0, 0).is(Blocks.STRUCTURE_VOID));
+        assertTrue(region.state(1, 0, 0).is(Blocks.STRUCTURE_VOID));
         assertEquals(1L, schematic.metadata().totalBlocks);
     }
 
@@ -203,6 +204,50 @@ class SchematicCodecTest {
         assertEquals(Direction.SOUTH, region.state(1, 0, 0).getValue(BlockStateProperties.HORIZONTAL_FACING));
         assertTrue(region.state(0, 0, 1).isAir());
         assertEquals(1L, schematic.metadata().totalBlocks);
+    }
+
+    @Test
+    void spongeImportKeepsEntitiesAndUnknownBlocksAreSkipped() throws IOException {
+        CompoundTag root = new CompoundTag();
+        root.putShort("Width", (short) 2);
+        root.putShort("Height", (short) 1);
+        root.putShort("Length", (short) 1);
+        root.putInt("Version", 2);
+        CompoundTag palette = new CompoundTag();
+        palette.putInt("minecraft:stone", 0);
+        palette.putInt("othermod:missing_block", 1);
+        root.put("Palette", palette);
+        root.put("BlockData", new ByteArrayTag(new byte[]{0, 1}));
+        ListTag entities = new ListTag();
+        CompoundTag frame = new CompoundTag();
+        frame.putString("Id", "minecraft:item_frame");
+        ListTag pos = new ListTag();
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(0.5));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(0.5));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(0.5));
+        frame.put("Pos", pos);
+        entities.add(frame);
+        CompoundTag outside = frame.copy();
+        ListTag far = new ListTag();
+        far.add(net.minecraft.nbt.DoubleTag.valueOf(40.0));
+        far.add(net.minecraft.nbt.DoubleTag.valueOf(0.5));
+        far.add(net.minecraft.nbt.DoubleTag.valueOf(0.5));
+        outside.put("Pos", far);
+        entities.add(outside);
+        root.put("Entities", entities);
+        Schematic schematic = SpongeCodec.read(root, "sponge");
+        SchematicRegion region = schematic.regions().get("sponge");
+        assertEquals(1, region.entities().size());
+        assertEquals("minecraft:item_frame", region.entities().get(0).getStringOr("id", ""));
+        assertTrue(region.state(1, 0, 0).is(Blocks.STRUCTURE_VOID));
+        assertEquals(1, schematic.metadata().unknownStates);
+    }
+
+    @Test
+    void regionsLongerThanTheBlockEntityKeyAreRejected() {
+        assertFalse(LitematicCodec.tooLong(1, 3, 2_000_000));
+        assertTrue(LitematicCodec.tooLong(1, 3, 3_000_000));
+        assertTrue(LitematicCodec.tooLong(-2_097_152, 1, 1));
     }
 
     @Test

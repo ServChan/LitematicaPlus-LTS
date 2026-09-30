@@ -33,6 +33,9 @@ public final class BlockEntityAssist {
     private static final int RETRY_TICKS = 15;
     private static final int CRAFTER_ATTEMPTS = 3;
     private static final Map<BlockPos, SignJob> SIGNS = new HashMap<>();
+    private static int crafterOpens;
+    private static int swallowCrafters;
+    private static long swallowUntil;
     private static CrafterJob crafter;
 
     private record SignJob(List<String> lines, long expiryTick) {
@@ -109,7 +112,11 @@ public final class BlockEntityAssist {
                 || !player.isWithinBlockInteractionRange(pos, 1.0)) {
             return;
         }
+        if (!TickQueue.worldReady(minecraft)) {
+            return;
+        }
         crafter = new CrafterJob(pos, disabled, TickQueue.now() + TIMEOUT_TICKS + FollowUps.latencyTicks(minecraft));
+        crafterOpens++;
         Direction face = Direction.getApproximateNearest(player.getEyePosition().subtract(Vec3.atCenterOf(pos)));
         BlockHitResult hit = new BlockHitResult(new Vec3(pos.getX() + 0.5 + face.getStepX() * 0.5,
                 pos.getY() + 0.5 + face.getStepY() * 0.5, pos.getZ() + 0.5 + face.getStepZ() * 0.5), face, pos, false);
@@ -123,9 +130,23 @@ public final class BlockEntityAssist {
         }
     }
 
+    public static void userInteracted() {
+        crafter = null;
+        crafterOpens = 0;
+        swallowCrafters = 0;
+    }
+
     public static boolean onOpenScreen(Minecraft minecraft, ClientboundOpenScreenPacket packet) {
         CrafterJob job = crafter;
         LocalPlayer player = minecraft.player;
+        if (player != null && job == null && swallowCrafters > 0 && packet.getType() == MenuType.CRAFTER_3x3) {
+            if (TickQueue.now() <= swallowUntil) {
+                swallowCrafters--;
+                player.connection.send(new ServerboundContainerClosePacket(packet.getContainerId()));
+                return true;
+            }
+            swallowCrafters = 0;
+        }
         if (job == null || player == null) {
             return false;
         }
@@ -136,6 +157,9 @@ public final class BlockEntityAssist {
             return false;
         }
         crafter = null;
+        swallowCrafters = Math.max(0, crafterOpens - 1);
+        swallowUntil = TickQueue.now() + RETRY_TICKS + FollowUps.latencyTicks(minecraft) * 2L;
+        crafterOpens = 0;
         for (int slot : job.disabled()) {
             if (slot >= 0 && slot < 9) {
                 player.connection.send(new ServerboundContainerSlotStateChangedPacket(slot, packet.getContainerId(), false));
