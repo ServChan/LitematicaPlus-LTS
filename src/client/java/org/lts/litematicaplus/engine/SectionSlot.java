@@ -14,6 +14,7 @@ public final class SectionSlot {
     boolean pendingGhost;
     boolean ghostBuilt;
     boolean built;
+    boolean chunkLoaded;
     GpuBuffer ghost;
     int ghostIndices;
     GpuBuffer fill;
@@ -32,6 +33,10 @@ public final class SectionSlot {
         this.originY = originY;
         this.originZ = originZ;
         this.hasSolid = hasSolid;
+    }
+
+    public boolean chunkLoaded() {
+        return this.chunkLoaded;
     }
 
     public GpuBuffer ghost() {

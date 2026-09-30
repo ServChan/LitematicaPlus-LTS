@@ -505,6 +505,7 @@ public final class GhostEngine {
         for (PlacementRuntime runtime : this.runtimes.values()) {
             for (SectionSlot slot : runtime.slots.values()) {
                 double range = distanceSquared(slot, camera);
+                slot.chunkLoaded = current.hasChunk(slot.originX >> 4, slot.originZ >> 4);
                 if (slot.ghostBuilt) {
                     if (range > far && !keep) {
                         closeSlot(runtime, slot);
