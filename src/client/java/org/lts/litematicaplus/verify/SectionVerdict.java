@@ -34,6 +34,25 @@ public final class SectionVerdict {
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
             boolean lenient) {
+        return compute(section, globalIds, solid, world, lenient, false);
+    }
+
+    private static boolean occluding(BlockState[] world, int index) {
+        BlockState state = world[index];
+        return state != null && state.isSolidRender();
+    }
+
+    static boolean hidden(BlockState[] world, int index) {
+        int x = index & 15;
+        int z = index >> 4 & 15;
+        int y = index >> 8;
+        return (x == 0 || occluding(world, index - 1)) && (x == 15 || occluding(world, index + 1))
+                && (z == 0 || occluding(world, index - 16)) && (z == 15 || occluding(world, index + 16))
+                && (y == 0 || occluding(world, index - 256)) && (y == 15 || occluding(world, index + 256));
+    }
+
+    public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
+            boolean lenient, boolean trustHidden) {
         byte[] categories = new byte[GhostSection.VOLUME];
         int[] counts = new int[TYPES];
         int[] correct = new int[globalIds.length];
@@ -68,6 +87,9 @@ public final class SectionVerdict {
             }
             int paletteIndex = value & 0xFFFF;
             MismatchType type = comparator.compare(globalIds[paletteIndex], worldId, lenient);
+            if (trustHidden && type == MismatchType.WRONG_BLOCK && hidden(world, i)) {
+                type = MismatchType.CORRECT;
+            }
             int ordinal = type.ordinal();
             categories[i] = (byte) ordinal;
             counts[ordinal]++;

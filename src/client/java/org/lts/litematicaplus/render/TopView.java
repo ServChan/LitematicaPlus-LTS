@@ -69,7 +69,7 @@ public final class TopView {
     }
 
     public static int ghostRange(int configured) {
-        return active ? Math.max(configured, (int) (distance * 1.6) + 96) : configured;
+        return active ? Math.max(configured, (int) (distance * 1.6) + 96) : ExternalMap.ghostRange(configured);
     }
 
     public static void zoom(double factor) {

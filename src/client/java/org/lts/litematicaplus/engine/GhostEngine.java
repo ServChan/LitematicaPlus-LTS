@@ -39,6 +39,7 @@ import org.lts.litematicaplus.render.MeshResult;
 import org.lts.litematicaplus.render.SectionJob;
 import org.lts.litematicaplus.render.SectionMesher;
 import org.lts.litematicaplus.render.SpecialBlocks;
+import org.lts.litematicaplus.render.ExternalMap;
 import org.lts.litematicaplus.render.TopView;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.util.Notify;
@@ -477,13 +478,14 @@ public final class GhostEngine {
         boolean render = config.renderEnabled;
         SectionJob.Options next = new SectionJob.Options(render && config.renderGhostBlocks,
                 render && config.renderOverlay, config.renderCollidingBlocks, config.lenientStates,
+                config.trustHiddenBlocks && !Minecraft.getInstance().hasSingleplayerServer(),
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
                 config.overlayFillAlpha, config.overlayLineAlpha);
         if (!next.equals(this.options)) {
             boolean changed = this.options != null;
             this.options = next;
             this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(),
-                    next.lenientStates(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
+                    next.lenientStates(), next.trustHidden(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
                     next.showWrongState(), next.fillAlpha(), next.lineAlpha());
             if (changed) {
                 for (PlacementRuntime runtime : this.runtimes.values()) {
@@ -498,12 +500,13 @@ public final class GhostEngine {
         int distance = TopView.ghostRange(LitematicaPlusConfig.current().renderDistance);
         double near = (double) distance * distance;
         int margin = Math.max(UNLOAD_MARGIN, distance / 2);
+        boolean keep = ExternalMap.active() || TopView.active();
         double far = (double) (distance + margin) * (distance + margin);
         for (PlacementRuntime runtime : this.runtimes.values()) {
             for (SectionSlot slot : runtime.slots.values()) {
                 double range = distanceSquared(slot, camera);
                 if (slot.ghostBuilt) {
-                    if (range > far) {
+                    if (range > far && !keep) {
                         closeSlot(runtime, slot);
                         slot.ghostBuilt = false;
                     }

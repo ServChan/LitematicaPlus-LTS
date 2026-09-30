@@ -16,6 +16,20 @@ import org.lts.litematicaplus.TestBootstrap;
 import org.lts.litematicaplus.world.GhostSection;
 
 class SectionVerdictTest {
+    @Test
+    void enclosedBlocksAreHiddenAndExposedOnesAreNot() {
+        TestBootstrap.ensure();
+        BlockState[] world = new BlockState[GhostSection.VOLUME];
+        java.util.Arrays.fill(world, Blocks.STONE.defaultBlockState());
+        int center = 8 | 8 << 4 | 8 << 8;
+        assertTrue(SectionVerdict.hidden(world, center));
+        assertTrue(SectionVerdict.hidden(world, 0));
+        world[center + 1] = Blocks.AIR.defaultBlockState();
+        assertFalse(SectionVerdict.hidden(world, center));
+        world[center + 1] = Blocks.GLASS.defaultBlockState();
+        assertFalse(SectionVerdict.hidden(world, center));
+    }
+
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
     private static final BlockState STONE = Blocks.STONE.defaultBlockState();
 

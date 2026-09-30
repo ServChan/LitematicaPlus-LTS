@@ -381,5 +381,7 @@
   "litematicaplus.option.hud_diagnostics.tip": "Two extra lines: sections drawn / ready / total, then queued, in work and rebuilt during the last second.",
   "litematicaplus.option.render_distance.tip": "How far from the camera ghost blocks are drawn, in blocks. Does not depend on loaded chunks.",
   "litematicaplus.hud.diag_sections": "Sections %1$s / %2$s / %3$s",
-  "litematicaplus.hud.diag_work": "Queue %1$s, busy %2$s, rebuilt/s %3$s"
+  "litematicaplus.hud.diag_work": "Queue %1$s, busy %2$s, rebuilt/s %3$s",
+  "litematicaplus.option.trust_hidden": "Hidden blocks count as correct",
+  "litematicaplus.option.trust_hidden.tip": "On servers with anti-xray the client receives fake blocks for everything buried inside other blocks. A wrong block that is covered on all six sides is therefore not reported. Does not apply in singleplayer."
 }

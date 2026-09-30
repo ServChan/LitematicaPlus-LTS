@@ -56,7 +56,8 @@ public final class SectionMesher {
         PlacementVolume volume = job.volume();
         GhostSection section = job.section();
         SectionVerdict verdict = job.world() == null && job.remembered() != null ? job.remembered()
-                : SectionVerdict.compute(section, volume.globalIds(), volume.solid(), job.world(), options.lenientStates());
+                : SectionVerdict.compute(section, volume.globalIds(), volume.solid(), job.world(), options.lenientStates(),
+                        options.trustHidden());
         int sectionX = SectionPos.x(job.sectionKey());
         int sectionY = SectionPos.y(job.sectionKey());
         int sectionZ = SectionPos.z(job.sectionKey());

@@ -31,6 +31,7 @@ public record SectionJob(
             boolean overlay,
             boolean renderColliding,
             boolean lenientStates,
+            boolean trustHidden,
             boolean showMissing,
             boolean showExtra,
             boolean showWrongBlock,
