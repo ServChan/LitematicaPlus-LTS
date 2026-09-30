@@ -93,6 +93,9 @@ public final class HubScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (this.view != null && this.view.mouseClicked(event)) {
+            return true;
+        }
         boolean handled = super.mouseClicked(event, doubleClick);
         GuiEventListener focused = getFocused();
         if (focused != null && !children().contains(focused)) {
@@ -184,6 +187,12 @@ public final class HubScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
+        if (this.view != null && this.view.keyPressed(event)) {
+            return true;
+        }
+        if (getFocused() instanceof Stepper stepper && stepper.editing() && stepper.keyPressed(event)) {
+            return true;
+        }
         if (event.key() == InputConstants.KEY_ESCAPE) {
             onClose();
             return true;

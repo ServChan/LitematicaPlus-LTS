@@ -15,7 +15,6 @@ import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
-import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 final class PlacementsView extends TabView {
@@ -25,7 +24,6 @@ final class PlacementsView extends TabView {
 
     private ListPanel<SchematicPlacement> list;
     private int removeArmed;
-    private int pasteArmed;
     private boolean regionsPage;
     private int detailX;
     private int detailWidth;
@@ -64,7 +62,6 @@ final class PlacementsView extends TabView {
                 .onSelect(placement -> {
                     manager.select(placement);
                     this.removeArmed = 0;
-                    this.pasteArmed = 0;
                     this.regionsPage = false;
                     this.screen.refresh();
                 }));
@@ -168,22 +165,8 @@ final class PlacementsView extends TabView {
                         }));
             }
         }
-        FlatButton paste = add(FlatButton.primary(x, bottomY, third,
-                tr(this.pasteArmed > 0 ? "litematicaplus.placements.paste_confirm" : "litematicaplus.placements.paste"),
-                button -> {
-                    if (this.pasteArmed > 0) {
-                        this.pasteArmed = 0;
-                        PasteController.startPaste(this.minecraft, GhostEngine.get().runtime(selected.id()));
-                        this.minecraft.gui.setScreen(null);
-                    } else {
-                        this.pasteArmed = ARM_TICKS;
-                        this.removeArmed = 0;
-                        this.screen.refresh();
-                    }
-                }));
-        PlacementRuntime runtime = GhostEngine.get().runtime(selected.id());
-        paste.active = this.minecraft.player != null && this.minecraft.player.hasInfiniteMaterials()
-                && !PasteController.active() && runtime != null && runtime.volume() != null;
+        add(FlatButton.primary(x, bottomY, third, tr("litematicaplus.placements.edit"),
+                button -> this.minecraft.gui.setScreen(new PlacementEditorScreen(this.screen, selected))));
         add(FlatButton.secondary(x + third + Theme.GAP, bottomY, third, tr("litematicaplus.placements.reload"),
                 button -> manager.reload(selected)));
         add(FlatButton.danger(x + (third + Theme.GAP) * 2, bottomY, this.detailWidth - (third + Theme.GAP) * 2,
@@ -194,7 +177,6 @@ final class PlacementsView extends TabView {
                         manager.remove(selected);
                     } else {
                         this.removeArmed = ARM_TICKS;
-                        this.pasteArmed = 0;
                     }
                     this.screen.refresh();
                 }));
@@ -224,9 +206,6 @@ final class PlacementsView extends TabView {
         }
         boolean expired = false;
         if (this.removeArmed > 0 && --this.removeArmed == 0) {
-            expired = true;
-        }
-        if (this.pasteArmed > 0 && --this.pasteArmed == 0) {
             expired = true;
         }
         SchematicPlacement selected = PlacementManager.get().selected();

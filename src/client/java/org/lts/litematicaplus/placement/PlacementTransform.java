@@ -3,6 +3,7 @@ package org.lts.litematicaplus.placement;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 public record PlacementTransform(int originX, int originY, int originZ, Rotation rotation, Mirror mirror) {
     public static final PlacementTransform IDENTITY = new PlacementTransform(0, 0, 0, Rotation.NONE, Mirror.NONE);
@@ -44,6 +45,17 @@ public record PlacementTransform(int originX, int originY, int originZ, Rotation
         int x = this.mirror == Mirror.FRONT_BACK ? -localX : localX;
         int z = this.mirror == Mirror.LEFT_RIGHT ? -localZ : localZ;
         return this.originZ + rotateZ(this.rotation, x, z);
+    }
+
+    public Vec3 worldPoint(double localX, double localY, double localZ) {
+        double x = this.mirror == Mirror.FRONT_BACK ? 1.0 - localX : localX;
+        double z = this.mirror == Mirror.LEFT_RIGHT ? 1.0 - localZ : localZ;
+        return switch (this.rotation) {
+            case CLOCKWISE_90 -> new Vec3(this.originX + 1.0 - z, this.originY + localY, this.originZ + x);
+            case CLOCKWISE_180 -> new Vec3(this.originX + 1.0 - x, this.originY + localY, this.originZ + 1.0 - z);
+            case COUNTERCLOCKWISE_90 -> new Vec3(this.originX + z, this.originY + localY, this.originZ + 1.0 - x);
+            default -> new Vec3(this.originX + x, this.originY + localY, this.originZ + z);
+        };
     }
 
     public BlockState apply(BlockState state) {

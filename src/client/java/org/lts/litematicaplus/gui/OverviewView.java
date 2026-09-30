@@ -43,7 +43,7 @@ final class OverviewView extends TabView {
         } else {
             int right = this.left + this.width - 12;
             add(FlatButton.secondary(right - 96, this.top + 5, 96, tr("litematicaplus.overview.manage"),
-                    button -> this.screen.switchTab(HubScreen.Tab.PLACEMENTS)));
+                    button -> this.minecraft.gui.setScreen(new PlacementEditorScreen(this.screen, placement))));
         }
         this.togglesTop = this.top + CARD_HEIGHT + 18;
         this.toggleCount = 0;

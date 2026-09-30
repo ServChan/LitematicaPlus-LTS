@@ -3,12 +3,22 @@
   "package": "org.lts.litematicaplus.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "AbstractContainerScreenAccessor",
     "BlockItemInvoker",
     "BlockModelRenderStateAccessor",
+    "CameraMixin",
     "ClientLevelMixin",
+    "ClientPacketListenerMixin",
+    "CloudRendererMixin",
+    "FogRendererMixin",
+    "GameRendererMixin",
+    "HudMixin",
+    "IrisCameraUniformsMixin",
     "LevelRendererMixin",
+    "LocalPlayerMixin",
     "MinecraftMixin",
-    "MouseHandlerMixin"
+    "MouseHandlerMixin",
+    "MultiPlayerGameModeMixin"
   ],
   "injectors": {
     "defaultRequire": 1

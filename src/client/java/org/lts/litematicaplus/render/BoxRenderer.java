@@ -9,6 +9,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DynamicGpuData;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lts.litematicaplus.LitematicaPlusConfig;
@@ -16,8 +17,11 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
+import org.lts.litematicaplus.tool.EntityAssist;
+import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class BoxRenderer {
@@ -31,6 +35,7 @@ public final class BoxRenderer {
     private static final int CORNER_FIRST_COLOR = 0xFFFF5555;
     private static final int CORNER_SECOND_COLOR = 0xFF5B8CFF;
     private static final double MAX_DISTANCE = 768.0;
+    private static final double TOP_VIEW_DISTANCE = 2560.0;
     private static final NativeWriter LINES = new NativeWriter(1 << 12);
     private static final NativeWriter FILLS = new NativeWriter(1 << 12);
     private static final NativeWriter XRAY_LINES = new NativeWriter(1 << 10);
@@ -70,15 +75,19 @@ public final class BoxRenderer {
         if (visible && config.renderPlacementBoxes) {
             SchematicPlacement selected = PlacementManager.get().selected();
             for (PlacementRuntime runtime : GhostEngine.get().runtimes()) {
-                PlacementVolume volume = runtime.volume();
                 SchematicPlacement placement = runtime.placement();
-                if (volume == null || !placement.enabled()
-                        || !near(camera, volume.minX(), volume.minY(), volume.minZ(), volume.maxX(), volume.maxY(), volume.maxZ())) {
+                Schematic schematic = placement.schematic();
+                if (schematic == null || !placement.enabled()) {
                     continue;
                 }
                 boolean active = placement == selected;
                 int color = placement.locked() ? PLACEMENT_LOCKED_COLOR : active ? PLACEMENT_SELECTED_COLOR : PLACEMENT_COLOR;
-                for (PlacementVolume.RegionBox region : volume.regionBoxes()) {
+                for (PlacementVolume.RegionBox region : PlacementVolume.regionBoxes(schematic, placement.transform(),
+                        placement.disabledRegions())) {
+                    if (!near(camera, region.minX(), region.minY(), region.minZ(), region.maxX(), region.maxY(),
+                            region.maxZ())) {
+                        continue;
+                    }
                     box(LINES, null, camera, region.minX() - 0.01, region.minY() - 0.01, region.minZ() - 0.01,
                             region.maxX() + 1.01, region.maxY() + 1.01, region.maxZ() + 1.01, color, active ? 2.5F : 1.5F, 0);
                 }
@@ -86,6 +95,18 @@ public final class BoxRenderer {
                     box(LINES, null, camera, placement.x() - 0.03, placement.y() - 0.03, placement.z() - 0.03,
                             placement.x() + 1.03, placement.y() + 1.03, placement.z() + 1.03, ORIGIN_COLOR, 3.0F, 0);
                 }
+            }
+        }
+        if (visible && config.entityPlacement) {
+            for (EntityAssist.Ghost ghost : EntityAssist.visible()) {
+                AABB bounds = ghost.box();
+                int color = switch (ghost.status()) {
+                    case INCOMPLETE -> MismatchType.WRONG_STATE.color();
+                    case BLOCKED -> MismatchType.WRONG_BLOCK.color();
+                    default -> MismatchType.MISSING.color();
+                };
+                box(LINES, FILLS, camera, bounds.minX - 0.01, bounds.minY - 0.01, bounds.minZ - 0.01, bounds.maxX + 0.01,
+                        bounds.maxY + 0.01, bounds.maxZ + 0.01, color, 2.0F, color & 0x38FFFFFF);
             }
         }
         if (visible && config.renderSelectionBoxes) {
@@ -157,7 +178,8 @@ public final class BoxRenderer {
         double dx = Math.max(Math.max(minX - camera.x, 0.0), camera.x - maxX - 1.0);
         double dy = Math.max(Math.max(minY - camera.y, 0.0), camera.y - maxY - 1.0);
         double dz = Math.max(Math.max(minZ - camera.z, 0.0), camera.z - maxZ - 1.0);
-        return dx * dx + dy * dy + dz * dz <= MAX_DISTANCE * MAX_DISTANCE;
+        double limit = TopView.active() ? TOP_VIEW_DISTANCE : MAX_DISTANCE;
+        return dx * dx + dy * dy + dz * dz <= limit * limit;
     }
 
     private static int abgr(int argb) {

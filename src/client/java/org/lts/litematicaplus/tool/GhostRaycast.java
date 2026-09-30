@@ -50,7 +50,7 @@ public final class GhostRaycast {
         double travelled = 0.0;
         for (int guard = 0; guard < 256 && travelled <= reach; guard++) {
             MismatchType type = engine.categoryAt(x, y, z);
-            if (type == MismatchType.MISSING || type == MismatchType.WRONG_STATE) {
+            if (type == MismatchType.MISSING || type == MismatchType.WRONG_STATE || type == MismatchType.WRONG_BLOCK) {
                 BlockState state = engine.schematicStateAt(x, y, z);
                 if (state != null && !state.isAir()) {
                     Hit hit = new Hit(new BlockPos(x, y, z), state, type);

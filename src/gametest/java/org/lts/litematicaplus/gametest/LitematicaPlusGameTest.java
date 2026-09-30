@@ -239,6 +239,9 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             check(placed == Blocks.STONE_BRICKS, "easy place should put stone bricks, found " + placed);
             settle(context, placement);
             check(runtime.errors() == 0, "errors after easy place " + runtime.errors());
+            EasyPlaceSuite.run(context, world);
+            EntitySuite.run(context, world);
+            MaterialsSuite.run(context, world);
 
             context.runOnClient(client -> {
                 LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -355,10 +358,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         context.waitTicks(10);
         int after = context.computeOnClient(client -> PlacementManager.get().placements().size());
         check(after == before + 1, "the Place button should create a placement, had " + before + " now " + after);
-        HubScreen.Tab tab = context.computeOnClient(client -> client.gui.screen() instanceof HubScreen hub ? hub.tab() : null);
-        check(tab == HubScreen.Tab.PLACEMENTS, "placing should switch to the Placements tab, got " + tab);
         SchematicPlacement created = context.computeOnClient(client -> PlacementManager.get().selected());
         check(created.origin().equals(new BlockPos(60, -60, 4)), "placement should sit at the player, got " + created.origin());
+        EditorSuite.run(context, created);
+        context.setScreen(() -> new HubScreen(null, HubScreen.Tab.PLACEMENTS));
         context.waitTicks(10);
         context.takeScreenshot("gui_two_placements");
         context.setScreen(() -> null);
@@ -428,7 +431,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         checkHealthy();
     }
 
-    private static void settle(ClientGameTestContext context, SchematicPlacement placement) {
+    static void settle(ClientGameTestContext context, SchematicPlacement placement) {
         context.waitFor(client -> {
             PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
             return runtime != null && runtime.volume() != null && !runtime.building() && runtime.pendingSections() == 0
@@ -439,6 +442,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
 
     private static void checkHealthy() {
         check(!GhostRenderer.failed(), "schematic renderer reported a failure");
+    }
+
+    static void require(boolean condition, String message) {
+        check(condition, message);
     }
 
     private static void check(boolean condition, String message) {

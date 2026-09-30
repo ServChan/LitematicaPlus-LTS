@@ -23,6 +23,8 @@ public final class FlatButton extends AbstractButton {
     private final Consumer<FlatButton> action;
     private final Style style;
     private BooleanSupplier state = () -> false;
+    private BooleanSupplier warning = () -> false;
+    private boolean shiftHeld;
 
     public FlatButton(int x, int y, int width, int height, Component message, Style style, Consumer<FlatButton> action) {
         super(x, y, width, height, message);
@@ -58,9 +60,19 @@ public final class FlatButton extends AbstractButton {
         return this;
     }
 
+    public FlatButton withWarning(BooleanSupplier supplier) {
+        this.warning = supplier;
+        return this;
+    }
+
     @Override
     public void onPress(InputWithModifiers input) {
+        this.shiftHeld = input.hasShiftDown();
         this.action.accept(this);
+    }
+
+    public boolean shiftHeld() {
+        return this.shiftHeld;
     }
 
     @Override
@@ -96,7 +108,8 @@ public final class FlatButton extends AbstractButton {
                 fill = !this.active ? Theme.SURFACE : marked ? Theme.SURFACE_SELECTED
                         : hovered ? Theme.SURFACE_HOVER : Theme.SURFACE_RAISED;
                 border = marked ? Theme.ACCENT : hovered ? Theme.BORDER_STRONG : Theme.BORDER;
-                text = !this.active ? Theme.TEXT_DISABLED : marked ? Theme.TEXT_BRIGHT : Theme.TEXT;
+                text = !this.active ? Theme.TEXT_DISABLED : this.warning.getAsBoolean() ? Theme.WARNING
+                        : marked ? Theme.TEXT_BRIGHT : Theme.TEXT;
             }
         }
         graphics.fill(x, y, x + width, y + height, fill);

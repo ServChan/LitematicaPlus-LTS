@@ -1,5 +1,6 @@
 package org.lts.litematicaplus.schematic;
 
+import com.mojang.datafixers.DSL;
 import com.mojang.serialization.Dynamic;
 import java.util.Optional;
 import net.minecraft.SharedConstants;
@@ -117,13 +118,21 @@ public final class BlockStateNbt {
     }
 
     public static CompoundTag fixBlockEntity(CompoundTag tag, int dataVersion) {
+        return fix(References.BLOCK_ENTITY, tag, dataVersion);
+    }
+
+    public static CompoundTag fixEntity(CompoundTag tag, int dataVersion) {
+        return fix(References.ENTITY, tag, dataVersion);
+    }
+
+    private static CompoundTag fix(DSL.TypeReference type, CompoundTag tag, int dataVersion) {
         int current = currentDataVersion();
         if (dataVersion <= 0 || dataVersion >= current || !tag.contains("id")) {
             return tag;
         }
         try {
             Tag updated = DataFixers.getDataFixer()
-                    .update(References.BLOCK_ENTITY, new Dynamic<>(NbtOps.INSTANCE, tag.copy()), dataVersion, current)
+                    .update(type, new Dynamic<>(NbtOps.INSTANCE, tag.copy()), dataVersion, current)
                     .getValue();
             return updated instanceof CompoundTag compound ? compound : tag;
         } catch (RuntimeException exception) {

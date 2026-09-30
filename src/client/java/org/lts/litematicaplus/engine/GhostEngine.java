@@ -39,6 +39,7 @@ import org.lts.litematicaplus.render.MeshResult;
 import org.lts.litematicaplus.render.SectionJob;
 import org.lts.litematicaplus.render.SectionMesher;
 import org.lts.litematicaplus.render.SpecialBlocks;
+import org.lts.litematicaplus.render.TopView;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
@@ -479,7 +480,7 @@ public final class GhostEngine {
     }
 
     private void sweep(ClientLevel current, Vec3 camera) {
-        int distance = LitematicaPlusConfig.current().renderDistance;
+        int distance = TopView.ghostRange(LitematicaPlusConfig.current().renderDistance);
         double near = (double) distance * distance;
         double far = (double) (distance + UNLOAD_MARGIN) * (distance + UNLOAD_MARGIN);
         for (PlacementRuntime runtime : this.runtimes.values()) {
@@ -520,7 +521,8 @@ public final class GhostEngine {
         ThreadPoolExecutor executor = Workers.mesh(threads);
         FluidStateModelSet fluids = minecraft.getModelManager().getFluidStateModelSet();
         long deadline = System.nanoTime() + config.snapshotBudgetMicros * 1000L;
-        double ghostRange = (double) config.renderDistance * config.renderDistance;
+        int configuredRange = TopView.ghostRange(config.renderDistance);
+        double ghostRange = (double) configuredRange * configuredRange;
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
             if (volume == null || runtime.dirty.isEmpty() || !runtime.placement().enabled()) {

@@ -89,7 +89,8 @@ public final class GhostRenderer {
         Vec3 cameraPos = camera.pos;
         FRUSTUM_MATRIX.set(camera.projectionMatrix).mul(camera.viewRotationMatrix);
         FRUSTUM.set(FRUSTUM_MATRIX);
-        double range = (double) config.renderDistance * config.renderDistance;
+        int configuredRange = TopView.ghostRange(config.renderDistance);
+        double range = (double) configuredRange * configuredRange;
         for (PlacementRuntime runtime : engine.runtimes()) {
             if (!runtime.placement().enabled() || runtime.volume() == null) {
                 continue;

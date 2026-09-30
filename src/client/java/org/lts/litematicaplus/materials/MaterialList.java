@@ -87,6 +87,16 @@ public final class MaterialList {
         return current;
     }
 
+    public static Item candleOf(Block candleCake) {
+        Identifier id = BuiltInRegistries.BLOCK.getKey(candleCake);
+        String path = id.getPath();
+        if (!path.endsWith("_cake")) {
+            return Items.AIR;
+        }
+        return BuiltInRegistries.ITEM.getOptional(
+                Identifier.fromNamespaceAndPath(id.getNamespace(), path.substring(0, path.length() - 5))).orElse(Items.AIR);
+    }
+
     public static void requirements(BlockState state, Sink sink) {
         Block block = state.getBlock();
         if (block instanceof FlowerPotBlock pot) {
@@ -99,15 +109,9 @@ public final class MaterialList {
         }
         if (block instanceof CandleCakeBlock) {
             sink.add(Items.CAKE, 1);
-            Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-            String path = id.getPath();
-            if (path.endsWith("_cake")) {
-                Item candle = BuiltInRegistries.ITEM.getOptional(
-                        Identifier.fromNamespaceAndPath(id.getNamespace(), path.substring(0, path.length() - 5)))
-                        .orElse(Items.AIR);
-                if (candle != Items.AIR) {
-                    sink.add(candle, 1);
-                }
+            Item candle = candleOf(block);
+            if (candle != Items.AIR) {
+                sink.add(candle, 1);
             }
             return;
         }

@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.block.state.properties.RailShape;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.block.state.properties.StairsShape;
 import org.junit.jupiter.api.BeforeAll;
@@ -40,8 +41,26 @@ class EasyPlaceOrientationTest {
     }
 
     @Test
-    void differentBlocksNeverMatch() {
-        assertFalse(EasyPlace.orientationMatches(Blocks.STONE.defaultBlockState(), Blocks.DIRT.defaultBlockState()));
+    void substituteBlocksAreComparedBySharedOrientation() {
+        assertTrue(EasyPlace.orientationMatches(Blocks.STONE.defaultBlockState(), Blocks.DIRT.defaultBlockState()));
+        BlockState oak = Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH)
+                .setValue(BlockStateProperties.HALF, Half.TOP);
+        BlockState spruce = Blocks.SPRUCE_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH)
+                .setValue(BlockStateProperties.HALF, Half.TOP);
+        assertTrue(EasyPlace.orientationMatches(spruce, oak));
+        assertFalse(EasyPlace.orientationMatches(spruce.setValue(BlockStateProperties.HALF, Half.BOTTOM), oak));
+        assertFalse(EasyPlace.orientationMatches(spruce.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST), oak));
+    }
+
+    @Test
+    void curvedRailsAreLeftToTheirNeighbours() {
+        BlockState straight = Blocks.RAIL.defaultBlockState().setValue(BlockStateProperties.RAIL_SHAPE, RailShape.EAST_WEST);
+        BlockState other = Blocks.RAIL.defaultBlockState().setValue(BlockStateProperties.RAIL_SHAPE, RailShape.NORTH_SOUTH);
+        BlockState curve = Blocks.RAIL.defaultBlockState().setValue(BlockStateProperties.RAIL_SHAPE, RailShape.SOUTH_EAST);
+        assertFalse(EasyPlace.orientationMatches(other, straight));
+        assertTrue(EasyPlace.orientationMatches(other, curve));
     }
 
     @Test

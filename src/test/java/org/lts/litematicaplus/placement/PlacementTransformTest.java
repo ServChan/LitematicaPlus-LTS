@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 class PlacementTransformTest {
@@ -23,6 +24,28 @@ class PlacementTransformTest {
                 }
                 assertEquals(81, seen.size(), rotation + " " + mirror);
                 assertEquals(70, transform.worldY(6));
+            }
+        }
+    }
+
+    @Test
+    void pointsStayInsideTheBlockTheyBelongTo() {
+        double[] fractions = {0.03125, 0.5, 0.96875};
+        for (Rotation rotation : Rotation.values()) {
+            for (Mirror mirror : Mirror.values()) {
+                PlacementTransform transform = new PlacementTransform(100, 64, -37, rotation, mirror);
+                for (int x = -2; x <= 2; x++) {
+                    for (int z = -2; z <= 2; z++) {
+                        for (double fx : fractions) {
+                            for (double fz : fractions) {
+                                Vec3 point = transform.worldPoint(x + fx, 3.25, z + fz);
+                                assertEquals(transform.worldX(x, z), (int) Math.floor(point.x), rotation + " " + mirror);
+                                assertEquals(transform.worldZ(x, z), (int) Math.floor(point.z), rotation + " " + mirror);
+                                assertEquals(67.25, point.y);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

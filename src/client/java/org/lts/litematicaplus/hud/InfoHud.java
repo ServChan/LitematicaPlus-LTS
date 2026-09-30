@@ -21,7 +21,9 @@ import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.tool.EasyPlace;
+import org.lts.litematicaplus.tool.EntityAssist;
 import org.lts.litematicaplus.tool.GhostRaycast;
+import org.lts.litematicaplus.tool.NoteTuner;
 import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.verify.MismatchType;
@@ -58,6 +60,12 @@ public final class InfoHud {
                         candidate -> EasyPlace.isPlaceable(minecraft, candidate));
                 if (hit != null) {
                     target = Component.translatable("litematicaplus.hud.target", hit.state().getBlock().getName());
+                }
+                if (config.entityPlacement) {
+                    Component entity = EntityAssist.describe(minecraft);
+                    if (entity != null) {
+                        target = entity;
+                    }
                 }
             }
         }
@@ -97,7 +105,9 @@ public final class InfoHud {
         }
         boolean tool = ToolController.get().holdingTool(minecraft);
         SchematicPlacement placement = PlacementManager.get().selected();
-        if (placement == null && !tool && !PasteController.active() && !GhostRenderer.failed()) {
+        NoteTuner.Progress tuning = config.noteTuningHud ? NoteTuner.progress(minecraft) : null;
+        boolean tuningActive = tuning != null && tuning.blocks() > 0;
+        if (placement == null && !tool && !PasteController.active() && !GhostRenderer.failed() && !tuningActive) {
             return;
         }
         Font font = minecraft.font;
@@ -115,6 +125,9 @@ public final class InfoHud {
             lines++;
         }
         if (PasteController.active()) {
+            lines++;
+        }
+        if (tuningActive) {
             lines++;
         }
         if (GhostRenderer.failed()) {
@@ -158,6 +171,11 @@ public final class InfoHud {
         if (PasteController.active()) {
             graphics.text(font, Component.translatable("litematicaplus.hud.paste",
                     String.format(Locale.ROOT, "%.0f", PasteController.progress() * 100.0)), textX, cursor, Theme.WARNING, false);
+            cursor += LINE;
+        }
+        if (tuningActive) {
+            graphics.text(font, Component.translatable("litematicaplus.hud.tuning", tuning.blocks(), tuning.clicks()),
+                    textX, cursor, Theme.WARNING, false);
             cursor += LINE;
         }
         if (targeted != null) {

@@ -82,6 +82,33 @@ class LanguageFilesTest {
         assertTrue(missing.isEmpty(), "Untranslated keys: " + missing);
     }
 
+    @Test
+    void everySettingsRowAndHotkeyIsTranslated() throws IOException {
+        Set<String> known = read("en_us.json").keySet();
+        Set<String> missing = new TreeSet<>();
+        Matcher rows = Pattern.compile("(?:toggle|number|percent)\\(\"([a-z0-9_]+)\"")
+                .matcher(Files.readString(Path.of("src/client/java/org/lts/litematicaplus/gui/SettingsView.java")));
+        while (rows.find()) {
+            if (!known.contains("litematicaplus.option." + rows.group(1))) {
+                missing.add("litematicaplus.option." + rows.group(1));
+            }
+        }
+        String hotkeys = Files.readString(Path.of("src/client/java/org/lts/litematicaplus/Hotkeys.java"));
+        Matcher keys = Pattern.compile("(?:add|toggle)\\(\"([a-z0-9_]+)\"").matcher(hotkeys);
+        while (keys.find()) {
+            if (!known.contains("key.litematicaplus." + keys.group(1))) {
+                missing.add("key.litematicaplus." + keys.group(1));
+            }
+        }
+        Matcher options = Pattern.compile("toggle\\(\"[a-z0-9_]+\", \"([a-z0-9_]+)\"").matcher(hotkeys);
+        while (options.find()) {
+            if (!known.contains("litematicaplus.option." + options.group(1))) {
+                missing.add("litematicaplus.option." + options.group(1));
+            }
+        }
+        assertTrue(missing.isEmpty(), "Untranslated keys: " + missing);
+    }
+
     private static int count(String value) {
         Matcher matcher = PLACEHOLDER.matcher(value);
         int total = 0;

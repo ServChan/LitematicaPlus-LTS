@@ -7,6 +7,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 abstract class TabView {
@@ -43,6 +45,14 @@ abstract class TabView {
     }
 
     void closed() {
+    }
+
+    boolean keyPressed(KeyEvent event) {
+        return false;
+    }
+
+    boolean mouseClicked(MouseButtonEvent event) {
+        return false;
     }
 
     protected <T extends GuiEventListener & Renderable & NarratableEntry> T add(T widget) {

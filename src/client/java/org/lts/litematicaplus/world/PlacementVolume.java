@@ -11,11 +11,14 @@ import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.placement.PlacementTransform;
 import org.lts.litematicaplus.schematic.BitPackedArray;
+import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicRegion;
 import org.lts.litematicaplus.util.LocalizedException;
@@ -29,6 +32,8 @@ public final class PlacementVolume {
     private final Long2ObjectOpenHashMap<GhostSection> sections;
     private final Long2ObjectOpenHashMap<CompoundTag> blockEntities;
     private final List<RegionBox> regionBoxes;
+    private final List<EntitySeed> entities;
+    private final PlacementTransform transform;
     private final int minX;
     private final int minY;
     private final int minZ;
@@ -42,9 +47,20 @@ public final class PlacementVolume {
     public record RegionBox(String name, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
     }
 
+    public record EntitySeed(CompoundTag tag, double x, double y, double z) {
+    }
+
+    public static final int MAX_ENTITIES = 512;
+    private static final Set<String> SUPPORTED_ENTITIES = Set.of("minecraft:item_frame", "minecraft:glow_item_frame",
+            "minecraft:painting", "minecraft:armor_stand", "ItemFrame", "Painting", "ArmorStand", "item_frame",
+            "glow_item_frame", "painting", "armor_stand");
+
     private PlacementVolume(BlockState[] palette, Long2ObjectOpenHashMap<GhostSection> sections,
-            Long2ObjectOpenHashMap<CompoundTag> blockEntities, List<RegionBox> regionBoxes, int dataVersion) {
+            Long2ObjectOpenHashMap<CompoundTag> blockEntities, List<RegionBox> regionBoxes, List<EntitySeed> entities,
+            PlacementTransform transform, int dataVersion) {
         this.palette = palette;
+        this.entities = List.copyOf(entities);
+        this.transform = transform;
         this.dataVersion = dataVersion;
         this.globalIds = new int[palette.length];
         this.solid = new boolean[palette.length];
@@ -115,10 +131,13 @@ public final class PlacementVolume {
         Long2ObjectOpenHashMap<GhostSection> sections = new Long2ObjectOpenHashMap<>();
         Long2ObjectOpenHashMap<CompoundTag> blockEntities = new Long2ObjectOpenHashMap<>();
         List<RegionBox> boxes = new ArrayList<>();
+        List<EntitySeed> entities = new ArrayList<>();
+        int dataVersion = schematic.metadata().dataVersion;
         for (SchematicRegion region : schematic.regions().values()) {
             if (disabledRegions != null && disabledRegions.contains(region.name())) {
                 continue;
             }
+            collectEntities(region, transform, dataVersion, entities);
             BlockState[] regionPalette = region.palette();
             short[] mapped = new short[regionPalette.length];
             boolean[] skip = new boolean[regionPalette.length];
@@ -180,20 +199,64 @@ public final class PlacementVolume {
                 blockEntities.put(BlockPos.asLong(transform.worldX(localX, localZ), transform.worldY(localY),
                         transform.worldZ(localX, localZ)), entry.getValue());
             }
-            int cornerAX = transform.worldX(baseX, baseZ);
-            int cornerAZ = transform.worldZ(baseX, baseZ);
-            int cornerBX = transform.worldX(baseX + sizeX - 1, baseZ + sizeZ - 1);
-            int cornerBZ = transform.worldZ(baseX + sizeX - 1, baseZ + sizeZ - 1);
-            boxes.add(new RegionBox(region.name(),
-                    Math.min(cornerAX, cornerBX), transform.worldY(baseY), Math.min(cornerAZ, cornerBZ),
-                    Math.max(cornerAX, cornerBX), transform.worldY(baseY + sizeY - 1), Math.max(cornerAZ, cornerBZ)));
+            boxes.add(regionBox(region, transform));
         }
         if (boxes.isEmpty()) {
             boxes.add(new RegionBox("", transform.originX(), transform.originY(), transform.originZ(),
                     transform.originX(), transform.originY(), transform.originZ()));
         }
-        return new PlacementVolume(palette.toArray(BlockState[]::new), sections, blockEntities, boxes,
-                schematic.metadata().dataVersion);
+        return new PlacementVolume(palette.toArray(BlockState[]::new), sections, blockEntities, boxes, entities,
+                transform, dataVersion);
+    }
+
+    private static void collectEntities(SchematicRegion region, PlacementTransform transform, int dataVersion,
+            List<EntitySeed> out) {
+        for (CompoundTag tag : region.entities()) {
+            if (out.size() >= MAX_ENTITIES) {
+                return;
+            }
+            if (!SUPPORTED_ENTITIES.contains(tag.getStringOr("id", ""))) {
+                continue;
+            }
+            ListTag position = tag.getListOrEmpty("Pos");
+            if (position.size() < 3) {
+                continue;
+            }
+            Vec3 world = transform.worldPoint(region.posX() + position.getDoubleOr(0, 0.0),
+                    region.posY() + position.getDoubleOr(1, 0.0), region.posZ() + position.getDoubleOr(2, 0.0));
+            out.add(new EntitySeed(BlockStateNbt.fixEntity(tag, dataVersion), world.x, world.y, world.z));
+        }
+    }
+
+    public List<EntitySeed> entities() {
+        return this.entities;
+    }
+
+    public PlacementTransform transform() {
+        return this.transform;
+    }
+
+    public static RegionBox regionBox(SchematicRegion region, PlacementTransform transform) {
+        int baseX = region.minX();
+        int baseY = region.minY();
+        int baseZ = region.minZ();
+        int cornerAX = transform.worldX(baseX, baseZ);
+        int cornerAZ = transform.worldZ(baseX, baseZ);
+        int cornerBX = transform.worldX(baseX + region.absX() - 1, baseZ + region.absZ() - 1);
+        int cornerBZ = transform.worldZ(baseX + region.absX() - 1, baseZ + region.absZ() - 1);
+        return new RegionBox(region.name(),
+                Math.min(cornerAX, cornerBX), transform.worldY(baseY), Math.min(cornerAZ, cornerBZ),
+                Math.max(cornerAX, cornerBX), transform.worldY(baseY + region.absY() - 1), Math.max(cornerAZ, cornerBZ));
+    }
+
+    public static List<RegionBox> regionBoxes(Schematic schematic, PlacementTransform transform, Set<String> disabled) {
+        List<RegionBox> boxes = new ArrayList<>();
+        for (SchematicRegion region : schematic.regions().values()) {
+            if (disabled == null || !disabled.contains(region.name())) {
+                boxes.add(regionBox(region, transform));
+            }
+        }
+        return boxes;
     }
 
     public BlockState[] palette() {

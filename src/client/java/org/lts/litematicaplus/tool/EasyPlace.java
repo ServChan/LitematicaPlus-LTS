@@ -1,11 +1,12 @@
 package org.lts.litematicaplus.tool;
 
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
@@ -13,7 +14,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.PlaceOnWaterBlockItem;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ButtonBlock;
 import net.minecraft.world.level.block.CakeBlock;
@@ -23,46 +23,121 @@ import net.minecraft.world.level.block.DragonEggBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.NoteBlock;
+import net.minecraft.world.level.block.ObserverBlock;
 import net.minecraft.world.level.block.RepeaterBlock;
 import net.minecraft.world.level.block.RespawnAnchorBlock;
-import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
-import org.lts.litematicaplus.mixin.BlockItemInvoker;
+import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class EasyPlace {
-    private static final Set<String> ORIENTATION_PROPERTIES = Set.of("facing", "axis", "half", "type", "rotation",
-            "face", "hinge", "attachment", "orientation", "vertical_direction", "hanging");
-    private static final Direction[] DIRECTIONS = Direction.values();
-    private static final double[] HEIGHTS = {0.25, 0.75};
-    private static final double[] LATERAL = {0.5, 0.25, 0.75};
-    private static final double[][] FLAT = {{0.5, 0.5}, {0.25, 0.25}, {0.75, 0.75}, {0.25, 0.75}, {0.75, 0.25}};
-    private static final double REACH_TOLERANCE = 0.5;
-    private static final int MATCH_NONE = 0;
-    private static final int MATCH_PLACEABLE = 1;
-    private static final int MATCH_EXACT = 2;
-    private static int cooldown;
+    private enum Step {
+        NONE,
+        FOLLOW_UP,
+        PLACE,
+        BREAK
+    }
+
+    private static final int RESTRICT_MARGIN = 2;
+    private static final int POSITION_COOLDOWN_TICKS = 6;
+    private static final int HEAD_YAW_LEAD_TICKS = 2;
+    private static final Map<BlockPos, Long> RECENT = new HashMap<>();
+    private static long globalReadyTick;
+    private static boolean sessionConsumed;
+    private static boolean sessionPlaced;
+    private static boolean requested;
+    private static boolean idle = true;
 
     private EasyPlace() {
     }
 
-    public static void tick() {
-        if (cooldown > 0) {
-            cooldown--;
+    public static void tick(Minecraft minecraft) {
+        if (minecraft.level == null || minecraft.player == null) {
+            if (!idle) {
+                reset();
+                idle = true;
+            }
+            return;
         }
+        idle = false;
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        boolean down = minecraft.options.keyUse.isDown();
+        boolean wanted = requested || down && sessionConsumed && config.easyPlaceHold;
+        requested = false;
+        if (wanted && active(config) && minecraft.gui.screen() == null && !cooling()
+                && !ToolController.get().holdingTool(minecraft) && (config.easyPlaceHold || !sessionPlaced)) {
+            act(minecraft, config);
+        }
+        if (!down) {
+            sessionConsumed = false;
+            sessionPlaced = false;
+        }
+    }
+
+    private static boolean active(LitematicaPlusConfig config) {
+        return config.easyPlaceEnabled && config.renderEnabled;
+    }
+
+    private static void act(Minecraft minecraft, LitematicaPlusConfig config) {
+        if (config.entityPlacement && EntityAssist.tryHandle(minecraft)) {
+            sessionPlaced = true;
+            return;
+        }
+        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isActionable(minecraft, candidate));
+        if (hit != null) {
+            sessionPlaced = true;
+            attempt(minecraft, hit, config);
+        }
+    }
+
+    public static void reset() {
+        RECENT.clear();
+        globalReadyTick = 0L;
+        sessionConsumed = false;
+        sessionPlaced = false;
+        requested = false;
+        TickQueue.clear();
+        LookLock.clear();
+        NoteTuner.clear();
+        FollowUps.clear();
+        BreakAssist.clear();
+        BlockEntityAssist.clear();
+        EntityAssist.clear();
+    }
+
+    public static void markPlacement(Minecraft minecraft, BlockPos pos) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        int jitter = config.easyPlaceJitter ? ThreadLocalRandom.current().nextInt(0, 2) : 0;
+        globalReadyTick = Math.max(globalReadyTick, TickQueue.now() + config.placementDelayTicks() + jitter);
+        if (RECENT.size() > 256) {
+            long now = TickQueue.now();
+            RECENT.values().removeIf(until -> until < now);
+        }
+        RECENT.put(pos.immutable(), TickQueue.now() + POSITION_COOLDOWN_TICKS + FollowUps.latencyTicks(minecraft));
+    }
+
+    public static void hold(int ticks) {
+        globalReadyTick = Math.max(globalReadyTick, TickQueue.now() + ticks);
+    }
+
+    public static boolean cooling() {
+        return TickQueue.now() < globalReadyTick;
+    }
+
+    private static boolean recentlyClicked(BlockPos pos) {
+        Long until = RECENT.get(pos);
+        return until != null && until >= TickQueue.now();
     }
 
     public static boolean onUse(Minecraft minecraft) {
@@ -74,16 +149,23 @@ public final class EasyPlace {
         if (player.isSpectator() || !player.mayBuild()) {
             return false;
         }
-        if (config.easyPlaceEnabled && config.renderEnabled) {
-            GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isPlaceable(minecraft, candidate));
-            if (hit != null) {
-                if (cooldown <= 0) {
-                    place(minecraft, hit, config);
-                }
-                return true;
-            }
+        if (!active(config)) {
+            return config.placementRestriction && restricted(minecraft, 0);
         }
-        return config.placementRestriction && restricted(minecraft);
+        boolean target = config.entityPlacement && EntityAssist.hasTarget(minecraft)
+                || GhostRaycast.trace(minecraft, candidate -> isActionable(minecraft, candidate)) != null;
+        if (target) {
+            sessionConsumed = true;
+            requested = true;
+            return true;
+        }
+        if (sessionConsumed) {
+            return true;
+        }
+        if (interacting(minecraft)) {
+            return !config.easyPlaceAllowInteraction && insideAnyPlacement(((BlockHitResult) minecraft.hitResult).getBlockPos());
+        }
+        return (config.easyPlaceRestrictArea || config.placementRestriction) && restricted(minecraft, RESTRICT_MARGIN);
     }
 
     public static boolean onPick(Minecraft minecraft) {
@@ -105,29 +187,44 @@ public final class EasyPlace {
     }
 
     public static boolean isPlaceable(Minecraft minecraft, GhostRaycast.Hit hit) {
+        return isActionable(minecraft, hit);
+    }
+
+    private static boolean isActionable(Minecraft minecraft, GhostRaycast.Hit hit) {
         ClientLevel level = minecraft.level;
-        if (level == null) {
+        if (level == null || recentlyClicked(hit.pos()) || BreakAssist.clearing(hit.pos())) {
             return false;
         }
-        BlockState target = hit.state();
+        return classify(minecraft, level, hit.pos(), hit.state(), level.getBlockState(hit.pos()),
+                LitematicaPlusConfig.current()) != Step.NONE;
+    }
+
+    private static Step classify(Minecraft minecraft, ClientLevel level, BlockPos pos, BlockState target, BlockState world,
+            LitematicaPlusConfig config) {
+        if (config.easyPlaceFinishStates && FollowUps.next(level, pos, target, world).kind() != FollowUps.Kind.NONE) {
+            return FollowUps.busy(pos) || NoteTuner.isTuning(pos) ? Step.NONE : Step.FOLLOW_UP;
+        }
+        if (!world.canBeReplaced()) {
+            return BreakAssist.eligible(level, pos, world, target, config) ? Step.BREAK : Step.NONE;
+        }
+        BlockState base = PlacementSolver.baseState(target);
+        if (world.getBlock() == base.getBlock()) {
+            return Step.NONE;
+        }
         Item item = InventoryHelper.itemFor(target);
         if (!(item instanceof BlockItem) || item instanceof PlaceOnWaterBlockItem) {
-            return false;
+            return Step.NONE;
         }
         if (target.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
                 && target.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
-            return false;
+            return Step.NONE;
         }
         if (target.hasProperty(BlockStateProperties.BED_PART)
                 && target.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
-            return false;
+            return Step.NONE;
         }
-        BlockState world = level.getBlockState(hit.pos());
-        if (hit.type() == MismatchType.WRONG_STATE) {
-            return isSlabCompletion(world, target);
-        }
-        return world.canBeReplaced()
-                && level.isUnobstructed(target, hit.pos(), CollisionContext.placementContext(minecraft.player));
+        return level.isUnobstructed(base, pos, CollisionContext.placementContext(minecraft.player))
+                ? Step.PLACE : Step.NONE;
     }
 
     public static boolean isInteractable(ClientLevel level, BlockPos pos, BlockState state) {
@@ -139,166 +236,161 @@ public final class EasyPlace {
                 || block instanceof RepeaterBlock || block instanceof DragonEggBlock;
     }
 
-    private static boolean isSlabCompletion(BlockState world, BlockState target) {
-        return target.getBlock() instanceof SlabBlock && world.getBlock() == target.getBlock()
-                && target.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.DOUBLE
-                && world.getValue(BlockStateProperties.SLAB_TYPE) != SlabType.DOUBLE;
-    }
-
-    private static void place(Minecraft minecraft, GhostRaycast.Hit hit, LitematicaPlusConfig config) {
-        LocalPlayer player = minecraft.player;
-        ClientLevel level = minecraft.level;
-        BlockState target = hit.state();
-        Item item = InventoryHelper.itemFor(target);
-        if (!(item instanceof BlockItem)) {
-            return;
-        }
-        if (!InventoryHelper.ensureInHand(minecraft, item)) {
-            Notify.actionBar("litematicaplus.message.item_missing", new ItemStack(item).getHoverName());
-            cooldown = 5;
-            return;
-        }
-        ItemStack stack = player.getMainHandItem();
-        if (!(stack.getItem() instanceof BlockItem)) {
-            cooldown = 2;
-            return;
-        }
-        BlockPos pos = hit.pos();
-        BlockHitResult click;
-        BlockState world = level.getBlockState(pos);
-        if (hit.type() == MismatchType.WRONG_STATE) {
-            boolean bottom = world.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.BOTTOM;
-            click = new BlockHitResult(new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5),
-                    bottom ? Direction.UP : Direction.DOWN, pos, false);
-        } else {
-            click = findClick(player, level, stack, pos, target, config);
-        }
-        if (click == null) {
-            Notify.actionBar("litematicaplus.message.easy_place_orientation");
-            cooldown = 3;
-            return;
-        }
-        InteractionResult result = minecraft.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, click);
-        if (result instanceof InteractionResult.Success) {
-            player.swing(InteractionHand.MAIN_HAND, stack.getInteractAnimation(), false);
-        }
-        cooldown = Math.max(1, config.easyPlaceDelayTicks);
-    }
-
-    private static BlockHitResult findClick(LocalPlayer player, ClientLevel level, ItemStack stack, BlockPos pos,
-            BlockState target, LitematicaPlusConfig config) {
-        Vec3 eye = player.getEyePosition(1.0F);
-        boolean sneaking = player.isShiftKeyDown();
-        BlockHitResult fallback = null;
-        for (int pass = 0; pass < 2; pass++) {
-            boolean wantVisible = pass == 0;
-            if (!wantVisible && !config.easyPlaceAirPlacement) {
-                break;
-            }
-            for (Direction side : DIRECTIONS) {
-                BlockPos neighbor = pos.relative(side.getOpposite());
-                BlockState neighborState = level.getBlockState(neighbor);
-                if (!isSupport(level, neighbor, neighborState, sneaking)
-                        || !player.isWithinBlockInteractionRange(neighbor, REACH_TOLERANCE)
-                        || faceVisible(eye, neighbor, side) != wantVisible) {
-                    continue;
-                }
-                int samples = side.getAxis() == Direction.Axis.Y ? FLAT.length : LATERAL.length * HEIGHTS.length;
-                for (int sample = 0; sample < samples; sample++) {
-                    BlockHitResult click = new BlockHitResult(faceLocation(neighbor, side, sample), side, neighbor, false);
-                    int match = match(player, stack, click, pos, target);
-                    if (match == MATCH_EXACT) {
-                        return click;
-                    }
-                    if (match == MATCH_PLACEABLE && fallback == null) {
-                        fallback = click;
-                    }
-                }
-            }
-        }
-        if (config.easyPlaceAirPlacement) {
-            for (Direction side : DIRECTIONS) {
-                for (double[] offset : FLAT) {
-                    for (double height : HEIGHTS) {
-                        BlockHitResult click = new BlockHitResult(new Vec3(pos.getX() + offset[0], pos.getY() + height,
-                                pos.getZ() + offset[1]), side, pos, false);
-                        int match = match(player, stack, click, pos, target);
-                        if (match == MATCH_EXACT) {
-                            return click;
-                        }
-                        if (match == MATCH_PLACEABLE && fallback == null) {
-                            fallback = click;
-                        }
-                    }
-                }
-            }
-        }
-        return config.easyPlaceStrictOrientation ? null : fallback;
-    }
-
-    private static boolean isSupport(ClientLevel level, BlockPos pos, BlockState state, boolean sneaking) {
-        if (state.canBeReplaced() || !state.isCollisionShapeFullBlock(level, pos)) {
+    private static boolean interacting(Minecraft minecraft) {
+        if (!(minecraft.hitResult instanceof BlockHitResult blockHit) || blockHit.getType() != HitResult.Type.BLOCK
+                || minecraft.player.isSecondaryUseActive()) {
             return false;
         }
-        return sneaking || !isInteractable(level, pos, state);
+        return isInteractable(minecraft.level, blockHit.getBlockPos(), minecraft.level.getBlockState(blockHit.getBlockPos()));
     }
 
-    private static boolean faceVisible(Vec3 eye, BlockPos block, Direction side) {
-        double centerX = block.getX() + 0.5 + side.getStepX() * 0.5;
-        double centerY = block.getY() + 0.5 + side.getStepY() * 0.5;
-        double centerZ = block.getZ() + 0.5 + side.getStepZ() * 0.5;
-        return (eye.x - centerX) * side.getStepX() + (eye.y - centerY) * side.getStepY()
-                + (eye.z - centerZ) * side.getStepZ() > 0.0;
+    private static boolean insideAnyPlacement(BlockPos pos) {
+        return GhostEngine.get().runtimeAt(pos.getX(), pos.getY(), pos.getZ()) != null;
     }
 
-    private static Vec3 faceLocation(BlockPos block, Direction side, int sample) {
-        if (side.getAxis() == Direction.Axis.Y) {
-            return new Vec3(block.getX() + FLAT[sample][0], block.getY() + 0.5 + side.getStepY() * 0.5,
-                    block.getZ() + FLAT[sample][1]);
+    static void diagnose(LitematicaPlusConfig config, String key, Object... args) {
+        if (config.easyPlaceDiagnostics) {
+            Notify.actionBar(key, args);
         }
-        double lateral = LATERAL[sample / HEIGHTS.length];
-        double height = HEIGHTS[sample % HEIGHTS.length];
-        if (side.getAxis() == Direction.Axis.X) {
-            return new Vec3(block.getX() + 0.5 + side.getStepX() * 0.5, block.getY() + height, block.getZ() + lateral);
-        }
-        return new Vec3(block.getX() + lateral, block.getY() + height, block.getZ() + 0.5 + side.getStepZ() * 0.5);
     }
 
-    private static int match(LocalPlayer player, ItemStack stack, BlockHitResult click, BlockPos pos, BlockState target) {
+    private static void attempt(Minecraft minecraft, GhostRaycast.Hit hit, LitematicaPlusConfig config) {
+        LocalPlayer player = minecraft.player;
+        ClientLevel level = minecraft.level;
+        BlockPos pos = hit.pos();
+        BlockState target = hit.state();
+        BlockState world = level.getBlockState(pos);
+        Step step = classify(minecraft, level, pos, target, world, config);
+        if (step == Step.FOLLOW_UP) {
+            if (FollowUps.start(minecraft, pos)) {
+                markPlacement(minecraft, pos);
+            }
+            return;
+        }
+        if (step == Step.BREAK) {
+            markPlacement(minecraft, pos);
+            BreakAssist.start(minecraft, pos);
+            return;
+        }
+        if (step != Step.PLACE) {
+            return;
+        }
+        if (config.easyPlaceObserverDetect && target.getBlock() instanceof ObserverBlock && !observedReady(level, pos, target)) {
+            diagnose(config, "litematicaplus.message.observer_wait");
+            hold(3);
+            return;
+        }
+        Item item = resolveItem(minecraft, target, config);
+        if (item == Items.AIR) {
+            diagnose(config, "litematicaplus.message.item_missing",
+                    new ItemStack(InventoryHelper.itemFor(target)).getHoverName());
+            hold(5);
+            return;
+        }
+        PlacementSolver.Plan plan = PlacementSolver.solve(player, level, new ItemStack(item), pos, target, config);
+        if (plan == null) {
+            diagnose(config, "litematicaplus.message.easy_place_orientation");
+            hold(3);
+            return;
+        }
+        markPlacement(minecraft, pos);
+        int lead = plan.rotate() ? config.easyPlaceRotationLeadTicks : 0;
+        BlockState base = PlacementSolver.baseState(target);
+        if (plan.rotate() && (base.hasProperty(BlockStateProperties.FACING) || base.hasProperty(BlockStateProperties.ORIENTATION))) {
+            lead = Math.max(lead, HEAD_YAW_LEAD_TICKS);
+        }
+        if (lead > 0) {
+            InventoryHelper.ensureInHand(minecraft, item);
+            LookLock.lock(plan.yaw(), plan.pitch(), lead + 2);
+            LookLock.sendRotation(minecraft, plan.yaw(), plan.pitch());
+            hold(lead);
+            BlockPos key = pos.immutable();
+            if (!TickQueue.after(lead, () -> execute(minecraft, key, target, item, plan))) {
+                LookLock.clear();
+            }
+        } else {
+            execute(minecraft, pos.immutable(), target, item, plan);
+        }
+    }
+
+    private static Item resolveItem(Minecraft minecraft, BlockState target, LitematicaPlusConfig config) {
+        Item item = InventoryHelper.itemFor(target);
+        LocalPlayer player = minecraft.player;
+        if (player.hasInfiniteMaterials() || InventoryHelper.has(player.getInventory(), item, config)) {
+            return item;
+        }
+        if (config.easyPlaceSubstitutes) {
+            return Substitutes.find(player.getInventory(), target);
+        }
+        return Items.AIR;
+    }
+
+    private static boolean observedReady(ClientLevel level, BlockPos pos, BlockState target) {
+        BlockPos watched = pos.relative(target.getValue(BlockStateProperties.FACING));
+        BlockState expected = GhostEngine.get().schematicStateAt(watched.getX(), watched.getY(), watched.getZ());
+        return expected == null || expected.isAir() || level.getBlockState(watched).getBlock() == expected.getBlock();
+    }
+
+    private static void execute(Minecraft minecraft, BlockPos pos, BlockState target, Item item,
+            PlacementSolver.Plan plan) {
+        LocalPlayer player = minecraft.player;
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
         try {
-            BlockItem item = (BlockItem) stack.getItem();
-            BlockPlaceContext context = item.updatePlacementContext(
-                    new BlockPlaceContext(player, InteractionHand.MAIN_HAND, stack, click));
-            if (context == null || !context.getClickedPos().equals(pos) || !context.canPlace()) {
-                return MATCH_NONE;
+            if (player == null || minecraft.level == null || minecraft.gameMode == null
+                    || !minecraft.level.getBlockState(pos).canBeReplaced()) {
+                return;
             }
-            BlockState placed = ((BlockItemInvoker) item).litematicaplus$getPlacementState(context);
-            if (placed == null) {
-                return MATCH_NONE;
+            if (!InventoryHelper.ensureInHand(minecraft, item)) {
+                diagnose(config, "litematicaplus.message.item_missing", new ItemStack(item).getHoverName());
+                return;
             }
-            return orientationMatches(placed, target) ? MATCH_EXACT : MATCH_PLACEABLE;
-        } catch (RuntimeException exception) {
-            return MATCH_NONE;
+            if (plan.rotate()) {
+                LookLock.sendRotation(minecraft, plan.yaw(), plan.pitch());
+            }
+            if (plan.sneak()) {
+                LookLock.sendSneak(minecraft, true);
+            }
+            InteractionResult result = PlacementSolver.withPlan(player, plan,
+                    () -> minecraft.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, plan.click()));
+            if (result instanceof InteractionResult.Success) {
+                player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getInteractAnimation(), false);
+            }
+            if (plan.sneak()) {
+                LookLock.sendSneak(minecraft, false);
+            }
+            BlockEntityAssist.afterPlace(minecraft, pos, target);
+            if (config.easyPlaceFinishStates) {
+                FollowUps.schedule(minecraft, pos);
+            }
+        } finally {
+            LookLock.clear();
+            if (plan.rotate() && config.easyPlaceRotationRevert && minecraft.player != null) {
+                LookLock.sendRealRotation(minecraft);
+            }
+        }
+    }
+
+    public static void retry(Minecraft minecraft, BlockPos pos) {
+        ClientLevel level = minecraft.level;
+        if (level == null || minecraft.player == null) {
+            return;
+        }
+        BlockState target = GhostEngine.get().schematicStateAt(pos.getX(), pos.getY(), pos.getZ());
+        if (target == null || target.isAir() || !minecraft.player.isWithinBlockInteractionRange(pos, 1.0)) {
+            return;
+        }
+        RECENT.remove(pos);
+        GhostRaycast.Hit hit = new GhostRaycast.Hit(pos, target, MismatchType.MISSING);
+        if (isActionable(minecraft, hit)) {
+            attempt(minecraft, hit, LitematicaPlusConfig.current());
         }
     }
 
     static boolean orientationMatches(BlockState placed, BlockState target) {
-        if (placed.getBlock() != target.getBlock()) {
-            return false;
-        }
-        for (Property<?> property : placed.getProperties()) {
-            if (!ORIENTATION_PROPERTIES.contains(property.getName())) {
-                continue;
-            }
-            Object wanted = target.getValue(property);
-            if (!placed.getValue(property).equals(wanted) && wanted != SlabType.DOUBLE) {
-                return false;
-            }
-        }
-        return true;
+        return PlacementSolver.orientationMatches(placed, target);
     }
 
-    private static boolean restricted(Minecraft minecraft) {
+    private static boolean restricted(Minecraft minecraft, int margin) {
         HitResult hit = minecraft.hitResult;
         if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) {
             return false;
@@ -317,14 +409,35 @@ public final class EasyPlace {
         }
         BlockPos target = clickedState.canBeReplaced() ? clicked : clicked.relative(blockHit.getDirection());
         GhostEngine engine = GhostEngine.get();
-        if (engine.runtimeAt(target.getX(), target.getY(), target.getZ()) == null) {
+        if (!nearPlacement(engine, target, margin)) {
             return false;
         }
         BlockState wanted = engine.schematicStateAt(target.getX(), target.getY(), target.getZ());
-        if (wanted != null && InventoryHelper.itemFor(wanted) == stack.getItem()) {
+        if (margin <= 0 && wanted != null && InventoryHelper.itemFor(wanted) == stack.getItem()) {
             return false;
         }
-        Notify.actionBar("litematicaplus.message.placement_restricted");
+        Notify.actionBar(margin > 0 ? "litematicaplus.message.easy_place_restricted"
+                : "litematicaplus.message.placement_restricted");
         return true;
+    }
+
+    private static boolean nearPlacement(GhostEngine engine, BlockPos pos, int margin) {
+        if (margin <= 0) {
+            return engine.runtimeAt(pos.getX(), pos.getY(), pos.getZ()) != null;
+        }
+        for (PlacementRuntime runtime : engine.runtimes()) {
+            PlacementVolume volume = runtime.volume();
+            if (volume == null || !runtime.placement().enabled()) {
+                continue;
+            }
+            for (PlacementVolume.RegionBox box : volume.regionBoxes()) {
+                if (pos.getX() >= box.minX() - margin && pos.getX() <= box.maxX() + margin
+                        && pos.getY() >= box.minY() - margin && pos.getY() <= box.maxY() + margin
+                        && pos.getZ() >= box.minZ() - margin && pos.getZ() <= box.maxZ() + margin) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

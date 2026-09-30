@@ -238,7 +238,7 @@ final class SchematicsView extends TabView {
         SchematicPlacement placement = PlacementManager.get().create(this.selected.path(),
                 this.minecraft.player.blockPosition());
         Notify.actionBar("litematicaplus.message.placement_created", placement.name());
-        this.screen.switchTab(HubScreen.Tab.PLACEMENTS);
+        this.minecraft.gui.setScreen(new PlacementEditorScreen(null, placement));
     }
 
     private void openFolder() {

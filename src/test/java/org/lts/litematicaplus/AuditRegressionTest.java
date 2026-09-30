@@ -145,11 +145,14 @@ class AuditRegressionTest {
     void olderConfigGetsSaferPasteDefaults(@TempDir Path directory) throws IOException {
         Path file = directory.resolve("config.json");
         Files.writeString(file, """
-                {"configVersion": 1, "pasteCommandsPerTick": 40, "easyPlaceAirPlacement": true, "ghostAlpha": 0.1}
+                {"configVersion": 1, "pasteCommandsPerTick": 40, "easyPlaceAirPlacement": false, "easyPlaceDelayTicks": 5,
+                 "ghostAlpha": 0.1}
                 """);
         LitematicaPlusConfig config = LitematicaPlusConfig.load(file);
         assertEquals(8, config.pasteCommandsPerTick);
-        assertFalse(config.easyPlaceAirPlacement);
+        assertTrue(config.easyPlaceAirPlacement);
+        assertEquals(LitematicaPlusConfig.PlacementPreset.CUSTOM, config.easyPlacePreset);
+        assertEquals(5, config.placementDelayTicks());
         assertEquals(0.2F, config.ghostAlpha);
         assertTrue(config.toolEnabled);
     }

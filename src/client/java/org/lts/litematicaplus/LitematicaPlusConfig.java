@@ -16,7 +16,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.lts.litematicaplus.util.Workers;
 
 public final class LitematicaPlusConfig {
-    private static final int CURRENT_CONFIG_VERSION = 2;
+    private static final int CURRENT_CONFIG_VERSION = 3;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
     private static final AtomicReference<LitematicaPlusConfig> PENDING = new AtomicReference<>();
@@ -28,6 +28,28 @@ public final class LitematicaPlusConfig {
 
         public PasteReplace next() {
             PasteReplace[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
+    }
+
+    public enum PlacementPreset {
+        BALANCED(2),
+        SAFE(4),
+        FAST(1),
+        CUSTOM(-1);
+
+        private final int ticks;
+
+        PlacementPreset(int ticks) {
+            this.ticks = ticks;
+        }
+
+        public int ticks(int custom) {
+            return this == CUSTOM ? Math.max(0, custom) : this.ticks;
+        }
+
+        public PlacementPreset next() {
+            PlacementPreset[] values = values();
             return values[(ordinal() + 1) % values.length];
         }
     }
@@ -61,7 +83,30 @@ public final class LitematicaPlusConfig {
     public boolean easyPlaceEnabled = false;
     public int easyPlaceDelayTicks = 2;
     public boolean easyPlaceStrictOrientation = true;
-    public boolean easyPlaceAirPlacement = false;
+    public boolean easyPlaceAirPlacement = true;
+    public PlacementPreset easyPlacePreset = PlacementPreset.BALANCED;
+    public boolean easyPlaceJitter = false;
+    public boolean easyPlaceHold = true;
+    public boolean easyPlaceFakeRotation = true;
+    public int easyPlaceRotationLeadTicks = 1;
+    public boolean easyPlaceRotationRevert = true;
+    public boolean easyPlaceAllowInteraction = true;
+    public boolean easyPlaceFinishStates = true;
+    public boolean easyPlaceObserverDetect = false;
+    public boolean easyPlaceIgnoreItemData = false;
+    public boolean easyPlaceSubstitutes = false;
+    public boolean easyPlaceDiagnostics = true;
+    public boolean easyPlaceRestrictArea = true;
+    public boolean excavationGuard = false;
+    public boolean excavationGuardOutside = true;
+    public boolean excavationGuardCorrect = true;
+    public boolean excavationGuardHint = true;
+    public boolean autoToolSwitch = false;
+    public boolean terrainAutoReplace = false;
+    public boolean breakWrongBlocks = false;
+    public boolean entityPlacement = true;
+    public boolean noteTuningHud = true;
+    public boolean materialHelper = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
     public int pasteCommandsPerTick = 8;
@@ -139,6 +184,10 @@ public final class LitematicaPlusConfig {
         }
     }
 
+    public int placementDelayTicks() {
+        return this.easyPlacePreset.ticks(this.easyPlaceDelayTicks);
+    }
+
     public int resolvedWorkerThreads() {
         if (this.workerThreads > 0) {
             return this.workerThreads;
@@ -168,7 +217,10 @@ public final class LitematicaPlusConfig {
     static LitematicaPlusConfig migrate(LitematicaPlusConfig config) {
         if (config.configVersion < 2) {
             config.pasteCommandsPerTick = Math.min(config.pasteCommandsPerTick, 8);
-            config.easyPlaceAirPlacement = false;
+        }
+        if (config.configVersion < 3) {
+            config.easyPlaceAirPlacement = true;
+            config.easyPlacePreset = config.easyPlaceDelayTicks == 2 ? PlacementPreset.BALANCED : PlacementPreset.CUSTOM;
         }
         return config;
     }
@@ -185,6 +237,10 @@ public final class LitematicaPlusConfig {
         config.hudMaterialLines = clamp(config.hudMaterialLines, 0, 16);
         config.easyPlaceDelayTicks = clamp(config.easyPlaceDelayTicks, 0, 20);
         config.pasteCommandsPerTick = clamp(config.pasteCommandsPerTick, 1, 16);
+        config.easyPlaceRotationLeadTicks = clamp(config.easyPlaceRotationLeadTicks, 0, 3);
+        if (config.easyPlacePreset == null) {
+            config.easyPlacePreset = PlacementPreset.BALANCED;
+        }
         if (config.pasteReplace == null) {
             config.pasteReplace = PasteReplace.ALL;
         }

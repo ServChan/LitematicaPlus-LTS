@@ -74,7 +74,9 @@ public final class ToolController {
         if (!minecraft.options.keyUse.isDown()) {
             this.useReleased = true;
         }
-        EasyPlace.tick();
+        TickQueue.tick(minecraft);
+        EntityAssist.tick(minecraft);
+        EasyPlace.tick(minecraft);
         PasteController.tick(minecraft);
     }
 
