@@ -37,7 +37,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         LitematicaPlusConfig.load();
         Session.init();
         category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"));
-        OPEN_MENU_KEY = register("open_menu", InputConstants.KEY_M);
+        OPEN_MENU_KEY = register("open_menu", InputConstants.KEY_K);
         TOGGLE_RENDER_KEY = register("toggle_render", InputConstants.UNKNOWN.getValue());
         TOGGLE_EASY_PLACE_KEY = register("toggle_easy_place", InputConstants.UNKNOWN.getValue());
         TOOL_MODE_KEY = register("tool_mode", InputConstants.UNKNOWN.getValue());

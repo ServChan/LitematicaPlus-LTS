@@ -55,10 +55,6 @@ public final class SchematicPlacement {
         return this.file;
     }
 
-    public void setFile(String file) {
-        this.file = file;
-    }
-
     public int x() {
         return this.x;
     }

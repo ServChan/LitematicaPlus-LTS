@@ -80,6 +80,10 @@ public final class PasteController {
     }
 
     public static void startPaste(Minecraft minecraft, PlacementRuntime runtime) {
+        startPaste(minecraft, runtime, minecraft.hasSingleplayerServer());
+    }
+
+    public static void startPaste(Minecraft minecraft, PlacementRuntime runtime, boolean direct) {
         if (!allowed(minecraft) || runtime == null || runtime.volume() == null) {
             if (runtime == null || runtime.volume() == null) {
                 Notify.actionBar("litematicaplus.message.no_placement");
@@ -88,6 +92,7 @@ public final class PasteController {
         }
         PlacementVolume volume = runtime.volume();
         Job created = baseJob(minecraft);
+        created.direct = direct && minecraft.hasSingleplayerServer();
         created.volume = volume;
         long[] keys = volume.sections().keySet().toLongArray();
         Long[] boxed = new Long[keys.length];

@@ -8,20 +8,21 @@ import org.junit.jupiter.api.Test;
 
 class PlacementTransformTest {
     @Test
-    void worldAndLocalAreInversesForEveryOrientation() {
+    void everyOrientationIsABijectionOnTheHorizontalPlane() {
         for (Rotation rotation : Rotation.values()) {
             for (Mirror mirror : Mirror.values()) {
                 PlacementTransform transform = new PlacementTransform(100, 64, -37, rotation, mirror);
-                for (int x = -5; x <= 5; x += 5) {
-                    for (int z = -3; z <= 9; z += 4) {
+                java.util.Set<Long> seen = new java.util.HashSet<>();
+                for (int x = -4; x <= 4; x++) {
+                    for (int z = -4; z <= 4; z++) {
                         int worldX = transform.worldX(x, z);
                         int worldZ = transform.worldZ(x, z);
-                        assertEquals(x, transform.localX(worldX, worldZ), rotation + " " + mirror);
-                        assertEquals(z, transform.localZ(worldX, worldZ), rotation + " " + mirror);
+                        assertEquals(x * x + z * z, (worldX - 100) * (worldX - 100) + (worldZ + 37) * (worldZ + 37));
+                        seen.add((long) worldX << 32 | worldZ & 0xFFFFFFFFL);
                     }
                 }
+                assertEquals(81, seen.size(), rotation + " " + mirror);
                 assertEquals(70, transform.worldY(6));
-                assertEquals(6, transform.localY(70));
             }
         }
     }

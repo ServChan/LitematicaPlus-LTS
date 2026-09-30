@@ -71,7 +71,9 @@ public final class SectionMesher {
         ByteBuffer ghostData = null;
         int ghostVertices = 0;
         this.specials.clear();
-        if (options.ghostBlocks() && section.solidCount() > 0) {
+        boolean inLayer = job.layer().intersects(sectionX << 4, sectionY << 4, sectionZ << 4,
+                (sectionX << 4) + 15, (sectionY << 4) + 15, (sectionZ << 4) + 15);
+        if (inLayer && options.ghostBlocks() && section.solidCount() > 0) {
             MeshData mesh = buildGhost(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
             if (mesh != null) {
                 try {
@@ -88,7 +90,7 @@ public final class SectionMesher {
         ByteBuffer lineData = null;
         int fillVertices = 0;
         int lineVertices = 0;
-        if (options.overlay() && verdict.worldKnown() && verdict.errors() > 0) {
+        if (inLayer && options.overlay() && verdict.worldKnown() && verdict.errors() > 0) {
             this.fill.reset();
             this.lines.reset();
             buildOverlay(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);

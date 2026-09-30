@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.Session;
+import org.lts.litematicaplus.SessionStore;
 
 public final class HubScreen extends Screen {
     public enum Tab {
@@ -130,6 +131,10 @@ public final class HubScreen extends Screen {
             String shown = this.font.width(scope) > scopeWidth
                     ? ".." + this.font.plainSubstrByWidth(scope, Math.max(0, scopeWidth - 8), true) : scope;
             Ui.right(graphics, this.font, shown, this.width - 12, 11, Theme.TEXT_DIM);
+        }
+        if (SessionStore.get().readOnly()) {
+            Ui.clipped(graphics, this.font, Component.translatable("litematicaplus.error.session_read_only").getString(),
+                    8, this.height - 12, this.sidebarWidth - 12, Theme.WARNING);
         }
         int contentX = this.sidebarWidth + Theme.PADDING;
         Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 9, 1.5F, Theme.TEXT_BRIGHT);

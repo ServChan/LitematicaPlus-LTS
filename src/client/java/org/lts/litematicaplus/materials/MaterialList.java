@@ -159,20 +159,4 @@ public final class MaterialList {
                 add(counts, inner, depth + 1);
             });
         }
-    }
-
-    public static String formatCount(long count, int stackSize) {
-        if (stackSize <= 1 || count < stackSize) {
-            return Long.toString(count);
-        }
-        long stacks = count / stackSize;
-        long rest = count % stackSize;
-        if (stacks >= 54) {
-            long boxes = stacks / 27;
-            long leftover = stacks % 27;
-            return count + " (" + boxes + "sb" + (leftover > 0 ? " + " + leftover + "st" : "")
-                    + (rest > 0 ? " + " + rest : "") + ")";
-        }
-        return count + " (" + stacks + "st" + (rest > 0 ? " + " + rest : "") + ")";
-    }
-}
+    }}

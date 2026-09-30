@@ -22,6 +22,7 @@
   "litematicaplus.button.save": "Guardar",
   "litematicaplus.button.revert": "Revertir",
   "litematicaplus.error.save_failed": "No se guardaron los ajustes. Comprueba que la carpeta config permite escritura.",
+  "litematicaplus.error.session_read_only": "El archivo de sesión es de una versión más nueva. Los cambios no se guardan.",
   "litematicaplus.error.tool_item": "Objeto desconocido. Escribe un ID como minecraft:stick.",
   "litematicaplus.overview.summary": "Colocaciones en este mundo: %s",
   "litematicaplus.overview.empty_title": "Aún no hay esquemas colocados",

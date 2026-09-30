@@ -22,6 +22,7 @@
   "litematicaplus.button.save": "Save",
   "litematicaplus.button.revert": "Revert",
   "litematicaplus.error.save_failed": "Settings were not saved. Check that the config folder is writable.",
+  "litematicaplus.error.session_read_only": "Session file is from a newer version. Changes are not saved.",
   "litematicaplus.error.tool_item": "Unknown item. Enter an item ID such as minecraft:stick.",
   "litematicaplus.overview.summary": "Placements in this world: %s",
   "litematicaplus.overview.empty_title": "No schematic placed yet",

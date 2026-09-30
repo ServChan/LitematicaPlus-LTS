@@ -26,15 +26,6 @@ public final class SelectionManager {
         this.changeListener = listener == null ? () -> { } : listener;
     }
 
-    public String name() {
-        return this.name;
-    }
-
-    public void setName(String name) {
-        this.name = name == null ? "" : name;
-        this.changeListener.run();
-    }
-
     public List<AreaBox> boxes() {
         return Collections.unmodifiableList(this.boxes);
     }

@@ -91,14 +91,4 @@ public final class AreaBox {
 
     public long volume() {
         return isEmpty() ? 0L : (long) sizeX() * sizeY() * sizeZ();
-    }
-
-    public void move(int dx, int dy, int dz) {
-        if (this.corner1 != null) {
-            this.corner1 = this.corner1.offset(dx, dy, dz);
-        }
-        if (this.corner2 != null) {
-            this.corner2 = this.corner2.offset(dx, dy, dz);
-        }
-    }
-}
+    }}

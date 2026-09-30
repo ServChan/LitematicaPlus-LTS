@@ -81,18 +81,6 @@ public record LayerRange(Mode mode, Direction.Axis axis, int single, int min, in
         return new LayerRange(newMode, this.axis, this.single, this.min, this.max);
     }
 
-    public LayerRange withAxis(Direction.Axis newAxis) {
-        return new LayerRange(this.mode, newAxis, this.single, this.min, this.max);
-    }
-
-    public LayerRange withSingle(int value) {
-        return new LayerRange(this.mode, this.axis, value, this.min, this.max);
-    }
-
-    public LayerRange withRange(int newMin, int newMax) {
-        return new LayerRange(this.mode, this.axis, this.single, newMin, newMax);
-    }
-
     public LayerRange shifted(int delta) {
         return new LayerRange(this.mode, this.axis, this.single + delta, this.min + delta, this.max + delta);
     }

@@ -82,15 +82,6 @@ public final class PlacementManager {
         this.changeListener.run();
     }
 
-    public SchematicPlacement byId(UUID id) {
-        for (SchematicPlacement placement : this.placements) {
-            if (placement.id().equals(id)) {
-                return placement;
-            }
-        }
-        return null;
-    }
-
     public SchematicPlacement create(Path file, BlockPos origin) {
         String name = SchematicIo.baseName(file);
         SchematicPlacement placement = new SchematicPlacement(UUID.randomUUID(), uniqueName(name), relativize(file), origin);
@@ -100,11 +91,6 @@ public final class PlacementManager {
         load(placement, false);
         this.changeListener.run();
         return placement;
-    }
-
-    public SchematicPlacement createLoaded(Schematic schematic, Path file, BlockPos origin) {
-        this.cache.put(cacheKey(file), CompletableFuture.completedFuture(schematic));
-        return create(file, origin);
     }
 
     public void remove(SchematicPlacement placement) {

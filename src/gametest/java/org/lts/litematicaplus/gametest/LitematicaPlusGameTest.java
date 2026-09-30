@@ -55,6 +55,13 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
     public void runTest(ClientGameTestContext context) {
         TestWorldSave save;
         int expectedPlacements;
+        for (HubScreen.Tab tab : HubScreen.Tab.values()) {
+            context.setScreen(() -> new HubScreen(null, tab));
+            context.waitTicks(4);
+        }
+        context.takeScreenshot("00_title_settings");
+        context.setScreen(() -> null);
+        context.waitTicks(4);
         try (TestSingleplayerContext world = context.worldBuilder()
                 .adjustSettings(settings -> settings.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE))
                 .create()) {
@@ -279,6 +286,9 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             check(deleted == Blocks.AIR, "delete tool should clear the selection, found " + deleted);
             context.runOnClient(client -> SelectionManager.get().clear());
 
+            uiPlacement(context, world);
+            commandPaste(context, world);
+
             context.runOnClient(client -> PlacementManager.get().rotate(placement, Rotation.CLOCKWISE_90));
             context.waitTicks(5);
             settle(context, placement);
@@ -312,6 +322,60 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             context.takeScreenshot("09_rejoined");
             checkHealthy();
         }
+    }
+
+    private static void uiPlacement(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("tp @p 60.5 -60 4.5 -45 12");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(10);
+        int before = context.computeOnClient(client -> PlacementManager.get().placements().size());
+        context.setScreen(() -> new HubScreen(null, HubScreen.Tab.SCHEMATICS));
+        context.waitTicks(25);
+        int scale = context.computeOnClient(client -> client.getWindow().getGuiScale());
+        click(context, scale, 150, 96);
+        context.getInput().pressKey(InputConstants.KEY_RETURN);
+        context.waitTicks(25);
+        click(context, scale, 150, 140);
+        context.waitTicks(25);
+        context.takeScreenshot("gui_schematic_details");
+        click(context, scale, 348, 194);
+        context.waitTicks(10);
+        int after = context.computeOnClient(client -> PlacementManager.get().placements().size());
+        check(after == before + 1, "the Place button should create a placement, had " + before + " now " + after);
+        HubScreen.Tab tab = context.computeOnClient(client -> client.gui.screen() instanceof HubScreen hub ? hub.tab() : null);
+        check(tab == HubScreen.Tab.PLACEMENTS, "placing should switch to the Placements tab, got " + tab);
+        SchematicPlacement created = context.computeOnClient(client -> PlacementManager.get().selected());
+        check(created.origin().equals(new BlockPos(60, -60, 4)), "placement should sit at the player, got " + created.origin());
+        context.waitTicks(10);
+        context.takeScreenshot("gui_two_placements");
+        context.setScreen(() -> null);
+        context.waitTicks(2);
+    }
+
+    private static void click(ClientGameTestContext context, int scale, int guiX, int guiY) {
+        context.getInput().setCursorPos(guiX * scale, guiY * scale);
+        context.waitTicks(2);
+        context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+        context.waitTicks(3);
+    }
+
+    private static void commandPaste(ClientGameTestContext context, TestSingleplayerContext world) {
+        SchematicPlacement second = context.computeOnClient(client -> PlacementManager.get().selected());
+        settle(context, second);
+        PlacementRuntime runtime = context.computeOnClient(client -> GhostEngine.get().runtime(second.id()));
+        long total = runtime.volume().totalBlocks();
+        check(runtime.count(MismatchType.MISSING) == total, "second placement should be fully missing");
+        context.runOnClient(client -> PasteController.startPaste(client, runtime, false));
+        context.waitFor(client -> !PasteController.active(), 1200);
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(40);
+        settle(context, second);
+        check(runtime.count(MismatchType.CORRECT) == total, "command paste should place every block, correct "
+                + runtime.count(MismatchType.CORRECT) + " of " + total + ", missing " + runtime.count(MismatchType.MISSING)
+                + ", wrong state " + runtime.count(MismatchType.WRONG_STATE));
+        context.takeScreenshot("05b_command_paste");
+        context.runOnClient(client -> PlacementManager.get().remove(second));
+        context.waitTicks(5);
     }
 
     private static void stress(ClientGameTestContext context, TestSingleplayerContext world, SchematicPlacement previous) {

@@ -256,9 +256,4 @@ public final class PlacementVolume {
     public BlockState stateAt(int x, int y, int z) {
         int index = paletteIndexAt(x, y, z);
         return index < 0 ? Blocks.AIR.defaultBlockState() : this.palette[index];
-    }
-
-    public BlockState stateAt(BlockPos pos) {
-        return stateAt(pos.getX(), pos.getY(), pos.getZ());
-    }
-}
+    }}

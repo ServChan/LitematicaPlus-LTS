@@ -40,7 +40,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 | Действие | Клавиша по умолчанию | Переназначение |
 |---|---|---|
-| Открыть меню | `M` | Options → Controls → Litematica Plus |
+| Открыть меню | `K` | Options → Controls → Litematica Plus |
 | Показать/скрыть схемы | не назначена | там же |
 | Лёгкая установка вкл/выкл | не назначена | там же |
 | Следующий режим инструмента | не назначена | там же |
@@ -61,14 +61,14 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 ### Настройки
 
-Меню (`M`) или **Mod Menu**: вкладки «Быстрый доступ», «Схемы», «Размещения», «Область», «Материалы», «Проверка», «Настройки». Настройки лежат в `config/litematicaplus.json`, размещения и выделения — в `config/litematica-plus-session.json` (оба файла пишутся атомарно, с резервной копией `.bak`).
+Меню (`K`) или **Mod Menu**: вкладки «Быстрый доступ», «Схемы», «Размещения», «Область», «Материалы», «Проверка», «Настройки». Настройки лежат в `config/litematicaplus.json`, размещения и выделения — в `config/litematica-plus-session.json` (оба файла пишутся атомарно, с резервной копией `.bak`).
 
 ### Установка
 
 1. **Fabric Loader** `0.19.3+` и **Fabric API** `0.161.0+26.3`.
 2. Скопируйте `litematica-plus-lts-1.0.0.jar` из `build/libs/` в папку `mods/`.
 3. **Mod Menu** — опционально, открывает меню мода из списка модов.
-4. Оригинальные Litematica и MaLiLib не нужны. Ставить их рядом можно, но клавиша `M` занята обоими модами — переназначьте одну.
+4. Оригинальные Litematica и MaLiLib не нужны.
 
 **Требования:** Minecraft `26.3` · Java `25` · только клиент.
 
@@ -116,7 +116,7 @@ Not ported from Litematica yet:
 
 | Action | Default key | Rebind |
 |---|---|---|
-| Open the menu | `M` | Options → Controls → Litematica Plus |
+| Open the menu | `K` | Options → Controls → Litematica Plus |
 | Show or hide schematics | unbound | same place |
 | Toggle easy place | unbound | same place |
 | Next tool mode | unbound | same place |
@@ -137,14 +137,14 @@ Without the tool: right-click a ghost for easy place (when enabled), middle-clic
 
 ### Configuration
 
-The menu (`M`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Area, Materials, Verifier, Settings. Settings live in `config/litematicaplus.json`; placements and selections in `config/litematica-plus-session.json` (both written atomically with a `.bak` backup).
+The menu (`K`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Area, Materials, Verifier, Settings. Settings live in `config/litematicaplus.json`; placements and selections in `config/litematica-plus-session.json` (both written atomically with a `.bak` backup).
 
 ### Installation
 
 1. **Fabric Loader** `0.19.3+` and **Fabric API** `0.161.0+26.3`.
 2. Copy `litematica-plus-lts-1.0.0.jar` from `build/libs/` into `mods/`.
 3. **Mod Menu** — optional, opens the mod's menu from the mod list.
-4. The original Litematica and MaLiLib are not needed. They can be installed side by side, but both mods bind `M` — rebind one of them.
+4. The original Litematica and MaLiLib are not needed.
 
 **Requirements:** Minecraft `26.3` · Java `25` · client-only.
 

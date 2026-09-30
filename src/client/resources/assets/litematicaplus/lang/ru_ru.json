@@ -22,6 +22,7 @@
   "litematicaplus.button.save": "Сохранить",
   "litematicaplus.button.revert": "Отменить",
   "litematicaplus.error.save_failed": "Настройки не сохранены. Проверьте, что папка config доступна для записи.",
+  "litematicaplus.error.session_read_only": "Файл сессии от более новой версии. Изменения не сохраняются.",
   "litematicaplus.error.tool_item": "Неизвестный предмет. Введите ID, например minecraft:stick.",
   "litematicaplus.overview.summary": "Размещений в этом мире: %s",
   "litematicaplus.overview.empty_title": "Схема ещё не размещена",

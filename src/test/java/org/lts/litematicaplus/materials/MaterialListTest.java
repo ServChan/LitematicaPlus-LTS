@@ -62,12 +62,4 @@ class MaterialListTest {
         assertEquals(4, MaterialList.countOf(Blocks.SEA_PICKLE.defaultBlockState().setValue(BlockStateProperties.PICKLES, 4)));
         assertEquals(5, MaterialList.countOf(Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 5)));
     }
-
-    @Test
-    void largeCountsAreSplitIntoStacksAndShulkerBoxes() {
-        assertEquals("12", MaterialList.formatCount(12, 64));
-        assertEquals("130 (2st + 2)", MaterialList.formatCount(130, 64));
-        assertEquals("3456 (2sb)", MaterialList.formatCount(3456, 64));
-        assertEquals("5", MaterialList.formatCount(5, 1));
-    }
 }

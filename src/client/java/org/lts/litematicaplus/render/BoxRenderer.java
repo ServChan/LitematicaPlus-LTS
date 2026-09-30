@@ -50,10 +50,6 @@ public final class BoxRenderer {
         focusColor = color;
     }
 
-    public static BlockPos focus() {
-        return focus;
-    }
-
     static boolean prepare(Minecraft minecraft, Vec3 camera) {
         LINES.reset();
         FILLS.reset();
