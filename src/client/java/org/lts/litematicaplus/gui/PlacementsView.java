@@ -1,7 +1,9 @@
 package org.lts.litematicaplus.gui;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -33,6 +35,9 @@ final class PlacementsView extends TabView {
     private SchematicPlacement.LoadState knownState;
     private Schematic knownSchematic;
     private int listScroll;
+    private final Map<SchematicPlacement, TextMemo> statusText = new IdentityHashMap<>();
+    private final TextMemo regionOn = new TextMemo();
+    private final TextMemo regionOff = new TextMemo();
 
     PlacementsView(HubScreen screen) {
         super(screen);
@@ -47,6 +52,7 @@ final class PlacementsView extends TabView {
     void init() {
         PlacementManager manager = PlacementManager.get();
         List<SchematicPlacement> placements = new ArrayList<>(manager.placements());
+        this.statusText.keySet().retainAll(placements);
         this.knownCount = placements.size();
         this.regionsTop = 0;
         if (placements.isEmpty()) {
@@ -199,8 +205,10 @@ final class PlacementsView extends TabView {
                     boolean on = !selected.disabledRegions().contains(region);
                     int textY = rowY + (rowHeight - 8) / 2;
                     Ui.clipped(graphics, rowFont, region, rowX + 6, textY, rowWidth - 44, on ? Theme.TEXT : Theme.TEXT_DIM);
-                    Ui.right(graphics, rowFont, tr(on ? "litematicaplus.state.on" : "litematicaplus.state.off").getString(),
-                            rowX + rowWidth - 6, textY, on ? Theme.SUCCESS : Theme.DANGER);
+                    TextMemo memo = on ? this.regionOn : this.regionOff;
+                    String state = memo.stale(null) ? memo.set(tr(on ? "litematicaplus.state.on"
+                            : "litematicaplus.state.off").getString()) : memo.text();
+                    Ui.right(graphics, rowFont, state, rowX + rowWidth - 6, textY, on ? Theme.SUCCESS : Theme.DANGER);
                 })
                 .describe(region -> region)
                 .onPress(region -> manager.toggleRegion(selected, region)));
@@ -228,21 +236,32 @@ final class PlacementsView extends TabView {
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, SchematicPlacement placement, int x, int y,
             int rowWidth, int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
-        String status;
+        String key;
         int color;
+        double progress = 0.0;
         PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
         if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
-            status = tr("litematicaplus.placements.state_failed").getString();
+            key = "litematicaplus.placements.state_failed";
             color = Theme.DANGER;
         } else if (!placement.enabled()) {
-            status = tr("litematicaplus.state.off").getString();
+            key = "litematicaplus.state.off";
             color = Theme.TEXT_DIM;
         } else if (runtime == null || runtime.volume() == null) {
-            status = tr("litematicaplus.placements.state_loading").getString();
+            key = "litematicaplus.placements.state_loading";
             color = Theme.WARNING;
         } else {
-            status = String.format(Locale.ROOT, "%.0f%%", runtime.progress() * 100.0);
-            color = runtime.progress() >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT;
+            key = null;
+            progress = runtime.progress();
+            color = progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT;
+        }
+        TextMemo memo = this.statusText.computeIfAbsent(placement, ignored -> new TextMemo());
+        String status;
+        if (!memo.stale(key, Double.doubleToLongBits(progress), 0L, 0L)) {
+            status = memo.text();
+        } else if (key == null) {
+            status = memo.set(String.format(Locale.ROOT, "%.0f%%", progress * 100.0));
+        } else {
+            status = memo.set(tr(key).getString());
         }
         int statusWidth = rowFont.width(status);
         Ui.clipped(graphics, rowFont, placement.name(), x + 8, textY, rowWidth - statusWidth - 22,

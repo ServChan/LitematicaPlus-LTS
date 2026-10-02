@@ -68,6 +68,19 @@ class SessionStoreTest {
     }
 
     @Test
+    void corruptPrimaryWithoutBackupIsSetAsideBeforeSaving(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("session.json");
+        Files.writeString(file, "{ not json");
+        SessionStore store = new SessionStore(file);
+        store.load();
+        assertFalse(store.readOnly());
+        store.saveBlocking("a", sample());
+        store.saveBlocking("b", sample());
+        assertEquals("{ not json", Files.readString(file.resolveSibling("session.json.corrupt")));
+        assertEquals(1, store.scope("a").placements.size());
+    }
+
+    @Test
     void newerSchemaIsKeptReadOnly(@TempDir Path directory) throws IOException {
         Path file = directory.resolve("session.json");
         String newer = "{\"schemaVersion\": 99, \"scopes\": {\"a\": {\"placements\": []}}}";

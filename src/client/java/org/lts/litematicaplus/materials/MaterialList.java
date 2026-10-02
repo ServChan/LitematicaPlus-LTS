@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.locale.Language;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -33,6 +34,9 @@ import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class MaterialList {
+    private static final Reference2ObjectOpenHashMap<Item, String> NAMES = new Reference2ObjectOpenHashMap<>();
+    private static Language namesLanguage;
+
     public record Entry(Item item, long total, long missing, long available) {
         public long shortfall() {
             return Math.max(0L, this.missing - this.available);
@@ -176,7 +180,8 @@ public final class MaterialList {
         long[] correct = runtime.correctByPalette();
         Reference2LongOpenHashMap<Item> totalByItem = new Reference2LongOpenHashMap<>();
         Reference2LongOpenHashMap<Item> missingByItem = new Reference2LongOpenHashMap<>();
-        for (int i = 1; i < palette.length; i++) {
+        int paletteSize = Math.min(palette.length, totals.length);
+        for (int i = 1; i < paletteSize; i++) {
             long total = totals[i];
             if (total <= 0L) {
                 continue;
@@ -193,22 +198,42 @@ public final class MaterialList {
             Item item = entry.getKey();
             entries.add(new Entry(item, entry.getLongValue(), missingByItem.getLong(item), available.getLong(item)));
         }
-        Reference2ObjectOpenHashMap<Item, String> names = new Reference2ObjectOpenHashMap<>();
-        for (Entry entry : entries) {
-            names.put(entry.item(), new ItemStack(entry.item()).getHoverName().getString());
-        }
-        entries.sort(comparator(sort, names));
+        entries.sort(comparator(sort));
         return entries;
     }
 
-    private static Comparator<Entry> comparator(Sort sort, Reference2ObjectOpenHashMap<Item, String> names) {
-        Comparator<Entry> byName = Comparator.comparing(entry -> names.get(entry.item()));
+    private static Reference2ObjectOpenHashMap<Item, String> names() {
+        Language language = Language.getInstance();
+        if (language != namesLanguage) {
+            NAMES.clear();
+            namesLanguage = language;
+        }
+        return NAMES;
+    }
+
+    static String name(Item item) {
+        return names().computeIfAbsent(item, (Item key) -> new ItemStack(key).getHoverName().getString());
+    }
+
+    private static Comparator<Entry> comparator(Sort sort) {
+        Comparator<Entry> byName = Comparator.comparing((Entry entry) -> name(entry.item()));
         return switch (sort) {
             case TOTAL -> Comparator.comparingLong(Entry::total).reversed().thenComparing(byName);
             case NAME -> byName;
             case SHORTFALL -> Comparator.comparingLong(Entry::shortfall).reversed().thenComparing(byName);
             case MISSING -> Comparator.comparingLong(Entry::missing).reversed().thenComparing(byName);
         };
+    }
+
+    static Reference2LongMap<Item> countTopLevel(Inventory inventory) {
+        Reference2LongOpenHashMap<Item> counts = new Reference2LongOpenHashMap<>();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty()) {
+                counts.addTo(stack.getItem(), stack.getCount());
+            }
+        }
+        return counts;
     }
 
     public static Reference2LongMap<Item> countInventory(Inventory inventory) {

@@ -127,6 +127,11 @@ public final class ToolController {
             Notify.actionBar("litematicaplus.message.no_placement");
             return;
         }
+        if (!PasteController.upToDate(runtime)) {
+            disarm();
+            Notify.actionBar("litematicaplus.message.paste_rebuilding");
+            return;
+        }
         if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.transform() + placement.disabledRegions())) {
             Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
             return;
@@ -181,9 +186,12 @@ public final class ToolController {
     }
 
     public boolean onUse(Minecraft minecraft) {
-        BlockEntityAssist.userInteracted();
         if (!holdingTool(minecraft)) {
-            return EasyPlace.onUse(minecraft);
+            boolean consumed = EasyPlace.onUse(minecraft);
+            if (!consumed) {
+                BlockEntityAssist.userInteracted();
+            }
+            return consumed;
         }
         if (!this.useReleased || this.clickCooldown > 0) {
             return true;

@@ -85,6 +85,58 @@ class SchematicCodecTest {
     }
 
     @Test
+    void growingPaletteIsPackedOnceWithExactWidth() throws IOException {
+        java.util.List<BlockState> states = new java.util.ArrayList<>();
+        for (BlockState state : net.minecraft.world.level.block.Block.BLOCK_STATE_REGISTRY) {
+            if (!state.isAir() && states.size() < 1100) {
+                states.add(state);
+            }
+        }
+        assertEquals(1100, states.size());
+        int sizeX = 37;
+        int sizeY = 3;
+        int sizeZ = 41;
+        RegionBuilder builder = new RegionBuilder("Wide", 0, 0, 0, sizeX, sizeY, sizeZ);
+        int[] expected = new int[sizeX * sizeY * sizeZ];
+        int next = 0;
+        for (int y = 0; y < sizeY; y++) {
+            for (int z = 0; z < sizeZ; z++) {
+                for (int x = 0; x < sizeX; x++) {
+                    int linear = (y * sizeZ + z) * sizeX + x;
+                    if (linear % 7 == 3) {
+                        continue;
+                    }
+                    BlockState state = states.get(next++ % states.size());
+                    builder.set(x, y, z, state);
+                    expected[linear] = states.indexOf(state) + 1;
+                }
+            }
+        }
+        SchematicRegion region = builder.build();
+        int bits = BitPackedArray.bitsFor(states.size() + 1);
+        assertEquals(11, bits);
+        BitPackedArray reference = new BitPackedArray(bits, expected.length);
+        for (int i = 0; i < expected.length; i++) {
+            reference.set(i, expected[i]);
+        }
+        assertEquals(bits, region.states().bits());
+        org.junit.jupiter.api.Assertions.assertArrayEquals(reference.raw(), region.states().raw());
+        Map<String, SchematicRegion> regions = new LinkedHashMap<>();
+        regions.put("Wide", region);
+        Schematic restored = LitematicCodec.read(LitematicCodec.write(new Schematic(new SchematicMetadata(), regions)));
+        SchematicRegion copy = restored.regions().get("Wide");
+        for (int y = 0; y < sizeY; y++) {
+            for (int z = 0; z < sizeZ; z++) {
+                for (int x = 0; x < sizeX; x++) {
+                    int linear = (y * sizeZ + z) * sizeX + x;
+                    BlockState wanted = expected[linear] == 0 ? Blocks.AIR.defaultBlockState() : states.get(expected[linear] - 1);
+                    assertSame(wanted, copy.state(x, y, z));
+                }
+            }
+        }
+    }
+
+    @Test
     void writtenFileUsesTheLitematicLayout() {
         CompoundTag root = LitematicCodec.write(sample());
         assertEquals(LitematicCodec.SCHEMATIC_VERSION, root.getIntOr("Version", 0));
@@ -204,6 +256,24 @@ class SchematicCodecTest {
         assertEquals(Direction.SOUTH, region.state(1, 0, 0).getValue(BlockStateProperties.HORIZONTAL_FACING));
         assertTrue(region.state(0, 0, 1).isAir());
         assertEquals(1L, schematic.metadata().totalBlocks);
+    }
+
+    @Test
+    void spongeVarintDataShorterThanTheVolumeIsRejected() {
+        CompoundTag root = new CompoundTag();
+        root.putShort("Width", (short) 2);
+        root.putShort("Height", (short) 1);
+        root.putShort("Length", (short) 1);
+        root.putInt("Version", 2);
+        CompoundTag palette = new CompoundTag();
+        palette.putInt("minecraft:air", 0);
+        palette.putInt("minecraft:stone", 200);
+        root.put("Palette", palette);
+        root.put("BlockData", new ByteArrayTag(new byte[]{(byte) 0xC8, 0x01}));
+        IOException failure = assertThrows(IOException.class, () -> SpongeCodec.read(root, "sponge"));
+        assertEquals("litematicaplus.error.corrupt", ((org.lts.litematicaplus.util.LocalizedException) failure).key());
+        root.put("BlockData", new ByteArrayTag(new byte[]{0, (byte) 0xC8}));
+        assertThrows(IOException.class, () -> SpongeCodec.read(root, "sponge"));
     }
 
     @Test

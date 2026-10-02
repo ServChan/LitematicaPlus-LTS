@@ -27,6 +27,8 @@ public final class FlatButton extends AbstractButton {
     private BooleanSupplier warning = () -> false;
     private boolean shiftHeld;
     private String index;
+    private final TextMemo label = new TextMemo();
+    private final TextMemo fitted = new TextMemo();
 
     public FlatButton(int x, int y, int width, int height, Component message, Style style, Consumer<FlatButton> action) {
         super(x, y, width, height, message);
@@ -90,7 +92,7 @@ public final class FlatButton extends AbstractButton {
         switch (this.style) {
             case PRIMARY -> {
                 graphics.fill(x, y, x + width, y + height, !this.active ? Theme.SURFACE
-                        : hovered ? 0xFF4A90A2 : Theme.ACCENT_DARK);
+                        : hovered ? Theme.ACCENT_HOVER : Theme.ACCENT_DARK);
                 if (!this.active) {
                     graphics.outline(x, y, width, height, Theme.DIVIDER);
                 }
@@ -110,19 +112,19 @@ public final class FlatButton extends AbstractButton {
                     graphics.fill(x, y, x + width, y + height, Theme.SURFACE_HOVER);
                 }
                 int textX = x + 9;
-                String title = getMessage().getString();
+                String title = label();
                 if (this.index != null && font.width(this.index) + 5 + font.width(title) <= x + width - textX - 6) {
                     graphics.text(font, this.index, textX, textY, on ? Theme.AMBER : Theme.TEXT_DISABLED, false);
                     textX += font.width(this.index) + 5;
                 }
-                graphics.text(font, shorten(font, getMessage().getString(), x + width - textX - 6), textX, textY,
+                graphics.text(font, fit(font, x + width - textX - 6), textX, textY,
                         on ? Theme.TEXT_BRIGHT : hovered ? Theme.TEXT : Theme.TEXT_DIM, false);
             }
             case TOGGLE -> {
                 graphics.fill(x, y, x + width, y + height, hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
                 graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
                 int switchX = x + width - 28;
-                graphics.text(font, shorten(font, getMessage().getString(), switchX - x - 12), x + 8, textY,
+                graphics.text(font, fit(font, switchX - x - 12), x + 8, textY,
                         !this.active ? Theme.TEXT_DISABLED : on ? Theme.TEXT_BRIGHT : Theme.TEXT, false);
                 Blueprint.toggle(graphics, switchX, y + (height - 10) / 2, on, this.active);
             }
@@ -142,8 +144,18 @@ public final class FlatButton extends AbstractButton {
     }
 
     private void centered(GuiGraphicsExtractor graphics, Font font, int x, int width, int y, int color) {
-        String label = shorten(font, getMessage().getString(), width - 8);
-        graphics.text(font, label, x + (width - font.width(label)) / 2, y, color, false);
+        String shown = fit(font, width - 8);
+        graphics.text(font, shown, x + (width - font.width(shown)) / 2, y, color, false);
+    }
+
+    private String label() {
+        Component message = getMessage();
+        return this.label.stale(message) ? this.label.set(message.getString()) : this.label.text();
+    }
+
+    private String fit(Font font, int width) {
+        String text = label();
+        return this.fitted.stale(text, width, 0L, 0L) ? this.fitted.set(shorten(font, text, width)) : this.fitted.text();
     }
 
     public FlatButton withIndex(String value) {

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import java.nio.ByteBuffer;
+import org.lwjgl.system.MemoryUtil;
 
 final class DynamicMesh {
     private final String label;
@@ -11,6 +12,8 @@ final class DynamicMesh {
     private GpuBuffer buffer;
     private int capacity;
     private int vertices;
+    private ByteBuffer shadow;
+    private int uploaded = -1;
 
     DynamicMesh(String label, int vertexSize) {
         this.label = label;
@@ -23,6 +26,11 @@ final class DynamicMesh {
         if (size == 0) {
             return;
         }
+        ByteBuffer data = writer.view();
+        if (this.buffer != null && this.uploaded == size
+                && MemoryUtil.memSlice(this.shadow, 0, size).mismatch(data) < 0) {
+            return;
+        }
         if (this.buffer == null || this.capacity < size) {
             if (this.buffer != null) {
                 this.buffer.close();
@@ -31,8 +39,16 @@ final class DynamicMesh {
             this.buffer = RenderSystem.getDevice().createBuffer(() -> this.label,
                     GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, this.capacity);
         }
-        ByteBuffer data = writer.view();
+        this.uploaded = -1;
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(this.buffer.slice(0L, size), data);
+        if (this.shadow == null || this.shadow.capacity() < size) {
+            if (this.shadow != null) {
+                MemoryUtil.memFree(this.shadow);
+            }
+            this.shadow = MemoryUtil.memAlloc(this.capacity);
+        }
+        MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(this.shadow), size);
+        this.uploaded = size;
     }
 
     void close() {
@@ -40,6 +56,11 @@ final class DynamicMesh {
             this.buffer.close();
             this.buffer = null;
         }
+        if (this.shadow != null) {
+            MemoryUtil.memFree(this.shadow);
+            this.shadow = null;
+        }
+        this.uploaded = -1;
         this.capacity = 0;
         this.vertices = 0;
     }

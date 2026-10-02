@@ -1,7 +1,10 @@
 package org.lts.litematicaplus.placement;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -31,9 +34,15 @@ public final class PlacementManager {
     private static final PlacementManager INSTANCE = new PlacementManager();
 
     private final List<SchematicPlacement> placements = new ArrayList<>();
-    private final Map<String, CompletableFuture<Schematic>> cache = new ConcurrentHashMap<>();
+    private final Map<String, CachedSchematic> cache = new ConcurrentHashMap<>();
     private UUID selected;
     private Runnable changeListener = () -> { };
+
+    private record CachedSchematic(long size, long modified, CompletableFuture<Schematic> result) {
+        boolean matches(long size, long modified) {
+            return this.size == size && this.modified == modified && !this.result.isCompletedExceptionally();
+        }
+    }
 
     private PlacementManager() {
     }
@@ -194,13 +203,13 @@ public final class PlacementManager {
             this.cache.remove(key);
         }
         int generation = placement.markLoading();
-        CompletableFuture<Schematic> future = this.cache.computeIfAbsent(key, ignored -> CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<Schematic> future = CompletableFuture.supplyAsync(() -> {
             try {
-                return SchematicIo.read(path);
+                return fetch(path, key);
             } catch (Exception exception) {
                 throw new CompletionException(exception);
             }
-        }, Workers.io()));
+        }, Workers.io());
         Minecraft minecraft = Minecraft.getInstance();
         future.whenComplete((schematic, failure) -> minecraft.execute(() -> {
             if (!this.placements.contains(placement) || placement.loadGeneration() != generation) {
@@ -209,7 +218,6 @@ public final class PlacementManager {
             if (failure != null || schematic == null) {
                 LitematicaPlusClient.LOGGER.warn("Could not load schematic {}: {}", path,
                         failure == null ? "no data" : String.valueOf(failure.getMessage()));
-                this.cache.remove(key, future);
                 placement.markFailed(Notify.describe(failure));
             } else {
                 placement.markReady(schematic);
@@ -218,6 +226,25 @@ public final class PlacementManager {
             GhostEngine.get().rebuild(placement);
             this.changeListener.run();
         }));
+    }
+
+    private Schematic fetch(Path path, String key) throws IOException {
+        BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+        long size = attributes.size();
+        long modified = attributes.lastModifiedTime().toMillis();
+        CachedSchematic fresh = new CachedSchematic(size, modified, new CompletableFuture<>());
+        CachedSchematic entry = this.cache.compute(key, (ignored, previous) ->
+                previous != null && previous.matches(size, modified) ? previous : fresh);
+        if (entry == fresh) {
+            try {
+                fresh.result().complete(SchematicIo.read(path));
+            } catch (IOException | RuntimeException | Error exception) {
+                this.cache.remove(key, fresh);
+                fresh.result().completeExceptionally(exception);
+                throw exception;
+            }
+        }
+        return entry.result().join();
     }
 
     private static void warnAboutContent(SchematicPlacement placement, Schematic schematic) {

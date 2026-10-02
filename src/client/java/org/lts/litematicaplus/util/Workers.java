@@ -10,10 +10,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class Workers {
     private static final AtomicInteger COUNTER = new AtomicInteger();
+    private static final ThreadLocal<Boolean> WORKER = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private static volatile ThreadPoolExecutor mesh;
     private static volatile ExecutorService io;
     private static volatile ExecutorService writer;
     private static volatile ExecutorService preview;
+    private static volatile ExecutorService save;
+    private static volatile boolean closing;
+    private static ExecutorService closed;
 
     private Workers() {
     }
@@ -67,10 +71,27 @@ public final class Workers {
         ExecutorService current = writer;
         if (current == null || current.isShutdown()) {
             synchronized (Workers.class) {
+                if (closing) {
+                    return closed();
+                }
                 current = writer;
                 if (current == null || current.isShutdown()) {
                     current = Executors.newSingleThreadExecutor(factory("LitematicaPlus-Writer", Thread.NORM_PRIORITY - 1));
                     writer = current;
+                }
+            }
+        }
+        return current;
+    }
+
+    public static ExecutorService save() {
+        ExecutorService current = save;
+        if (current == null || current.isShutdown()) {
+            synchronized (Workers.class) {
+                current = save;
+                if (current == null || current.isShutdown()) {
+                    current = Executors.newSingleThreadExecutor(factory("LitematicaPlus-Save", Thread.NORM_PRIORITY - 1));
+                    save = current;
                 }
             }
         }
@@ -93,6 +114,7 @@ public final class Workers {
 
     public static void shutdown() {
         synchronized (Workers.class) {
+            closing = true;
             if (preview != null) {
                 preview.shutdownNow();
                 preview = null;
@@ -114,12 +136,36 @@ public final class Workers {
                 io.shutdownNow();
                 io = null;
             }
+            if (save != null) {
+                save.shutdown();
+                try {
+                    save.awaitTermination(5L, TimeUnit.SECONDS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+                save = null;
+            }
         }
+    }
+
+    private static ExecutorService closed() {
+        if (closed == null) {
+            closed = Executors.newSingleThreadExecutor(factory("LitematicaPlus-Closed", Thread.NORM_PRIORITY));
+            closed.shutdown();
+        }
+        return closed;
+    }
+
+    public static boolean onWorkerThread() {
+        return WORKER.get();
     }
 
     private static ThreadFactory factory(String prefix, int priority) {
         return runnable -> {
-            Thread thread = new Thread(runnable, prefix + "-" + COUNTER.incrementAndGet());
+            Thread thread = new Thread(() -> {
+                WORKER.set(Boolean.TRUE);
+                runnable.run();
+            }, prefix + "-" + COUNTER.incrementAndGet());
             thread.setDaemon(true);
             thread.setPriority(priority);
             return thread;

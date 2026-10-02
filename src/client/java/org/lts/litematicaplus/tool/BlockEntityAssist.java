@@ -50,6 +50,9 @@ public final class BlockEntityAssist {
     public static void clear() {
         SIGNS.clear();
         crafter = null;
+        crafterOpens = 0;
+        swallowCrafters = 0;
+        swallowUntil = 0L;
     }
 
     private static CompoundTag data(BlockPos pos) {
@@ -112,7 +115,10 @@ public final class BlockEntityAssist {
                 || !player.isWithinBlockInteractionRange(pos, 1.0)) {
             return;
         }
-        if (!TickQueue.worldReady(minecraft)) {
+        if (!TickQueue.worldReady(minecraft) || BreakAssist.busy(minecraft)) {
+            if (attemptsLeft > 1) {
+                TickQueue.after(RETRY_TICKS, () -> openCrafter(minecraft, pos, disabled, attemptsLeft - 1));
+            }
             return;
         }
         crafter = new CrafterJob(pos, disabled, TickQueue.now() + TIMEOUT_TICKS + FollowUps.latencyTicks(minecraft));

@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 import net.fabricmc.loader.api.FabricLoader;
@@ -43,7 +44,10 @@ public final class PreviewService {
     private static final int MAX_ENTRIES = 12;
     private static final int MAX_MODELS = 3;
     private static final int MAX_CACHE_FILES = 400;
-    private static final String ALGORITHM = "litematicaplus-preview-1";
+    private static final int TRIM_EVERY_WRITES = 16;
+    private static final long DRAG_SETTLE_MILLIS = 400L;
+    private static final long RETRY_MILLIS = 30_000L;
+    private static final String ALGORITHM = "litematicaplus-preview-2";
     private static final String SIMPLIFIED_SUFFIX = ".simple.png";
 
     public enum Status {
@@ -93,32 +97,42 @@ public final class PreviewService {
 
     private static final class Work {
         final String key;
-        final Source source;
         final boolean detailed;
         final BlockStateModelSet models;
         final BlockColors colors;
+        final String resources;
+        final int generation;
+        volatile Source source;
         volatile PreviewModel model;
         volatile Request rendered;
         volatile boolean failed;
+        volatile long failedAt;
 
-        Work(String key, Source source, boolean detailed, BlockStateModelSet models, BlockColors colors) {
+        Work(String key, Source source, boolean detailed, BlockStateModelSet models, BlockColors colors,
+                String resources, int generation) {
             this.key = key;
             this.source = source;
             this.detailed = detailed;
             this.models = models;
             this.colors = colors;
+            this.resources = resources;
+            this.generation = generation;
         }
     }
 
     private static final LinkedHashMap<String, Entry> ENTRIES = new LinkedHashMap<>(16, 0.75F, true);
     private static final Map<String, PreviewRaster.View> VIEWS = new HashMap<>();
+    private static final Map<String, Long> DRAGGED_AT = new HashMap<>();
     private static final Map<String, Request> DESIRED = new ConcurrentHashMap<>();
     private static final Set<String> QUEUED = ConcurrentHashMap.newKeySet();
     private static final Map<String, Work> WORK = new ConcurrentHashMap<>();
     private static final List<String> WORK_ORDER = new ArrayList<>();
+    private static final AtomicInteger CACHE_WRITES = new AtomicInteger();
     private static volatile String focus;
+    private static volatile int generation;
     private static int textureCounter;
     private static BlockStateModelSet modelIdentity;
+    private static String resources = "";
 
     private PreviewService() {
     }
@@ -139,6 +153,7 @@ public final class PreviewService {
                 clear();
             }
             modelIdentity = models;
+            resources = resourceFingerprint(minecraft);
         }
         String key = key(source);
         focus = key;
@@ -149,12 +164,51 @@ public final class PreviewService {
             trim();
             DESIRED.put(key, new Request(view(source), FULL_SIZE));
         }
+        settleDrag(key);
         Work work = WORK.get(key);
+        long now = System.currentTimeMillis();
+        if (work != null && work.failed && now - work.failedAt >= RETRY_MILLIS) {
+            retry(work, entry);
+        }
         boolean pending = work == null || !work.failed && !Objects.equals(work.rendered, DESIRED.get(key));
         if (pending) {
             schedule(key, source, LitematicaPlusConfig.current().previewModels, models, minecraft.getBlockColors());
         }
         return entry;
+    }
+
+    private static void settleDrag(String key) {
+        Request desired = DESIRED.get(key);
+        if (desired == null || desired.size() == FULL_SIZE) {
+            return;
+        }
+        Long draggedAt = DRAGGED_AT.get(key);
+        if (draggedAt == null || System.currentTimeMillis() - draggedAt >= DRAG_SETTLE_MILLIS) {
+            DRAGGED_AT.remove(key);
+            DESIRED.put(key, new Request(desired.view(), FULL_SIZE));
+        }
+    }
+
+    private static void retry(Work work, Entry entry) {
+        work.failed = false;
+        work.failedAt = 0L;
+        work.rendered = null;
+        if (entry != null && entry.status == Status.FAILED) {
+            entry.status = Status.LOADING;
+        }
+    }
+
+    public static void retryFailed() {
+        for (Work work : WORK.values()) {
+            if (work.failed) {
+                retry(work, ENTRIES.get(work.key));
+            }
+        }
+        for (Entry entry : ENTRIES.values()) {
+            if (entry.status == Status.FAILED) {
+                entry.status = Status.LOADING;
+            }
+        }
     }
 
     public static PreviewRaster.View view(Source source) {
@@ -164,24 +218,59 @@ public final class PreviewService {
     public static void setView(Source source, PreviewRaster.View view, boolean dragging) {
         String key = key(source);
         VIEWS.put(key, view);
+        if (dragging) {
+            DRAGGED_AT.put(key, System.currentTimeMillis());
+        } else {
+            DRAGGED_AT.remove(key);
+        }
         DESIRED.put(key, new Request(view, dragging ? DRAG_SIZE : FULL_SIZE));
         Minecraft minecraft = Minecraft.getInstance();
         schedule(key, source, LitematicaPlusConfig.current().previewModels,
                 minecraft.getModelManager().getBlockStateModelSet(), minecraft.getBlockColors());
     }
 
+    public static void release() {
+        focus = null;
+        DRAGGED_AT.clear();
+        for (Map.Entry<String, Request> desired : DESIRED.entrySet()) {
+            if (desired.getValue().size() != FULL_SIZE) {
+                desired.setValue(new Request(desired.getValue().view(), FULL_SIZE));
+            }
+        }
+        for (Work work : WORK.values()) {
+            work.model = null;
+            Source source = work.source;
+            if (source != null && source.schematic() != null) {
+                work.source = null;
+            }
+        }
+        synchronized (WORK_ORDER) {
+            WORK_ORDER.clear();
+        }
+    }
+
     public static void clear() {
+        generation++;
         Minecraft minecraft = Minecraft.getInstance();
         for (Entry entry : ENTRIES.values()) {
             release(minecraft, entry);
         }
         ENTRIES.clear();
         DESIRED.clear();
+        DRAGGED_AT.clear();
         WORK.clear();
         synchronized (WORK_ORDER) {
             WORK_ORDER.clear();
         }
         PreviewBuilder.clearTextures();
+    }
+
+    private static String resourceFingerprint(Minecraft minecraft) {
+        try {
+            return String.join(",", minecraft.getResourcePackRepository().getSelectedIds());
+        } catch (RuntimeException exception) {
+            return "";
+        }
     }
 
     private static void trim() {
@@ -192,6 +281,7 @@ public final class PreviewService {
             release(minecraft, eldest.getValue());
             DESIRED.remove(eldest.getKey());
             VIEWS.remove(eldest.getKey());
+            DRAGGED_AT.remove(eldest.getKey());
             WORK.remove(eldest.getKey());
             iterator.remove();
         }
@@ -208,10 +298,14 @@ public final class PreviewService {
 
     private static void schedule(String key, Source source, boolean detailed, BlockStateModelSet models,
             BlockColors colors) {
+        Work work = WORK.computeIfAbsent(key,
+                ignored -> new Work(key, source, detailed, models, colors, resources, generation));
+        if (work.source == null) {
+            work.source = source;
+        }
         if (!QUEUED.add(key)) {
             return;
         }
-        WORK.computeIfAbsent(key, ignored -> new Work(key, source, detailed, models, colors));
         try {
             Workers.preview().execute(() -> pump(key));
         } catch (RejectedExecutionException exception) {
@@ -226,44 +320,51 @@ public final class PreviewService {
         if (work == null || desired == null || work.failed || desired.equals(work.rendered)) {
             return;
         }
-        BooleanSupplier cancelled = () -> !key.equals(focus) || Thread.currentThread().isInterrupted();
+        Source source = work.source;
+        if (source == null) {
+            return;
+        }
+        BooleanSupplier cancelled = () -> !key.equals(focus) || work.generation != generation
+                || Thread.currentThread().isInterrupted();
         if (cancelled.getAsBoolean()) {
             return;
         }
         boolean defaultView = desired.view().equals(PreviewRaster.View.DEFAULT) && desired.size() == FULL_SIZE;
-        Path cacheFile = work.source.file() == null ? null : cacheFile(work);
+        Path cacheFile = source.file() == null ? null : cacheFile(work, source);
         try {
-            if (work.model == null) {
+            PreviewModel model = work.model;
+            if (model == null) {
                 if (defaultView && cacheFile != null) {
                     if (publishCached(work, desired, cacheFile, false) || publishCached(work, desired,
                             simplifiedVariant(cacheFile), true)) {
                         return;
                     }
                 }
-                Schematic schematic = work.source.schematic() != null ? work.source.schematic()
-                        : SchematicIo.read(work.source.file());
-                work.model = PreviewBuilder.build(schematic, work.models, work.colors, work.detailed, cancelled);
+                Schematic schematic = source.schematic() != null ? source.schematic() : SchematicIo.read(source.file());
+                model = PreviewBuilder.build(schematic, work.models, work.colors, work.detailed, cancelled);
+                work.model = model;
                 remember(work);
-                if (work.model.isEmpty()) {
+                if (model.isEmpty()) {
                     work.rendered = desired;
-                    publishStatus(key, Status.EMPTY);
+                    publishStatus(work, Status.EMPTY);
                     return;
                 }
             }
-            int[] argb = PreviewRaster.render(work.model, desired.size(), desired.view(), cancelled);
+            int[] argb = PreviewRaster.render(model, desired.size(), desired.view(), cancelled);
             int[] abgr = toAbgr(argb);
             work.rendered = desired;
-            publish(key, abgr, desired.size(), work.model.simplified());
-            if (defaultView && cacheFile != null) {
-                writeCache(work.model.simplified() ? simplifiedVariant(cacheFile) : cacheFile, abgr, desired.size());
+            publish(work, abgr, desired.size(), model.simplified());
+            if (defaultView && cacheFile != null && work.generation == generation) {
+                writeCache(model.simplified() ? simplifiedVariant(cacheFile) : cacheFile, abgr, desired.size());
             }
         } catch (CancellationException exception) {
             return;
         } catch (IOException | RuntimeException | OutOfMemoryError exception) {
             LitematicaPlusClient.LOGGER.warn("Could not build the schematic preview for {}", key, exception);
-            work.failed = true;
             work.model = null;
-            publishStatus(key, Status.FAILED);
+            work.failedAt = System.currentTimeMillis();
+            work.failed = true;
+            publishStatus(work, Status.FAILED);
             return;
         }
         Request latest = DESIRED.get(key);
@@ -286,7 +387,7 @@ public final class PreviewService {
             }
             int[] abgr = image.getPixelsABGR();
             work.rendered = desired;
-            publish(work.key, abgr, desired.size(), simplified);
+            publish(work, abgr, desired.size(), simplified);
             return true;
         } catch (IOException | RuntimeException exception) {
             return false;
@@ -301,7 +402,6 @@ public final class PreviewService {
                 Work old = WORK.get(WORK_ORDER.remove(0));
                 if (old != null) {
                     old.model = null;
-                    old.rendered = null;
                 }
             }
         }
@@ -316,19 +416,25 @@ public final class PreviewService {
         return result;
     }
 
-    private static void publishStatus(String key, Status status) {
+    private static void publishStatus(Work work, Status status) {
         Minecraft.getInstance().execute(() -> {
-            Entry entry = ENTRIES.get(key);
+            if (work.generation != generation) {
+                return;
+            }
+            Entry entry = ENTRIES.get(work.key);
             if (entry != null) {
                 entry.status = status;
             }
         });
     }
 
-    private static void publish(String key, int[] abgr, int size, boolean simplified) {
+    private static void publish(Work work, int[] abgr, int size, boolean simplified) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
-            Entry entry = ENTRIES.get(key);
+            if (work.generation != generation) {
+                return;
+            }
+            Entry entry = ENTRIES.get(work.key);
             if (entry == null) {
                 return;
             }
@@ -356,6 +462,9 @@ public final class PreviewService {
                 LitematicaPlusClient.LOGGER.warn("Could not upload the schematic preview", exception);
                 release(minecraft, entry);
                 entry.status = Status.FAILED;
+                work.rendered = null;
+                work.failedAt = System.currentTimeMillis();
+                work.failed = true;
             }
         });
     }
@@ -364,9 +473,9 @@ public final class PreviewService {
         return FabricLoader.getInstance().getConfigDir().resolve("litematicaplus").resolve("previews");
     }
 
-    private static Path cacheFile(Work work) {
-        String input = ALGORITHM + '\n' + FULL_SIZE + '\n' + work.detailed + '\n' + work.source.file() + '\n'
-                + work.source.size() + '\n' + work.source.modified();
+    private static Path cacheFile(Work work, Source source) {
+        String input = ALGORITHM + '\n' + FULL_SIZE + '\n' + work.detailed + '\n' + source.file() + '\n'
+                + source.size() + '\n' + source.modified() + '\n' + work.resources;
         try {
             String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(input.getBytes(StandardCharsets.UTF_8)));
@@ -388,7 +497,9 @@ public final class PreviewService {
             MemoryUtil.memIntBuffer(image.getPointer(), abgr.length).put(abgr);
             image.writeToFile(temp);
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-            trimCache(file.getParent());
+            if (CACHE_WRITES.getAndIncrement() % TRIM_EVERY_WRITES == 0) {
+                trimCache(file.getParent());
+            }
         } catch (IOException | RuntimeException exception) {
             LitematicaPlusClient.LOGGER.debug("Could not write the preview cache {}", file, exception);
             try {

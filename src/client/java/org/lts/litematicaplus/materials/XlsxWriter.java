@@ -249,12 +249,14 @@ public final class XlsxWriter {
     }
 
     static String sheetName(String wanted, List<Sheet> existing) {
-        String cleaned = wanted == null ? "" : wanted.replaceAll("[\\\\/?*\\[\\]:]", " ").strip();
+        String cleaned = wanted == null ? "" : wanted.replaceAll("[\\\\/?*\\[\\]:]", " ")
+                .replaceAll("^['\\s]+|['\\s]+$", "");
         if (cleaned.isEmpty()) {
             cleaned = "Sheet";
         }
         if (cleaned.length() > 31) {
-            cleaned = cleaned.substring(0, 31).strip();
+            int end = Character.isHighSurrogate(cleaned.charAt(30)) ? 30 : 31;
+            cleaned = cleaned.substring(0, end).replaceAll("['\\s]+$", "");
         }
         String candidate = cleaned;
         int suffix = 2;

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
@@ -13,6 +14,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.SessionStore;
+import org.lts.litematicaplus.preview.PreviewService;
 
 public final class HubScreen extends Screen {
     public enum Tab {
@@ -44,6 +46,8 @@ public final class HubScreen extends Screen {
     private int sidebarWidth = Theme.SIDEBAR_WIDTH;
     private List<GuiEventListener> previousChildren = List.of();
     private boolean refreshPending;
+    private final TextMemo headingText = new TextMemo();
+    private final TextMemo sheetText = new TextMemo();
 
     public HubScreen(Screen parent) {
         this(parent, lastTab);
@@ -72,6 +76,7 @@ public final class HubScreen extends Screen {
         if (this.view != null) {
             this.view.closed();
         }
+        PreviewService.release();
         this.tab = next;
         lastTab = next;
         this.view = null;
@@ -101,11 +106,41 @@ public final class HubScreen extends Screen {
             return;
         }
         List<? extends GuiEventListener> current = children();
-        if (index < current.size() && current.get(index).getClass() == old.getClass()) {
-            setFocused(current.get(index));
-        } else {
-            setFocused(null);
+        if (current.size() == this.previousChildren.size()) {
+            if (index < current.size() && current.get(index).getClass() == old.getClass()) {
+                setFocused(current.get(index));
+            } else {
+                setFocused(null);
+            }
+            return;
         }
+        GuiEventListener match = null;
+        if (old instanceof AbstractWidget widget && countSame(this.previousChildren, widget) == 1) {
+            String label = widget.getMessage().getString();
+            for (GuiEventListener candidate : current) {
+                if (candidate.getClass() == widget.getClass() && candidate instanceof AbstractWidget other
+                        && other.getMessage().getString().equals(label)) {
+                    if (match != null) {
+                        match = null;
+                        break;
+                    }
+                    match = candidate;
+                }
+            }
+        }
+        setFocused(match);
+    }
+
+    private static int countSame(List<? extends GuiEventListener> children, AbstractWidget widget) {
+        String label = widget.getMessage().getString();
+        int count = 0;
+        for (GuiEventListener candidate : children) {
+            if (candidate.getClass() == widget.getClass() && candidate instanceof AbstractWidget other
+                    && other.getMessage().getString().equals(label)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     @Override
@@ -175,6 +210,7 @@ public final class HubScreen extends Screen {
         if (this.view != null) {
             this.view.closed();
         }
+        PreviewService.release();
         super.removed();
     }
 
@@ -204,11 +240,12 @@ public final class HubScreen extends Screen {
         graphics.fill(this.sidebarWidth, Theme.HEADER_HEIGHT, this.sidebarWidth + 1, this.height, Theme.DIVIDER);
         graphics.outline(10, 9, 11, 11, Theme.BORDER_STRONG);
         graphics.fill(14, 13, 17, 16, Theme.AMBER);
-        String heading = this.title.getString().toUpperCase(java.util.Locale.ROOT);
+        String heading = this.headingText.stale(this.title) ? this.headingText.set(
+                this.title.getString().toUpperCase(java.util.Locale.ROOT)) : this.headingText.text();
         graphics.text(this.font, heading, 27, 11, Theme.TEXT_BRIGHT, false);
-        Component sheet = Component.translatable("litematicaplus.hub.sheet",
+        String sheet = this.sheetText.stale(this.tab) ? this.sheetText.set(Component.translatable("litematicaplus.hub.sheet",
                 String.format(java.util.Locale.ROOT, "%02d", this.tab.ordinal() + 1),
-                String.format(java.util.Locale.ROOT, "%02d", Tab.values().length));
+                String.format(java.util.Locale.ROOT, "%02d", Tab.values().length)).getString()) : this.sheetText.text();
         int sheetX = 27 + this.font.width(heading) + 10;
         graphics.fill(sheetX - 5, 9, sheetX - 4, 21, Theme.DIVIDER);
         graphics.text(this.font, sheet, sheetX, 11, Theme.TEXT_DIM, false);

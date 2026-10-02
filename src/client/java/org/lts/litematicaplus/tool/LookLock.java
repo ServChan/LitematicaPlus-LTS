@@ -5,6 +5,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 import net.minecraft.world.entity.player.Input;
+import org.lts.litematicaplus.mixin.LocalPlayerAccessor;
 
 public final class LookLock {
     private static final int MAX_TICKS = 30;
@@ -12,7 +13,7 @@ public final class LookLock {
     private static float yaw;
     private static float pitch;
     private static long expiryTick;
-    private static boolean swapped;
+    private static LocalPlayer swapped;
     private static float realYaw;
     private static float realPitch;
 
@@ -38,6 +39,7 @@ public final class LookLock {
     }
 
     public static void beforeSendPosition(LocalPlayer player) {
+        afterSendPosition(player);
         if (!locked()) {
             return;
         }
@@ -45,12 +47,13 @@ public final class LookLock {
         realPitch = player.getXRot();
         player.setYRot(yaw);
         player.setXRot(pitch);
-        swapped = true;
+        swapped = player;
     }
 
     public static void afterSendPosition(LocalPlayer player) {
-        if (swapped) {
-            swapped = false;
+        LocalPlayer owner = swapped;
+        swapped = null;
+        if (owner == player) {
             player.setYRot(realYaw);
             player.setXRot(realPitch);
         }
@@ -58,10 +61,20 @@ public final class LookLock {
 
     public static void sendRotation(Minecraft minecraft, float sendYaw, float sendPitch) {
         LocalPlayer player = minecraft.player;
-        if (player != null) {
-            player.connection.send(new ServerboundMovePlayerPacket.Rot(sendYaw, sendPitch, player.onGround(),
-                    player.horizontalCollision));
+        if (player == null) {
+            return;
         }
+        LocalPlayerAccessor last = (LocalPlayerAccessor) player;
+        if (last.litematicaplus$getYRotLast() == sendYaw && last.litematicaplus$getXRotLast() == sendPitch) {
+            return;
+        }
+        boolean onGround = player.onGround();
+        boolean collision = player.horizontalCollision;
+        player.connection.send(new ServerboundMovePlayerPacket.Rot(sendYaw, sendPitch, onGround, collision));
+        last.litematicaplus$setYRotLast(sendYaw);
+        last.litematicaplus$setXRotLast(sendPitch);
+        last.litematicaplus$setLastOnGround(onGround);
+        last.litematicaplus$setLastHorizontalCollision(collision);
     }
 
     public static void sendRealRotation(Minecraft minecraft) {

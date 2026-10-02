@@ -1,22 +1,26 @@
 package org.lts.litematicaplus.render;
 
-import java.lang.reflect.Method;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import net.fabricmc.loader.api.FabricLoader;
 
 public final class SectionReady {
     private static final String RENDERER = "net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer";
-    private static final Method INSTANCE = resolve("instanceNullable");
-    private static final Method READY = resolve("isSectionReady", int.class, int.class, int.class);
+    private static final MethodHandle INSTANCE = resolve("instanceNullable", MethodType.methodType(Object.class));
+    private static final MethodHandle READY = resolve("isSectionReady",
+            MethodType.methodType(boolean.class, Object.class, int.class, int.class, int.class), int.class, int.class,
+            int.class);
 
     private SectionReady() {
     }
 
-    private static Method resolve(String name, Class<?>... parameters) {
+    private static MethodHandle resolve(String name, MethodType type, Class<?>... parameters) {
         if (!FabricLoader.getInstance().isModLoaded("sodium")) {
             return null;
         }
         try {
-            return Class.forName(RENDERER).getMethod(name, parameters);
+            return MethodHandles.publicLookup().unreflect(Class.forName(RENDERER).getMethod(name, parameters)).asType(type);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             return null;
         }
@@ -26,15 +30,35 @@ public final class SectionReady {
         return INSTANCE != null && READY != null;
     }
 
-    public static boolean ready(int sectionX, int sectionY, int sectionZ) {
+    public static Object renderer() {
         if (INSTANCE == null || READY == null) {
+            return null;
+        }
+        try {
+            return (Object) INSTANCE.invokeExact();
+        } catch (Throwable exception) {
+            if (exception instanceof VirtualMachineError error) {
+                throw error;
+            }
+            return null;
+        }
+    }
+
+    public static boolean ready(Object renderer, int sectionX, int sectionY, int sectionZ) {
+        if (renderer == null || READY == null) {
             return true;
         }
         try {
-            Object renderer = INSTANCE.invoke(null);
-            return renderer == null || Boolean.TRUE.equals(READY.invoke(renderer, sectionX, sectionY, sectionZ));
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            return (boolean) READY.invokeExact(renderer, sectionX, sectionY, sectionZ);
+        } catch (Throwable exception) {
+            if (exception instanceof VirtualMachineError error) {
+                throw error;
+            }
             return true;
         }
+    }
+
+    public static boolean ready(int sectionX, int sectionY, int sectionZ) {
+        return ready(renderer(), sectionX, sectionY, sectionZ);
     }
 }

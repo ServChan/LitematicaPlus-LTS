@@ -183,7 +183,7 @@ public final class LitematicCodec {
             palette.add(BlockStateNbt.write(state));
         }
         tag.put("BlockStatePalette", palette);
-        tag.putLongArray("BlockStates", region.states().raw().clone());
+        tag.putLongArray("BlockStates", region.states().raw());
         ListTag tiles = new ListTag();
         for (Long2ObjectMap.Entry<CompoundTag> entry : region.blockEntities().long2ObjectEntrySet()) {
             CompoundTag tile = entry.getValue().copy();

@@ -5,7 +5,10 @@ import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DynamicGpuData;
 import net.minecraft.core.BlockPos;
@@ -16,6 +19,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
+import org.lts.litematicaplus.placement.PlacementTransform;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.selection.AreaBox;
@@ -46,8 +50,27 @@ public final class BoxRenderer {
     private static final DynamicMesh XRAY_FILL_MESH = new DynamicMesh("LitematicaPlus focus fills", 16);
     private static BlockPos focus;
     private static int focusColor = 0xFFFFFFFF;
+    private static Map<SchematicPlacement, RegionCache> regionCache = new IdentityHashMap<>();
+    private static Map<SchematicPlacement, RegionCache> nextRegionCache = new IdentityHashMap<>();
+
+    private record RegionCache(Schematic schematic, PlacementTransform transform, Set<String> disabled,
+            List<PlacementVolume.RegionBox> boxes) {
+    }
 
     private BoxRenderer() {
+    }
+
+    private static List<PlacementVolume.RegionBox> regionBoxes(SchematicPlacement placement, Schematic schematic) {
+        PlacementTransform transform = placement.transform();
+        Set<String> disabled = placement.disabledRegions();
+        RegionCache cached = regionCache.get(placement);
+        if (cached == null || cached.schematic() != schematic || !cached.transform().equals(transform)
+                || !cached.disabled().equals(disabled)) {
+            cached = new RegionCache(schematic, transform, Set.copyOf(disabled),
+                    PlacementVolume.regionBoxes(schematic, transform, disabled));
+        }
+        nextRegionCache.put(placement, cached);
+        return cached.boxes();
     }
 
     public static void setFocus(BlockPos pos, int color) {
@@ -82,8 +105,7 @@ public final class BoxRenderer {
                 }
                 boolean active = placement == selected;
                 int color = placement.locked() ? PLACEMENT_LOCKED_COLOR : active ? PLACEMENT_SELECTED_COLOR : PLACEMENT_COLOR;
-                for (PlacementVolume.RegionBox region : PlacementVolume.regionBoxes(schematic, placement.transform(),
-                        placement.disabledRegions())) {
+                for (PlacementVolume.RegionBox region : regionBoxes(placement, schematic)) {
                     if (!near(camera, region.minX(), region.minY(), region.minZ(), region.maxX(), region.maxY(),
                             region.maxZ())) {
                         continue;
@@ -125,6 +147,10 @@ public final class BoxRenderer {
                 corner(camera, area.corner2(), CORNER_SECOND_COLOR);
             }
         }
+        Map<SchematicPlacement, RegionCache> used = regionCache;
+        regionCache = nextRegionCache;
+        nextRegionCache = used;
+        used.clear();
         LINE_MESH.upload(LINES);
         FILL_MESH.upload(FILLS);
         XRAY_LINE_MESH.upload(XRAY_LINES);

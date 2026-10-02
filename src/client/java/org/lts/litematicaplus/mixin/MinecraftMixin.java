@@ -20,7 +20,9 @@ public abstract class MinecraftMixin {
         Minecraft minecraft = (Minecraft) (Object) this;
         if (minecraft.player != null && ToolController.get().onAttack(minecraft)) {
             cir.setReturnValue(false);
+            return;
         }
+        BreakAssist.yieldTo(minecraft);
     }
 
     @Inject(method = "continueAttack", at = @At("HEAD"), cancellable = true)
@@ -30,6 +32,8 @@ public abstract class MinecraftMixin {
             ci.cancel();
         } else if (!down && BreakAssist.active()) {
             ci.cancel();
+        } else if (down && minecraft.player != null) {
+            BreakAssist.yieldTo(minecraft);
         }
     }
 

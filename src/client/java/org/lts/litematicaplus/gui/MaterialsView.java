@@ -3,7 +3,9 @@ package org.lts.litematicaplus.gui;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
@@ -25,6 +27,9 @@ import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.util.Notify;
 
 final class MaterialsView extends TabView {
+    private record RowText(String available, String missing, String total, String name) {
+    }
+
     private static MaterialList.Sort sort = MaterialList.Sort.MISSING;
     private static boolean hideCompleted = true;
 
@@ -38,6 +43,8 @@ final class MaterialsView extends TabView {
     private boolean exporting;
     private Component status;
     private int statusTicks;
+    private final Map<MaterialList.Entry, RowText> rowText = new IdentityHashMap<>();
+    private final TextMemo[] headers = {new TextMemo(), new TextMemo(), new TextMemo()};
 
     MaterialsView(HubScreen screen) {
         super(screen);
@@ -121,6 +128,7 @@ final class MaterialsView extends TabView {
         }
         this.totalMissing = missing;
         this.entries = shown;
+        this.rowText.clear();
         this.list.setItems(shown);
     }
 
@@ -221,17 +229,21 @@ final class MaterialsView extends TabView {
         graphics.fakeItem(stack, x + 5, y + 3);
         int textY = y + (rowHeight - 8) / 2;
         int right = x + rowWidth - 6;
-        int stackSize = stack.getMaxStackSize();
         boolean done = entry.missing() <= 0L;
         boolean enough = entry.available() >= entry.missing();
-        Ui.right(graphics, rowFont, Long.toString(entry.available()), right, textY,
+        RowText text = this.rowText.computeIfAbsent(entry, ignored -> rowText(entry, stack, done));
+        Ui.right(graphics, rowFont, text.available(), right, textY,
                 done ? Theme.TEXT_DIM : enough ? Theme.SUCCESS : Theme.WARNING);
-        Ui.right(graphics, rowFont, done ? tr("litematicaplus.materials.done").getString()
-                : compact(entry.missing(), stackSize), right - this.columnWidth, textY, done ? Theme.SUCCESS : Theme.TEXT_BRIGHT);
-        Ui.right(graphics, rowFont, Long.toString(entry.total()), right - this.columnWidth * 2 - 10, textY, Theme.TEXT_DIM);
+        Ui.right(graphics, rowFont, text.missing(), right - this.columnWidth, textY, done ? Theme.SUCCESS : Theme.TEXT_BRIGHT);
+        Ui.right(graphics, rowFont, text.total(), right - this.columnWidth * 2 - 10, textY, Theme.TEXT_DIM);
         int nameWidth = rowWidth - 30 - this.columnWidth * 3 - 16;
-        Ui.clipped(graphics, rowFont, stack.getHoverName().getString(), x + 26, textY, nameWidth,
-                done ? Theme.TEXT_DIM : Theme.TEXT);
+        Ui.clipped(graphics, rowFont, text.name(), x + 26, textY, nameWidth, done ? Theme.TEXT_DIM : Theme.TEXT);
+    }
+
+    private RowText rowText(MaterialList.Entry entry, ItemStack stack, boolean done) {
+        return new RowText(Long.toString(entry.available()), done ? tr("litematicaplus.materials.done").getString()
+                : compact(entry.missing(), stack.getMaxStackSize()), Long.toString(entry.total()),
+                stack.getHoverName().getString());
     }
 
     private String compact(long count, int stackSize) {
@@ -255,10 +267,15 @@ final class MaterialsView extends TabView {
         int right = this.left + this.width - 7 - (this.list != null && this.list.items().size() * Theme.ROW_HEIGHT
                 > this.list.getHeight() ? 5 : 0);
         graphics.text(this.font, tr("litematicaplus.materials.column_item"), this.left + 27, headerY, Theme.ACCENT, false);
-        Ui.right(graphics, this.font, tr("litematicaplus.materials.column_have").getString(), right, headerY, Theme.ACCENT);
-        Ui.right(graphics, this.font, tr("litematicaplus.materials.column_missing").getString(), right - this.columnWidth,
+        Ui.right(graphics, this.font, header(0, "litematicaplus.materials.column_have"), right, headerY, Theme.ACCENT);
+        Ui.right(graphics, this.font, header(1, "litematicaplus.materials.column_missing"), right - this.columnWidth,
                 headerY, Theme.ACCENT);
-        Ui.right(graphics, this.font, tr("litematicaplus.materials.column_total").getString(),
+        Ui.right(graphics, this.font, header(2, "litematicaplus.materials.column_total"),
                 right - this.columnWidth * 2 - 10, headerY, Theme.ACCENT);
+    }
+
+    private String header(int index, String key) {
+        TextMemo memo = this.headers[index];
+        return memo.stale(key) ? memo.set(tr(key).getString()) : memo.text();
     }
 }

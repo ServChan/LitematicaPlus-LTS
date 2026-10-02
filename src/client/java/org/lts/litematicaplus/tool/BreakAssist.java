@@ -18,7 +18,10 @@ import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
@@ -80,11 +83,39 @@ public final class BreakAssist {
         return !CLEARING.isEmpty();
     }
 
+    public static boolean busy(Minecraft minecraft) {
+        if (active()) {
+            return true;
+        }
+        return minecraft.gameMode != null && minecraft.gameMode.isDestroying() && minecraft.options.keyAttack.isDown();
+    }
+
+    public static void yieldTo(Minecraft minecraft) {
+        if (CLEARING.isEmpty()) {
+            return;
+        }
+        boolean same = minecraft.hitResult instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK
+                && CLEARING.contains(hit.getBlockPos());
+        CLEARING.clear();
+        bypassGuard = false;
+        if (!same && minecraft.gameMode != null) {
+            minecraft.gameMode.stopDestroyBlock();
+        }
+    }
+
     public static void start(Minecraft minecraft, BlockPos pos) {
         BlockPos key = pos.immutable();
         if (!CLEARING.isEmpty() || !CLEARING.add(key)) {
             return;
         }
+        try {
+            begin(minecraft, key);
+        } catch (RuntimeException exception) {
+            abort(minecraft, key, exception);
+        }
+    }
+
+    private static void begin(Minecraft minecraft, BlockPos key) {
         LocalPlayer player = minecraft.player;
         ClientLevel level = minecraft.level;
         BlockState world = level.getBlockState(key);
@@ -113,11 +144,35 @@ public final class BreakAssist {
         }
     }
 
+    private static void abort(Minecraft minecraft, BlockPos pos, RuntimeException exception) {
+        CLEARING.remove(pos);
+        bypassGuard = false;
+        LitematicaPlusClient.LOGGER.error("Clearing a wrong block failed", exception);
+        if (minecraft.gameMode != null) {
+            try {
+                minecraft.gameMode.stopDestroyBlock();
+            } catch (RuntimeException stopFailure) {
+                LitematicaPlusClient.LOGGER.debug("Could not stop breaking after a failure", stopFailure);
+            }
+        }
+    }
+
     public static boolean bypassGuard() {
         return bypassGuard;
     }
 
     private static void step(Minecraft minecraft, BlockPos pos, Direction face, int ticksLeft) {
+        if (!CLEARING.contains(pos)) {
+            return;
+        }
+        try {
+            advance(minecraft, pos, face, ticksLeft);
+        } catch (RuntimeException exception) {
+            abort(minecraft, pos, exception);
+        }
+    }
+
+    private static void advance(Minecraft minecraft, BlockPos pos, Direction face, int ticksLeft) {
         ClientLevel level = minecraft.level;
         LocalPlayer player = minecraft.player;
         if (level == null || player == null || minecraft.gameMode == null) {
@@ -150,6 +205,7 @@ public final class BreakAssist {
         }
         player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getInteractAnimation(), false);
         if (!TickQueue.after(1, () -> step(minecraft, pos, face, ticksLeft - 1))) {
+            minecraft.gameMode.stopDestroyBlock();
             CLEARING.remove(pos);
         }
     }

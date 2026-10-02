@@ -67,13 +67,57 @@ public final class LodDepth {
     private static int inverseLocation;
     private static int targetLocation;
     private static int modeLocation;
+    private static final int MAX_RETRIES = 3;
+    private static final Matrix4f INVERSE = new Matrix4f();
     private static boolean failed;
+    private static int retries;
+    private static Object contextLevel;
+    private static int contextWidth = -1;
+    private static int contextHeight = -1;
 
     private LodDepth() {
     }
 
     public static boolean failed() {
         return failed;
+    }
+
+    public static void track(Object level, RenderTarget target) {
+        GpuTexture depth = target.getDepthTexture();
+        int width = depth == null ? -1 : depth.getWidth(0);
+        int height = depth == null ? -1 : depth.getHeight(0);
+        boolean levelChanged = level != contextLevel;
+        if (!levelChanged && width == contextWidth && height == contextHeight) {
+            return;
+        }
+        contextLevel = level;
+        contextWidth = width;
+        contextHeight = height;
+        if (levelChanged) {
+            close();
+        }
+        if (failed && retries < MAX_RETRIES) {
+            retries++;
+            failed = false;
+            LitematicaPlusClient.LOGGER.warn("Retrying the Voxy terrain depth merge after a world or window change ({} of {})",
+                    retries, MAX_RETRIES);
+        }
+    }
+
+    public static void close() {
+        releaseTarget();
+        if (program != 0) {
+            GL20C.glDeleteProgram(program);
+            program = 0;
+        }
+        if (vertexArray != 0) {
+            GL30C.glDeleteVertexArrays(vertexArray);
+            vertexArray = 0;
+        }
+        if (sampler != 0) {
+            GL33C.glDeleteSamplers(sampler);
+            sampler = 0;
+        }
     }
 
     public static GpuTextureView merge(RenderTarget target, VoxyLod.Frame frame) {
@@ -199,7 +243,7 @@ public final class LodDepth {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer matrix = stack.mallocFloat(16);
             GL41C.glProgramUniformMatrix4fv(program, inverseLocation, false,
-                    new Matrix4f(frame.projectionView()).invert().get(matrix));
+                    INVERSE.set(frame.projectionView()).invert().get(matrix));
             GL41C.glProgramUniformMatrix4fv(program, targetLocation, false, target.get(matrix));
             GL41C.glProgramUniform2f(program, modeLocation, zeroToOne ? 1.0F : 0.0F, reverse ? 1.0F : 0.0F);
             IntBuffer viewport = stack.mallocInt(4);
@@ -215,41 +259,44 @@ public final class LodDepth {
             int previousTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
             int previousSampler = GL11C.glGetInteger(GL33C.GL_SAMPLER_BINDING);
             int depthFunction = reverse ? GL11C.GL_GEQUAL : GL11C.GL_LEQUAL;
-            GlStateManager._glBindFramebuffer(GL30C.GL_FRAMEBUFFER, framebuffer);
-            GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, framebuffer);
-            GlStateManager._viewport(0, 0, width, height);
-            GlStateManager._disableScissorTest();
-            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
-            GlStateManager._disableCull();
-            GL11C.glDisable(GL11C.GL_CULL_FACE);
-            GL11C.glDisable(GL11C.GL_STENCIL_TEST);
-            GlStateManager._enableDepthTest();
-            GL11C.glEnable(GL11C.GL_DEPTH_TEST);
-            GlStateManager._depthFunc(depthFunction);
-            GL11C.glDepthFunc(depthFunction);
-            GlStateManager._depthMask(true);
-            GL11C.glDepthMask(true);
-            GlStateManager._glUseProgram(program);
-            GlStateManager._bindTexture(frame.depthTexture());
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, frame.depthTexture());
-            GL33C.glBindSampler(0, sampler);
-            GlStateManager._glBindVertexArray(vertexArray);
-            GlStateManager._drawArrays(GL11C.GL_TRIANGLES, 0, 3);
-            GL33C.glBindSampler(0, previousSampler);
-            GlStateManager._bindTexture(previousTexture);
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, previousTexture);
-            GlStateManager._activeTexture(previousUnit);
-            GL13C.glActiveTexture(previousUnit);
-            GlStateManager._glBindVertexArray(previousArray);
-            GlStateManager._glUseProgram(previousProgram);
-            if (stencil) {
-                GL11C.glEnable(GL11C.GL_STENCIL_TEST);
+            try {
+                GlStateManager._glBindFramebuffer(GL30C.GL_FRAMEBUFFER, framebuffer);
+                GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, framebuffer);
+                GlStateManager._viewport(0, 0, width, height);
+                GlStateManager._disableScissorTest();
+                GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+                GlStateManager._disableCull();
+                GL11C.glDisable(GL11C.GL_CULL_FACE);
+                GL11C.glDisable(GL11C.GL_STENCIL_TEST);
+                GlStateManager._enableDepthTest();
+                GL11C.glEnable(GL11C.GL_DEPTH_TEST);
+                GlStateManager._depthFunc(depthFunction);
+                GL11C.glDepthFunc(depthFunction);
+                GlStateManager._depthMask(true);
+                GL11C.glDepthMask(true);
+                GlStateManager._glUseProgram(program);
+                GlStateManager._bindTexture(frame.depthTexture());
+                GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, frame.depthTexture());
+                GL33C.glBindSampler(0, sampler);
+                GlStateManager._glBindVertexArray(vertexArray);
+                GlStateManager._drawArrays(GL11C.GL_TRIANGLES, 0, 3);
+            } finally {
+                GL33C.glBindSampler(0, previousSampler);
+                GlStateManager._bindTexture(previousTexture);
+                GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, previousTexture);
+                GlStateManager._activeTexture(previousUnit);
+                GL13C.glActiveTexture(previousUnit);
+                GlStateManager._glBindVertexArray(previousArray);
+                GlStateManager._glUseProgram(previousProgram);
+                if (stencil) {
+                    GL11C.glEnable(GL11C.GL_STENCIL_TEST);
+                }
+                GlStateManager._glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, previousDraw);
+                GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, previousDraw);
+                GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, previousRead);
+                GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, previousRead);
+                GlStateManager._viewport(viewport.get(0), viewport.get(1), viewport.get(2), viewport.get(3));
             }
-            GlStateManager._glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, previousDraw);
-            GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, previousDraw);
-            GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, previousRead);
-            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, previousRead);
-            GlStateManager._viewport(viewport.get(0), viewport.get(1), viewport.get(2), viewport.get(3));
         }
     }
 }

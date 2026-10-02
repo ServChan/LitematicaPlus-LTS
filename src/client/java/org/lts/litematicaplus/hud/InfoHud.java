@@ -4,16 +4,20 @@ import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.gui.Blueprint;
+import org.lts.litematicaplus.gui.TextMemo;
 import org.lts.litematicaplus.gui.Theme;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -27,6 +31,7 @@ import org.lts.litematicaplus.tool.GhostRaycast;
 import org.lts.litematicaplus.tool.NoteTuner;
 import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.tool.ToolController;
+import org.lts.litematicaplus.tool.ToolMode;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
@@ -35,12 +40,39 @@ public final class InfoHud {
     private static final int WIDTH = 176;
     private static final int PADDING = 6;
     private static final int LINE = 10;
+    private static final int TEXT_WIDTH = WIDTH - PADDING * 2 - 4;
     private static final Reference2ObjectOpenHashMap<Item, ItemStack> STACKS = new Reference2ObjectOpenHashMap<>();
-    private static List<MaterialList.Entry> materials = List.of();
+    private static final TextMemo TITLE = new TextMemo();
+    private static final TextMemo MODE = new TextMemo();
+    private static final TextMemo LAYER = new TextMemo();
+    private static final TextMemo SELECTION = new TextMemo();
+    private static final TextMemo PASTE = new TextMemo();
+    private static final TextMemo TUNING = new TextMemo();
+    private static final TextMemo RENDER_FAILED = new TextMemo();
+    private static final TextMemo DIAG_SECTIONS = new TextMemo();
+    private static final TextMemo DIAG_WORK = new TextMemo();
+    private static final TextMemo DIAG_DEPTH = new TextMemo();
+    private static final TextMemo DIAG_CHANGES = new TextMemo();
+    private static final TextMemo NAME = new TextMemo();
+    private static final TextMemo STATE = new TextMemo();
+    private static final TextMemo PROGRESS = new TextMemo();
+    private static final TextMemo SCOPED = new TextMemo();
+    private static final TextMemo MISSING = new TextMemo();
+    private static final TextMemo WRONG = new TextMemo();
+    private static final TextMemo EXTRA = new TextMemo();
+
+    private record MaterialRow(ItemStack stack, String name, String count, boolean enough) {
+    }
+
+    private static List<MaterialRow> materials = List.of();
     private static Component target;
+    private static Component targetSource;
+    private static FormattedCharSequence targetLine = FormattedCharSequence.EMPTY;
+    private static NoteTuner.Progress tuning;
     private static int ticks;
     private static long lastJobs;
     private static long jobsPerSecond;
+    private static boolean wasVisible;
 
     private InfoHud() {
     }
@@ -52,6 +84,11 @@ public final class InfoHud {
             STACKS.put(item, stack);
         }
         return stack;
+    }
+
+    private static boolean visible(Minecraft minecraft, LitematicaPlusConfig config) {
+        return config.hudEnabled && minecraft.player != null && minecraft.level != null && minecraft.gui.screen() == null
+                && !minecraft.gui.hud.isHidden() && !minecraft.gui.hud.getDebugOverlay().showDebugScreen();
     }
 
     public static void tick(Minecraft minecraft) {
@@ -77,22 +114,31 @@ public final class InfoHud {
             jobsPerSecond = jobs - lastJobs;
             lastJobs = jobs;
         }
-        if (ticks % 10 != 0) {
+        boolean visible = visible(minecraft, config);
+        tuning = visible && config.noteTuningHud ? NoteTuner.progress(minecraft) : null;
+        boolean appeared = visible && !wasVisible;
+        wasVisible = visible;
+        if (!visible || ticks % 10 != 0 && !appeared) {
             return;
         }
         SchematicPlacement placement = PlacementManager.get().selected();
-        if (!config.hudEnabled || config.hudMaterialLines <= 0 || placement == null || minecraft.player == null) {
+        if (config.hudMaterialLines <= 0 || placement == null) {
             materials = List.of();
             return;
         }
         PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
         List<MaterialList.Entry> all = MaterialList.compute(runtime, minecraft.player.getInventory(), MaterialList.Sort.MISSING);
-        List<MaterialList.Entry> top = new ArrayList<>();
+        List<MaterialRow> top = new ArrayList<>();
+        Font font = minecraft.font;
         for (MaterialList.Entry entry : all) {
             if (entry.missing() <= 0L) {
                 break;
             }
-            top.add(entry);
+            ItemStack stack = stackOf(entry.item());
+            String count = entry.missing() + " / " + entry.available();
+            int nameWidth = WIDTH - PADDING * 2 - 14 - font.width(count) - 6;
+            top.add(new MaterialRow(stack, font.plainSubstrByWidth(stack.getHoverName().getString(), nameWidth), count,
+                    entry.available() >= entry.missing()));
             if (top.size() >= config.hudMaterialLines) {
                 break;
             }
@@ -100,21 +146,23 @@ public final class InfoHud {
         materials = top;
     }
 
+    private static String text(TextMemo memo, Font font, Object ref, long a, long b, long c, Supplier<Component> make) {
+        return memo.stale(ref, a, b, c) ? memo.set(font.plainSubstrByWidth(make.get().getString(), TEXT_WIDTH)) : memo.text();
+    }
+
+    private static String text(TextMemo memo, Font font, String key) {
+        return text(memo, font, key, 0L, 0L, 0L, () -> Component.translatable(key));
+    }
+
     public static void render(Minecraft minecraft, GuiGraphicsExtractor graphics) {
-        if (minecraft.player == null || minecraft.level == null || minecraft.gui.hud.isHidden()) {
-            return;
-        }
-        if (minecraft.gui.screen() != null || minecraft.gui.hud.getDebugOverlay().showDebugScreen()) {
-            return;
-        }
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!config.hudEnabled) {
+        if (!visible(minecraft, config)) {
             return;
         }
         boolean tool = ToolController.get().holdingTool(minecraft);
         SchematicPlacement placement = PlacementManager.get().selected();
-        NoteTuner.Progress tuning = config.noteTuningHud ? NoteTuner.progress(minecraft) : null;
-        boolean tuningActive = tuning != null && tuning.blocks() > 0;
+        NoteTuner.Progress tuned = config.noteTuningHud ? tuning : null;
+        boolean tuningActive = tuned != null && tuned.blocks() > 0;
         if (placement == null && !tool && !PasteController.active() && !GhostRenderer.failed() && !tuningActive) {
             return;
         }
@@ -122,6 +170,7 @@ public final class InfoHud {
         PlacementRuntime runtime = placement == null ? null : GhostEngine.get().runtime(placement.id());
         LayerRange layer = GhostEngine.get().layer();
         AreaBox box = tool ? SelectionManager.get().selectedBox() : null;
+        List<MaterialRow> rows = materials;
         int lines = 1;
         if (placement != null) {
             lines += 3;
@@ -148,8 +197,8 @@ public final class InfoHud {
         if (targeted != null) {
             lines++;
         }
-        int height = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0) + materials.size() * LINE
-                + (materials.isEmpty() ? 0 : 4);
+        int height = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0) + rows.size() * LINE
+                + (rows.isEmpty() ? 0 : 4);
         int screenWidth = graphics.guiWidth();
         int x = config.hudRightSide ? screenWidth - WIDTH - 6 : 6;
         int y = 6;
@@ -158,9 +207,11 @@ public final class InfoHud {
         int textX = x + PADDING + 2;
         int cursor = y + PADDING;
         Blueprint.marker(graphics, textX, cursor + 2, Theme.AMBER);
-        graphics.text(font, Component.translatable("litematicaplus.hud.title"), textX + 6, cursor, Theme.TEXT_DIM, false);
+        graphics.text(font, text(TITLE, font, "litematicaplus.hud.title"), textX + 6, cursor, Theme.TEXT_DIM, false);
         if (tool) {
-            Component mode = Component.translatable(ToolController.get().mode().translationKey());
+            ToolMode current = ToolController.get().mode();
+            String mode = MODE.stale(current) ? MODE.set(Component.translatable(current.translationKey()).getString())
+                    : MODE.text();
             int modeWidth = font.width(mode) + 8;
             int modeX = x + WIDTH - PADDING - modeWidth;
             graphics.fill(modeX, cursor - 2, modeX + modeWidth, cursor + 9, Theme.CHIP);
@@ -170,35 +221,44 @@ public final class InfoHud {
         Blueprint.dashed(graphics, textX, cursor - 2, WIDTH - PADDING * 2 - 2, Theme.DIVIDER);
         cursor += 1;
         if (placement != null) {
-            cursor = renderPlacement(graphics, font, placement, runtime, x, textX, cursor);
+            cursor = renderPlacement(graphics, font, placement, runtime, textX, cursor);
         }
         if (!layer.unrestricted()) {
-            graphics.text(font, font.plainSubstrByWidth(layerText(layer).getString(), WIDTH - PADDING * 2 - 4), textX,
-                    cursor, Theme.TEXT_DIM, false);
+            graphics.text(font, text(LAYER, font, layer, 0L, 0L, 0L, () -> layerText(layer)), textX, cursor,
+                    Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (box != null && !box.isEmpty()) {
-            graphics.text(font, font.plainSubstrByWidth(Component.translatable("litematicaplus.hud.selection",
-                    box.name(), box.sizeX(), box.sizeY(), box.sizeZ()).getString(), WIDTH - PADDING * 2 - 4),
-                    textX, cursor, Theme.TEXT_DIM, false);
+            long size = (long) box.sizeX() << 42 ^ (long) box.sizeY() << 21 ^ box.sizeZ();
+            graphics.text(font, text(SELECTION, font, box, size, box.name().hashCode(), 0L,
+                    () -> Component.translatable("litematicaplus.hud.selection", box.name(), box.sizeX(), box.sizeY(),
+                            box.sizeZ())), textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (PasteController.active()) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.paste",
-                    String.format(Locale.ROOT, "%.0f", PasteController.progress() * 100.0)), textX, cursor, Theme.WARNING, false);
+            double progress = PasteController.progress();
+            graphics.text(font, text(PASTE, font, null, Double.doubleToLongBits(progress), 0L, 0L,
+                    () -> Component.translatable("litematicaplus.hud.paste",
+                            String.format(Locale.ROOT, "%.0f", progress * 100.0))), textX, cursor, Theme.WARNING, false);
             cursor += LINE;
         }
         if (tuningActive) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.tuning", tuning.blocks(), tuning.clicks()),
+            graphics.text(font, text(TUNING, font, null, tuned.blocks(), tuned.clicks(), 0L,
+                    () -> Component.translatable("litematicaplus.hud.tuning", tuned.blocks(), tuned.clicks())),
                     textX, cursor, Theme.WARNING, false);
             cursor += LINE;
         }
         if (targeted != null) {
-            graphics.text(font, targeted, textX, cursor, Theme.TEXT_BRIGHT, false);
+            if (targeted != targetSource) {
+                targetSource = targeted;
+                targetLine = Language.getInstance().getVisualOrder(font.substrByWidth(targeted, TEXT_WIDTH));
+            }
+            graphics.text(font, targetLine, textX, cursor, Theme.TEXT_BRIGHT, false);
             cursor += LINE;
         }
         if (GhostRenderer.failed()) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.render_failed"), textX, cursor, Theme.DANGER, false);
+            graphics.text(font, text(RENDER_FAILED, font, "litematicaplus.hud.render_failed"), textX, cursor,
+                    Theme.DANGER, false);
             cursor += LINE;
         }
         if (config.hudDiagnostics) {
@@ -209,90 +269,115 @@ public final class InfoHud {
                 total += each.slotCount();
                 ready += each.drawable().size();
             }
-            graphics.text(font, Component.translatable("litematicaplus.hud.diag_sections", GhostRenderer.lastDrawn(), ready,
-                    total), textX, cursor, Theme.TEXT_DIM, false);
+            int drawn = GhostRenderer.lastDrawn();
+            int readyCount = ready;
+            int totalCount = total;
+            graphics.text(font, text(DIAG_SECTIONS, font, null, drawn, readyCount, totalCount,
+                    () -> Component.translatable("litematicaplus.hud.diag_sections", drawn, readyCount, totalCount)),
+                    textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
-            graphics.text(font, Component.translatable("litematicaplus.hud.diag_work", engine.pending(), engine.inFlight(),
-                    jobsPerSecond), textX, cursor, Theme.TEXT_DIM, false);
+            int pending = engine.pending();
+            int inFlight = engine.inFlight();
+            long perSecond = jobsPerSecond;
+            graphics.text(font, text(DIAG_WORK, font, null, pending, inFlight, perSecond,
+                    () -> Component.translatable("litematicaplus.hud.diag_work", pending, inFlight, perSecond)),
+                    textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
-            Component depth = switch (GhostRenderer.lastDepth()) {
-                case 1 -> Component.translatable("litematicaplus.hud.diag_depth.voxy");
-                case 2 -> Component.translatable("litematicaplus.hud.diag_depth.hidden", GhostRenderer.lastHidden());
-                default -> Component.translatable("litematicaplus.hud.diag_depth.game");
-            };
-            graphics.text(font, Component.translatable("litematicaplus.hud.diag_depth", depth), textX, cursor,
-                    GhostRenderer.lastDepth() == 2 ? Theme.WARNING : Theme.TEXT_DIM, false);
+            int depthMode = GhostRenderer.lastDepth();
+            long hidden = GhostRenderer.lastHidden();
+            graphics.text(font, text(DIAG_DEPTH, font, null, depthMode, hidden, 0L, () -> {
+                Component depth = switch (depthMode) {
+                    case 1 -> Component.translatable("litematicaplus.hud.diag_depth.voxy");
+                    case 2 -> Component.translatable("litematicaplus.hud.diag_depth.hidden", GhostRenderer.lastHidden());
+                    default -> Component.translatable("litematicaplus.hud.diag_depth.game");
+                };
+                return Component.translatable("litematicaplus.hud.diag_depth", depth);
+            }), textX, cursor, depthMode == 2 ? Theme.WARNING : Theme.TEXT_DIM, false);
             cursor += LINE;
-            graphics.text(font, Component.translatable("litematicaplus.hud.diag_changes", engine.changesLastMinute()),
+            long changes = engine.changesLastMinute();
+            graphics.text(font, text(DIAG_CHANGES, font, null, changes, 0L, 0L,
+                    () -> Component.translatable("litematicaplus.hud.diag_changes", changes)),
                     textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
-        if (!materials.isEmpty()) {
+        if (!rows.isEmpty()) {
             cursor += 2;
             Blueprint.dashed(graphics, textX, cursor - 1, WIDTH - PADDING * 2 - 2, Theme.DIVIDER);
             cursor += 2;
-            for (MaterialList.Entry entry : materials) {
-                ItemStack stack = stackOf(entry.item());
+            for (MaterialRow row : rows) {
                 graphics.pose().pushMatrix();
                 graphics.pose().translate(textX, cursor - 1);
                 graphics.pose().scale(0.5F, 0.5F);
-                graphics.fakeItem(stack, 0, 0);
+                graphics.fakeItem(row.stack(), 0, 0);
                 graphics.pose().popMatrix();
-                String count = entry.missing() + " / " + entry.available();
-                int countWidth = font.width(count);
-                int nameWidth = WIDTH - PADDING * 2 - 14 - countWidth - 6;
-                String name = font.plainSubstrByWidth(stack.getHoverName().getString(), nameWidth);
-                graphics.text(font, name, textX + 11, cursor, Theme.TEXT, false);
-                graphics.text(font, count, x + WIDTH - PADDING - countWidth, cursor,
-                        entry.available() >= entry.missing() ? Theme.SUCCESS : Theme.WARNING, false);
+                int countWidth = font.width(row.count());
+                graphics.text(font, row.name(), textX + 11, cursor, Theme.TEXT, false);
+                graphics.text(font, row.count(), x + WIDTH - PADDING - countWidth, cursor,
+                        row.enough() ? Theme.SUCCESS : Theme.WARNING, false);
                 cursor += LINE;
             }
         }
     }
 
     private static int renderPlacement(GuiGraphicsExtractor graphics, Font font, SchematicPlacement placement,
-            PlacementRuntime runtime, int x, int textX, int cursor) {
-        String name = font.plainSubstrByWidth(placement.name(), WIDTH - PADDING * 2 - 4);
+            PlacementRuntime runtime, int textX, int cursor) {
+        String placementName = placement.name();
+        String name = NAME.stale(placementName) ? NAME.set(font.plainSubstrByWidth(placementName, TEXT_WIDTH)) : NAME.text();
         graphics.text(font, name, textX, cursor, Theme.TEXT_BRIGHT, false);
         cursor += LINE;
         PlacementVolume volume = runtime == null ? null : runtime.volume();
         if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.failed"), textX, cursor, Theme.DANGER, false);
+            graphics.text(font, text(STATE, font, "litematicaplus.hud.failed"), textX, cursor, Theme.DANGER, false);
             return cursor + LINE * 2 + 6;
         }
         if (volume == null) {
-            graphics.text(font, Component.translatable(placement.enabled()
-                    ? "litematicaplus.hud.loading" : "litematicaplus.hud.disabled"), textX, cursor, Theme.TEXT_DIM, false);
+            graphics.text(font, text(STATE, font, placement.enabled() ? "litematicaplus.hud.loading"
+                    : "litematicaplus.hud.disabled"), textX, cursor, Theme.TEXT_DIM, false);
             return cursor + LINE * 2 + 6;
         }
         double progress = runtime.progress();
         int barX = textX;
-        int barWidth = WIDTH - PADDING * 2 - 4;
+        int barWidth = TEXT_WIDTH;
         Blueprint.progress(graphics, barX, cursor, barWidth, 4, progress, progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
         cursor += 7;
-        Component progressText = Component.translatable("litematicaplus.hud.progress",
-                String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                runtime.totalBlocks());
+        long correct = runtime.count(MismatchType.CORRECT);
+        long total = runtime.totalBlocks();
+        String progressText = text(PROGRESS, font, null, Double.doubleToLongBits(progress), correct, total,
+                () -> Component.translatable("litematicaplus.hud.progress",
+                        String.format(Locale.ROOT, "%.1f", progress * 100.0), correct, total));
         graphics.text(font, progressText, textX, cursor, Theme.TEXT, false);
         if (runtime.scoped()) {
-            graphics.text(font, Component.translatable("litematicaplus.hud.scoped"), textX + font.width(progressText) + 6,
-                    cursor, Theme.WARNING, false);
+            int scopedX = textX + font.width(progressText) + 6;
+            int room = textX + TEXT_WIDTH - scopedX;
+            if (room > 0) {
+                String scoped = text(SCOPED, font, "litematicaplus.hud.scoped");
+                graphics.text(font, font.width(scoped) > room ? font.plainSubstrByWidth(scoped, room) : scoped, scopedX,
+                        cursor, Theme.WARNING, false);
+            }
         }
         cursor += LINE;
         long wrong = runtime.count(MismatchType.WRONG_BLOCK) + runtime.count(MismatchType.WRONG_STATE);
+        int limit = textX + TEXT_WIDTH;
         int cx = textX;
-        cx = stat(graphics, font, "litematicaplus.hud.missing", runtime.count(MismatchType.MISSING),
-                MismatchType.MISSING.textColor(), cx, cursor);
-        cx = stat(graphics, font, "litematicaplus.hud.wrong", wrong, MismatchType.WRONG_BLOCK.textColor(), cx, cursor);
-        stat(graphics, font, "litematicaplus.hud.extra", runtime.count(MismatchType.EXTRA),
-                MismatchType.EXTRA.textColor(), cx, cursor);
+        cx = stat(graphics, font, MISSING, "litematicaplus.hud.missing", runtime.count(MismatchType.MISSING),
+                MismatchType.MISSING.textColor(), cx, cursor, limit);
+        cx = stat(graphics, font, WRONG, "litematicaplus.hud.wrong", wrong, MismatchType.WRONG_BLOCK.textColor(), cx,
+                cursor, limit);
+        stat(graphics, font, EXTRA, "litematicaplus.hud.extra", runtime.count(MismatchType.EXTRA),
+                MismatchType.EXTRA.textColor(), cx, cursor, limit);
         return cursor + LINE;
     }
 
-    private static int stat(GuiGraphicsExtractor graphics, Font font, String key, long value, int color, int x, int y) {
-        Component text = Component.translatable(key, value);
-        graphics.text(font, text, x, y, value > 0L ? color : Theme.TEXT_DIM, false);
-        return x + font.width(text) + 8;
+    private static int stat(GuiGraphicsExtractor graphics, Font font, TextMemo memo, String key, long value, int color,
+            int x, int y, int limit) {
+        String text = text(memo, font, key, value, 0L, 0L, () -> Component.translatable(key, value));
+        int room = limit - x;
+        if (room <= 0) {
+            return x;
+        }
+        String shown = font.width(text) > room ? font.plainSubstrByWidth(text, room) : text;
+        graphics.text(font, shown, x, y, value > 0L ? color : Theme.TEXT_DIM, false);
+        return x + font.width(shown) + 8;
     }
 
     public static Component layerText(LayerRange layer) {

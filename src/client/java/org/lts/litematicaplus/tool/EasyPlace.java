@@ -7,6 +7,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
@@ -33,6 +35,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
@@ -49,10 +52,17 @@ public final class EasyPlace {
         BREAK
     }
 
+    private record Unsolved(BlockState target, Item item, long signature, long until) {
+    }
+
     private static final int RESTRICT_MARGIN = 2;
     private static final int POSITION_COOLDOWN_TICKS = 6;
     private static final int HEAD_YAW_LEAD_TICKS = 2;
+    private static final int RETRY_ATTEMPTS = 8;
+    private static final int RETRY_WAIT_TICKS = 10;
+    private static final int UNSOLVED_TICKS = 20;
     private static final Map<BlockPos, Long> RECENT = new HashMap<>();
+    private static final Map<BlockPos, Unsolved> UNSOLVED = new HashMap<>();
     private static long globalReadyTick;
     private static boolean sessionConsumed;
     private static boolean sessionPlaced;
@@ -83,7 +93,7 @@ public final class EasyPlace {
         boolean down = minecraft.options.keyUse.isDown();
         boolean wanted = requested || down && sessionConsumed && config.easyPlaceHold;
         requested = false;
-        if (wanted && active(config) && minecraft.gui.screen() == null && !cooling()
+        if (wanted && active(config) && minecraft.gui.screen() == null && !cooling() && !BreakAssist.busy(minecraft)
                 && !ToolController.get().holdingTool(minecraft) && (config.easyPlaceHold || !sessionPlaced)) {
             act(minecraft, config);
         }
@@ -111,6 +121,7 @@ public final class EasyPlace {
 
     public static void reset() {
         RECENT.clear();
+        UNSOLVED.clear();
         globalReadyTick = 0L;
         sessionConsumed = false;
         sessionPlaced = false;
@@ -309,7 +320,7 @@ public final class EasyPlace {
             hold(5);
             return;
         }
-        PlacementSolver.Plan plan = PlacementSolver.solve(player, level, new ItemStack(item), pos, target, config);
+        PlacementSolver.Plan plan = solve(player, level, item, pos, target, config);
         if (plan == null) {
             diagnose(config, "litematicaplus.message.easy_place_orientation");
             hold(3);
@@ -330,10 +341,51 @@ public final class EasyPlace {
             BlockPos key = pos.immutable();
             if (!TickQueue.after(lead, () -> execute(minecraft, key, target, item, plan))) {
                 LookLock.clear();
+                if (config.easyPlaceRotationRevert) {
+                    LookLock.sendRealRotation(minecraft);
+                }
             }
         } else {
             execute(minecraft, pos.immutable(), target, item, plan);
         }
+    }
+
+    private static PlacementSolver.Plan solve(LocalPlayer player, ClientLevel level, Item item, BlockPos pos,
+            BlockState target, LitematicaPlusConfig config) {
+        long signature = solveSignature(player, level, pos, config);
+        Unsolved known = UNSOLVED.get(pos);
+        if (known != null && known.until() >= TickQueue.now() && known.target() == target && known.item() == item
+                && known.signature() == signature) {
+            return null;
+        }
+        PlacementSolver.Plan plan = PlacementSolver.solve(player, level, new ItemStack(item), pos, target, config);
+        if (plan != null) {
+            UNSOLVED.remove(pos);
+            return plan;
+        }
+        if (UNSOLVED.size() > 256) {
+            long now = TickQueue.now();
+            UNSOLVED.values().removeIf(entry -> entry.until() < now);
+        }
+        UNSOLVED.put(pos.immutable(), new Unsolved(target, item, signature, TickQueue.now() + UNSOLVED_TICKS));
+        return null;
+    }
+
+    private static long solveSignature(LocalPlayer player, ClientLevel level, BlockPos pos, LitematicaPlusConfig config) {
+        Vec3 eye = player.getEyePosition();
+        long signature = Mth.floor(eye.x * 4.0);
+        signature = signature * 31L + Mth.floor(eye.y * 4.0);
+        signature = signature * 31L + Mth.floor(eye.z * 4.0);
+        signature = signature * 31L + Mth.floor(player.getYRot() / 11.25F);
+        signature = signature * 31L + Mth.floor(player.getXRot() / 15.0F);
+        signature = signature * 31L + (player.input.keyPresses.shift() ? 1 : 0);
+        signature = signature * 31L + (config.easyPlaceFakeRotation ? 1 : 0) + (config.easyPlaceAirPlacement ? 2 : 0)
+                + (config.easyPlaceStrictOrientation ? 4 : 0);
+        signature = signature * 31L + System.identityHashCode(level.getBlockState(pos));
+        for (Direction side : Direction.values()) {
+            signature = signature * 31L + System.identityHashCode(level.getBlockState(pos.relative(side)));
+        }
+        return signature;
     }
 
     private static Item resolveItem(Minecraft minecraft, BlockState target, LitematicaPlusConfig config) {
@@ -360,7 +412,8 @@ public final class EasyPlace {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         try {
             if (player == null || minecraft.level == null || minecraft.gameMode == null
-                    || !TickQueue.worldReady(minecraft) || !minecraft.level.getBlockState(pos).canBeReplaced()) {
+                    || !TickQueue.worldReady(minecraft) || BreakAssist.busy(minecraft)
+                    || !minecraft.level.getBlockState(pos).canBeReplaced()) {
                 return;
             }
             if (!InventoryHelper.ensureInHand(minecraft, item)) {
@@ -397,10 +450,21 @@ public final class EasyPlace {
     }
 
     public static void retry(Minecraft minecraft, BlockPos pos) {
+        retry(minecraft, pos.immutable(), RETRY_ATTEMPTS);
+    }
+
+    private static void retry(Minecraft minecraft, BlockPos pos, int attemptsLeft) {
         ClientLevel level = minecraft.level;
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         if (level == null || minecraft.player == null || !active(config) || !TickQueue.worldReady(minecraft)
                 || ToolController.get().holdingTool(minecraft)) {
+            return;
+        }
+        if (cooling() || BreakAssist.busy(minecraft)) {
+            if (attemptsLeft > 1) {
+                int wait = (int) Math.max(1L, Math.min(RETRY_WAIT_TICKS, globalReadyTick - TickQueue.now()));
+                TickQueue.after(wait, () -> retry(minecraft, pos, attemptsLeft - 1));
+            }
             return;
         }
         BlockState target = GhostEngine.get().schematicStateAt(pos.getX(), pos.getY(), pos.getZ());

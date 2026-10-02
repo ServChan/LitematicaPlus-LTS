@@ -1,7 +1,10 @@
 package org.lts.litematicaplus.gui;
 
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -24,6 +27,11 @@ final class VerifierView extends TabView {
     private List<GhostEngine.Mismatch> mismatches = List.of();
     private int ticks;
     private int scroll;
+    private List<Object> signature = List.of();
+    private final Map<GhostEngine.Mismatch, RowText> rowText = new IdentityHashMap<>();
+
+    private record RowText(String type, String where, String detail) {
+    }
 
     VerifierView(HubScreen screen) {
         super(screen);
@@ -82,7 +90,44 @@ final class VerifierView extends TabView {
                 }));
     }
 
+    private boolean changed() {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        GhostEngine engine = GhostEngine.get();
+        PlacementRuntime runtime = placement == null ? null : engine.runtime(placement.id());
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        List<Object> signature = new ArrayList<>();
+        signature.add(placement == null ? null : placement.id());
+        signature.add(placement == null ? null : placement.loadState());
+        signature.add(placement != null && placement.enabled());
+        signature.add(runtime);
+        signature.add(runtime == null ? null : runtime.volume());
+        signature.add(engine.layer());
+        signature.add(this.minecraft.player == null ? null : this.minecraft.player.position());
+        signature.add(config.showMissing);
+        signature.add(config.showWrongBlock);
+        signature.add(config.showWrongState);
+        signature.add(config.showExtra);
+        signature.add(config.countVisibleOnly);
+        signature.add(engine.jobsStarted());
+        if (runtime != null) {
+            signature.add(runtime.pendingSections());
+            signature.add(runtime.verifiedSections());
+            signature.add(runtime.knownSections());
+            signature.add(runtime.scopePending());
+            for (MismatchType type : MismatchType.VALUES) {
+                signature.add(runtime.fullCount(type));
+            }
+        }
+        boolean busy = engine.pending() > 0 || engine.inFlight() > 0;
+        if (!busy && signature.equals(this.signature)) {
+            return false;
+        }
+        this.signature = signature;
+        return true;
+    }
+
     private void recompute() {
+        this.rowText.clear();
         SchematicPlacement placement = PlacementManager.get().selected();
         if (placement == null || this.list == null || this.minecraft.player == null) {
             this.mismatches = List.of();
@@ -127,7 +172,10 @@ final class VerifierView extends TabView {
         if (this.list != null) {
             this.scroll = this.list.scroll();
             if (++this.ticks % 20 == 0) {
-                recompute();
+                this.rowText.clear();
+                if (changed()) {
+                    recompute();
+                }
             }
         }
     }
@@ -136,17 +184,22 @@ final class VerifierView extends TabView {
             int rowWidth, int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
         graphics.fill(x + 7, y + 7, x + 15, y + rowHeight - 7, mismatch.type().color());
-        String type = tr("litematicaplus.mismatch." + mismatch.type().key()).getString();
-        graphics.text(rowFont, type, x + 21, textY, mismatch.type().textColor(), false);
-        int typeWidth = Math.max(78, rowFont.width(type) + 8);
+        RowText text = this.rowText.computeIfAbsent(mismatch, this::rowText);
+        graphics.text(rowFont, text.type(), x + 21, textY, mismatch.type().textColor(), false);
+        int typeWidth = Math.max(78, rowFont.width(text.type()) + 8);
+        int whereWidth = rowFont.width(text.where());
+        Ui.right(graphics, rowFont, text.where(), x + rowWidth - 6, textY, Theme.TEXT_DIM);
+        Ui.clipped(graphics, rowFont, text.detail(), x + 21 + typeWidth, textY, rowWidth - 33 - typeWidth - whereWidth,
+                Theme.TEXT);
+    }
+
+    private RowText rowText(GhostEngine.Mismatch mismatch) {
         BlockPos pos = mismatch.pos();
         String where = pos.getX() + " " + pos.getY() + " " + pos.getZ() + "  "
                 + String.format(Locale.ROOT, "%.0f m", Math.sqrt(mismatch.distanceSquared()));
-        int whereWidth = rowFont.width(where);
-        Ui.right(graphics, rowFont, where, x + rowWidth - 6, textY, Theme.TEXT_DIM);
         BlockState found = this.minecraft.level == null ? null : this.minecraft.level.getBlockState(pos);
-        String detail = describe(mismatch, found);
-        Ui.clipped(graphics, rowFont, detail, x + 21 + typeWidth, textY, rowWidth - 33 - typeWidth - whereWidth, Theme.TEXT);
+        return new RowText(tr("litematicaplus.mismatch." + mismatch.type().key()).getString(), where,
+                describe(mismatch, found));
     }
 
     private static String describe(GhostEngine.Mismatch mismatch, BlockState found) {

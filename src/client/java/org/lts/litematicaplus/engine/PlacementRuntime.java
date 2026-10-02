@@ -17,6 +17,8 @@ public final class PlacementRuntime {
     final LongOpenHashSet dirty = new LongOpenHashSet();
     final ArrayList<SectionSlot> drawable = new ArrayList<>();
     final LongArrayFIFOQueue urgent = new LongArrayFIFOQueue();
+    final LongOpenHashSet urgentKeys = new LongOpenHashSet();
+    final ArrayList<SectionSlot> specialSlots = new ArrayList<>();
     long[] queue = new long[0];
     int queueSize;
     int queuePos;
@@ -34,7 +36,7 @@ public final class PlacementRuntime {
     int knownSections;
     LayerRange scope;
     boolean scopeReady = true;
-    int scopeGeneration;
+    volatile int scopeGeneration;
     final long[] scopedCounts = new long[MismatchType.VALUES.length];
     long[] scopedTotals = new long[0];
     long[] scopedCorrect = new long[0];
@@ -58,6 +60,27 @@ public final class PlacementRuntime {
 
     public List<SectionSlot> drawable() {
         return this.drawable;
+    }
+
+    public List<SectionSlot> specialSlots() {
+        return this.specialSlots;
+    }
+
+    void enqueueUrgent(long key) {
+        if (this.urgentKeys.add(key)) {
+            this.urgent.enqueue(key);
+        }
+    }
+
+    long dequeueUrgent() {
+        long key = this.urgent.dequeueLong();
+        this.urgentKeys.remove(key);
+        return key;
+    }
+
+    void clearUrgent() {
+        this.urgent.clear();
+        this.urgentKeys.clear();
     }
 
     public int slotCount() {

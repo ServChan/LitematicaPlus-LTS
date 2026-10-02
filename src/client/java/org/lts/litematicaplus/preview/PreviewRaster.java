@@ -91,33 +91,32 @@ public final class PreviewRaster {
             drawQuad(model, q, sx, sy, sd, pixels, depth, size, true);
         }
         if (translucentCount > 0) {
-            int[] order = new int[translucentCount];
-            float[] keys = new float[translucentCount];
+            long[] order = new long[translucentCount];
             for (int q = 0, n = 0; q < model.quads; q++) {
                 if (model.translucent[q]) {
                     int base = q * 12;
                     float cx = (model.positions[base] + model.positions[base + 6]) * 0.5F;
                     float cy = (model.positions[base + 1] + model.positions[base + 7]) * 0.5F;
                     float cz = (model.positions[base + 2] + model.positions[base + 8]) * 0.5F;
-                    order[n] = q;
-                    keys[n++] = (float) (cx * dx + cy * dy + cz * dz);
+                    order[n++] = (long) sortableKey((float) (cx * dx + cy * dy + cz * dz)) << 32 | q;
                 }
             }
-            Integer[] boxed = new Integer[translucentCount];
-            for (int i = 0; i < translucentCount; i++) {
-                boxed[i] = i;
-            }
-            Arrays.sort(boxed, (a, b) -> Float.compare(keys[a], keys[b]));
+            Arrays.sort(order);
             for (int i = 0; i < translucentCount; i++) {
                 if ((i & 1023) == 0 && cancelled.getAsBoolean()) {
                     throw new CancellationException();
                 }
-                int q = order[boxed[i]];
+                int q = (int) order[i];
                 project(model, q, sx, sy, sd, rx, rz, ux, uy, uz, dx, dy, dz, scale, offsetX, offsetY);
                 drawQuad(model, q, sx, sy, sd, pixels, depth, size, false);
             }
         }
         return pixels;
+    }
+
+    static int sortableKey(float value) {
+        int bits = Float.floatToIntBits(value);
+        return bits ^ (bits >> 31 & 0x7FFFFFFF);
     }
 
     private static void project(PreviewModel model, int q, float[] sx, float[] sy, float[] sd, double rx, double rz,

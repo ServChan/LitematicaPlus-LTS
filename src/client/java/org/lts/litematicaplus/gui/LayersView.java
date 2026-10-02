@@ -21,6 +21,9 @@ final class LayersView extends TabView {
     private static final int MIN = -30000000;
     private static final int MAX = 30000000;
     private static final int ROW = Theme.CONTROL_HEIGHT + 4;
+    private static boolean xZeroChosen;
+    private static boolean zZeroChosen;
+    private static String zeroScope = "";
 
     private int layerTop;
     private int clipTop;
@@ -106,7 +109,11 @@ final class LayersView extends TabView {
                 tr("litematicaplus.layers.fit_placement"), button -> fitToPlacement()));
         fit.active = selectedVolume() != null;
         add(FlatButton.secondary(this.left + this.width - resetWidth, y, resetWidth, tr("litematicaplus.layers.reset"),
-                button -> applyClip(LayerRange.Clip.NONE)));
+                button -> {
+                    xZeroChosen = false;
+                    zZeroChosen = false;
+                    applyClip(LayerRange.Clip.NONE);
+                }));
         y += ROW;
         axisRow(y, true, clip);
         y += ROW;
@@ -177,10 +184,14 @@ final class LayersView extends TabView {
         if (xAxis) {
             int min = low ? value : Math.min(clip.minX(), value);
             int max = low ? Math.max(clip.maxX(), value) : value;
+            xZeroChosen = min == 0 && max == 0;
+            zeroScope = Session.scope();
             applyClip(clip.withX(clip.xEnabled(), min, max));
         } else {
             int min = low ? value : Math.min(clip.minZ(), value);
             int max = low ? Math.max(clip.maxZ(), value) : value;
+            zZeroChosen = min == 0 && max == 0;
+            zeroScope = Session.scope();
             applyClip(clip.withZ(clip.zEnabled(), min, max));
         }
     }
@@ -190,13 +201,13 @@ final class LayersView extends TabView {
         BlockPos pos = this.minecraft.player == null ? BlockPos.ZERO : this.minecraft.player.blockPosition();
         LayerRange.Clip next = clip;
         if (xAxis) {
-            boolean unset = clip.minX() == 0 && clip.maxX() == 0;
+            boolean unset = clip.minX() == 0 && clip.maxX() == 0 && !zeroChosen(true);
             int min = unset ? volume != null ? volume.minX() : pos.getX() - 8 : clip.minX();
             int max = unset ? volume != null ? volume.maxX() : pos.getX() + 8 : clip.maxX();
             next = next.withX(true, min, max);
         }
         if (zAxis) {
-            boolean unset = clip.minZ() == 0 && clip.maxZ() == 0;
+            boolean unset = clip.minZ() == 0 && clip.maxZ() == 0 && !zeroChosen(false);
             int min = unset ? volume != null ? volume.minZ() : pos.getZ() - 8 : clip.minZ();
             int max = unset ? volume != null ? volume.maxZ() : pos.getZ() + 8 : clip.maxZ();
             next = next.withZ(true, min, max);
@@ -204,11 +215,18 @@ final class LayersView extends TabView {
         return next;
     }
 
+    private static boolean zeroChosen(boolean xAxis) {
+        return (xAxis ? xZeroChosen : zZeroChosen) && zeroScope.equals(Session.scope());
+    }
+
     private void fitToPlacement() {
         PlacementVolume volume = selectedVolume();
         if (volume == null) {
             return;
         }
+        xZeroChosen = volume.minX() == 0 && volume.maxX() == 0;
+        zZeroChosen = volume.minZ() == 0 && volume.maxZ() == 0;
+        zeroScope = Session.scope();
         applyClip(new LayerRange.Clip(true, true, volume.minX(), volume.maxX(), true, volume.minZ(), volume.maxZ()));
     }
 

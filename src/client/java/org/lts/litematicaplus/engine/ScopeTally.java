@@ -64,14 +64,14 @@ public final class ScopeTally {
 
     static ScopeTally compute(GhostSection section, boolean[] solid, SectionVerdict verdict, LayerRange scope,
             int originX, int originY, int originZ, Scratch scratch) {
-        if (section == null || verdict == null
-                || !scope.intersects(originX, originY, originZ, originX + 15, originY + 15, originZ + 15)) {
+        if (section == null || !scope.intersects(originX, originY, originZ, originX + 15, originY + 15, originZ + 15)) {
             return EMPTY;
         }
         boolean whole = scope.encloses(originX, originY, originZ, originX + 15, originY + 15, originZ + 15);
         short[] raw = section.raw();
-        byte[] categories = verdict.categories();
-        boolean known = verdict.worldKnown();
+        boolean verified = verdict != null;
+        byte[] categories = verified ? verdict.categories() : null;
+        boolean known = verified && verdict.worldKnown();
         int[] counts = new int[MismatchType.VALUES.length];
         scratch.ensure(solid.length);
         int[] totals = scratch.totals;
@@ -104,7 +104,7 @@ public final class ScopeTally {
                 if (category == CORRECT && paletteIndex != 0) {
                     correct[paletteIndex]++;
                 }
-            } else if (isSolid) {
+            } else if (isSolid && verified) {
                 counts[UNKNOWN]++;
             }
         }

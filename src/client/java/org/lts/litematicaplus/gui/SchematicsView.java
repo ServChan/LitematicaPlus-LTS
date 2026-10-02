@@ -28,7 +28,8 @@ import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 
 final class SchematicsView extends TabView {
-    private record Entry(Path path, boolean directory, boolean parent, String name, long size, long modified) {
+    private record Entry(Path path, boolean directory, boolean parent, String name, long size, long modified,
+            String sizeText) {
     }
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
@@ -48,6 +49,7 @@ final class SchematicsView extends TabView {
     private int detailWidth;
     private PreviewWidget preview;
     private int previewSide;
+    private final TextMemo parentText = new TextMemo();
 
     SchematicsView(HubScreen screen) {
         super(screen);
@@ -94,7 +96,10 @@ final class SchematicsView extends TabView {
         add(FlatButton.secondary(this.detailX, buttonY, half, tr("litematicaplus.schematics.open_folder"),
                 button -> openFolder()));
         add(FlatButton.secondary(this.detailX + half + Theme.GAP, buttonY, this.detailWidth - half - Theme.GAP,
-                tr("litematicaplus.schematics.refresh"), button -> reload()));
+                tr("litematicaplus.schematics.refresh"), button -> {
+                    PreviewService.retryFailed();
+                    reload();
+                }));
         int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 2;
         this.previewSide = previews ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
         this.preview = null;
@@ -145,7 +150,7 @@ final class SchematicsView extends TabView {
         try {
             Files.createDirectories(directory);
             if (!directory.equals(root)) {
-                result.add(new Entry(directory.getParent(), true, true, "..", 0L, 0L));
+                result.add(new Entry(directory.getParent(), true, true, "..", 0L, 0L, ""));
             }
             List<Entry> found = new ArrayList<>();
             try (Stream<Path> stream = Files.list(directory)) {
@@ -153,10 +158,11 @@ final class SchematicsView extends TabView {
                     try {
                         if (Files.isDirectory(path)) {
                             found.add(new Entry(path, true, false, path.getFileName().toString(), 0L,
-                                    Files.getLastModifiedTime(path).toMillis()));
+                                    Files.getLastModifiedTime(path).toMillis(), ""));
                         } else if (SchematicIo.isSupported(path)) {
-                            found.add(new Entry(path, false, false, path.getFileName().toString(), Files.size(path),
-                                    Files.getLastModifiedTime(path).toMillis()));
+                            long size = Files.size(path);
+                            found.add(new Entry(path, false, false, path.getFileName().toString(), size,
+                                    Files.getLastModifiedTime(path).toMillis(), formatSize(size)));
                         }
                     } catch (IOException exception) {
                         LitematicaPlusClient.LOGGER.debug("Skipping unreadable entry {}", path);
@@ -280,17 +286,22 @@ final class SchematicsView extends TabView {
         if (entry.directory()) {
             graphics.fill(x + 8, y + 7, x + 18, y + rowHeight - 6, Theme.WARNING);
             graphics.fill(x + 8, y + 5, x + 13, y + 7, Theme.WARNING);
-            Ui.clipped(graphics, rowFont, entry.parent() ? tr("litematicaplus.schematics.parent").getString() : entry.name(),
+            Ui.clipped(graphics, rowFont, entry.parent() ? parentLabel() : entry.name(),
                     x + 24, textY, rowWidth - 30, Theme.TEXT_BRIGHT);
             return;
         }
         graphics.fill(x + 9, y + 5, x + 17, y + rowHeight - 5, Theme.ACCENT_DARK);
         graphics.fill(x + 11, y + 8, x + 15, y + 9, Theme.TEXT_BRIGHT);
         graphics.fill(x + 11, y + 11, x + 15, y + 12, Theme.TEXT_BRIGHT);
-        String size = formatSize(entry.size());
+        String size = entry.sizeText();
         int sizeWidth = rowFont.width(size);
         Ui.clipped(graphics, rowFont, entry.name(), x + 24, textY, rowWidth - 36 - sizeWidth, Theme.TEXT);
         Ui.right(graphics, rowFont, size, x + rowWidth - 6, textY, Theme.TEXT_DIM);
+    }
+
+    private String parentLabel() {
+        return this.parentText.stale(null) ? this.parentText.set(tr("litematicaplus.schematics.parent").getString())
+                : this.parentText.text();
     }
 
     private static String formatSize(long bytes) {
@@ -356,7 +367,7 @@ final class SchematicsView extends TabView {
         if (meta.dataVersion > 0) {
             y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.data_version", Integer.toString(meta.dataVersion));
         }
-        y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.file_size", formatSize(this.selected.size()));
+        y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.file_size", this.selected.sizeText());
         if (!meta.description.isBlank() && y + 12 < limit) {
             graphics.enableScissor(this.detailX + 1, y, this.detailX + this.detailWidth - 1, limit);
             graphics.textWithWordWrap(this.font, Component.literal(meta.description), x, y + 4, inner, Theme.TEXT_DIM, false);

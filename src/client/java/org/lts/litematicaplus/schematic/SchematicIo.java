@@ -1,10 +1,8 @@
 package org.lts.litematicaplus.schematic;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntTag;
@@ -13,6 +11,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.visitors.CollectFields;
 import net.minecraft.nbt.visitors.FieldSelector;
+import org.lts.litematicaplus.util.AtomicFilePersistence;
 import org.lts.litematicaplus.util.LocalizedException;
 
 public final class SchematicIo {
@@ -97,11 +96,7 @@ public final class SchematicIo {
         Path temp = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             NbtIo.writeCompressed(LitematicCodec.write(schematic), temp);
-            try {
-                Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException exception) {
-                Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
-            }
+            AtomicFilePersistence.replace(temp, path);
         } finally {
             Files.deleteIfExists(temp);
         }

@@ -5,21 +5,27 @@ import com.google.gson.GsonBuilder;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.loader.api.FabricLoader;
+import org.lts.litematicaplus.util.AtomicFilePersistence;
 import org.lts.litematicaplus.util.Workers;
 
 public final class LitematicaPlusConfig {
     private static final int CURRENT_CONFIG_VERSION = 4;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
-    private static final AtomicReference<LitematicaPlusConfig> PENDING = new AtomicReference<>();
+    private static final AtomicReference<Pending> PENDING = new AtomicReference<>();
+
+    private record Pending(LitematicaPlusConfig config, List<CompletableFuture<Boolean>> results) {
+    }
 
     public enum PasteReplace {
         ALL,
@@ -147,6 +153,7 @@ public final class LitematicaPlusConfig {
         LitematicaPlusConfig backup = read(backupPath(configPath));
         current = sanitize(backup == null ? defaults() : migrate(backup));
         try {
+            AtomicFilePersistence.quarantine(configPath);
             writeAtomically(configPath, current, false);
         } catch (IOException exception) {
             LitematicaPlusClient.LOGGER.error("Could not initialize config {}", configPath, exception);
@@ -169,28 +176,42 @@ public final class LitematicaPlusConfig {
         return copyOf(current);
     }
 
-    public static boolean save(LitematicaPlusConfig config) {
+    public static CompletableFuture<Boolean> save(LitematicaPlusConfig config) {
         LitematicaPlusConfig clean = sanitize(copyOf(config));
         current = clean;
-        PENDING.set(clean);
+        CompletableFuture<Boolean> result = new CompletableFuture<>();
+        PENDING.accumulateAndGet(new Pending(clean, List.of(result)), (previous, next) -> {
+            if (previous == null) {
+                return next;
+            }
+            List<CompletableFuture<Boolean>> merged = new ArrayList<>(previous.results());
+            merged.addAll(next.results());
+            return new Pending(next.config(), merged);
+        });
         try {
             Workers.writer().execute(LitematicaPlusConfig::writePending);
         } catch (RejectedExecutionException exception) {
             writePending();
         }
-        return true;
+        return result;
     }
 
     private static void writePending() {
-        LitematicaPlusConfig snapshot = PENDING.getAndSet(null);
-        if (snapshot == null) {
+        Pending pending = PENDING.getAndSet(null);
+        if (pending == null) {
             return;
         }
         Path configPath = configPath();
+        boolean written = false;
         try {
-            writeAtomically(configPath, snapshot, true);
-        } catch (IOException exception) {
+            writeAtomically(configPath, pending.config(), true);
+            written = true;
+        } catch (IOException | RuntimeException exception) {
             LitematicaPlusClient.LOGGER.error("Could not save config {}", configPath, exception);
+        } finally {
+            for (CompletableFuture<Boolean> result : pending.results()) {
+                result.complete(written);
+            }
         }
     }
 
@@ -211,16 +232,16 @@ public final class LitematicaPlusConfig {
             Files.createDirectories(parent);
         }
         Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
-        try (Writer writer = Files.newBufferedWriter(temporary)) {
-            GSON.toJson(sanitize(copyOf(config)), writer);
-        }
-        if (backupExisting && Files.isRegularFile(path)) {
-            Files.copy(path, backupPath(path), StandardCopyOption.REPLACE_EXISTING);
-        }
         try {
-            Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException exception) {
-            Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+            try (Writer writer = Files.newBufferedWriter(temporary)) {
+                GSON.toJson(sanitize(copyOf(config)), writer);
+            }
+            if (backupExisting && Files.isRegularFile(path)) {
+                Files.copy(path, backupPath(path), StandardCopyOption.REPLACE_EXISTING);
+            }
+            AtomicFilePersistence.replace(temporary, path);
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

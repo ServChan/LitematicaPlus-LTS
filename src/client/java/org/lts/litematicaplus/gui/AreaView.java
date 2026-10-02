@@ -1,11 +1,9 @@
 package org.lts.litematicaplus.gui;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.RejectedExecutionException;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -213,7 +211,7 @@ final class AreaView extends TabView {
                 return;
             }
             try {
-                Workers.io().execute(() -> {
+                Workers.save().execute(() -> {
                     try {
                         SchematicIo.write(target, result.schematic());
                         long blocks = result.schematic().metadata().totalBlocks;
@@ -224,12 +222,12 @@ final class AreaView extends TabView {
                         } else {
                             finish(tr("litematicaplus.area.saved", blocks, target.getFileName().toString()), Theme.SUCCESS);
                         }
-                    } catch (IOException | RuntimeException exception) {
+                    } catch (Throwable exception) {
                         LitematicaPlusClient.LOGGER.error("Could not save schematic {}", target, exception);
                         finish(tr("litematicaplus.area.error_write", Notify.describe(exception)), Theme.DANGER);
                     }
                 });
-            } catch (RejectedExecutionException exception) {
+            } catch (Throwable exception) {
                 finish(tr("litematicaplus.area.error_write", Notify.describe(exception)), Theme.DANGER);
             }
         });

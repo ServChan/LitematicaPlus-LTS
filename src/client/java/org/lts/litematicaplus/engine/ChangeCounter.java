@@ -22,6 +22,11 @@ public final class ChangeCounter {
         return sum;
     }
 
+    public void reset() {
+        Arrays.fill(this.buckets, 0);
+        this.second = Long.MIN_VALUE;
+    }
+
     private void advance(long nowSecond) {
         if (this.second == Long.MIN_VALUE || nowSecond - this.second >= WINDOW_SECONDS) {
             Arrays.fill(this.buckets, 0);

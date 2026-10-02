@@ -35,6 +35,7 @@ public final class Substitutes {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Set<Item> ITEMS = new LinkedHashSet<>();
     private static boolean loaded;
+    private static volatile Set<Item> snapshot;
 
     private static final class FileData {
         int schemaVersion = 1;
@@ -51,6 +52,7 @@ public final class Substitutes {
     public static synchronized void load() {
         loaded = true;
         ITEMS.clear();
+        snapshot = Set.of();
         Path file = path();
         FileData data = read(file);
         if (data == null) {
@@ -66,6 +68,7 @@ public final class Substitutes {
                 ITEMS.add(item);
             }
         }
+        snapshot = Set.copyOf(ITEMS);
     }
 
     private static FileData read(Path file) {
@@ -114,6 +117,17 @@ public final class Substitutes {
         save();
     }
 
+    private static Set<Item> snapshot() {
+        Set<Item> current = snapshot;
+        if (current != null) {
+            return current;
+        }
+        synchronized (Substitutes.class) {
+            ensureLoaded();
+            return snapshot;
+        }
+    }
+
     private static void ensureLoaded() {
         if (!loaded) {
             load();
@@ -121,6 +135,7 @@ public final class Substitutes {
     }
 
     private static void save() {
+        snapshot = Set.copyOf(ITEMS);
         FileData data = new FileData();
         for (Item item : ITEMS) {
             data.items.add(BuiltInRegistries.ITEM.getKey(item).toString());
@@ -154,7 +169,7 @@ public final class Substitutes {
             return true;
         }
         Item item = present.asItem();
-        return item != Items.AIR && items().contains(item);
+        return item != Items.AIR && snapshot().contains(item);
     }
 
     public static Item find(Inventory inventory, BlockState target) {
@@ -177,7 +192,7 @@ public final class Substitutes {
                 }
             }
         }
-        List<Item> list = items();
+        Set<Item> list = snapshot();
         for (int slot = 0; slot < 36; slot++) {
             ItemStack stack = inventory.getItem(slot);
             if (!stack.isEmpty() && list.contains(stack.getItem())) {

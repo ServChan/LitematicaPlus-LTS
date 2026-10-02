@@ -22,6 +22,7 @@ final class OverviewView extends TabView {
     private int layerTop;
     private int maxToggles;
     private int toggleCount;
+    private final TextMemo progressText = new TextMemo();
 
     OverviewView(HubScreen screen) {
         super(screen);
@@ -142,9 +143,13 @@ final class OverviewView extends TabView {
                 double progress = runtime.progress();
                 Ui.progress(graphics, x, this.top + 26, this.width - 24, 6, progress,
                         progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
-                graphics.text(this.font, tr("litematicaplus.hud.progress",
-                        String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                        runtime.totalBlocks()), x, this.top + 35, Theme.TEXT, false);
+                long correct = runtime.count(MismatchType.CORRECT);
+                long total = runtime.totalBlocks();
+                String text = this.progressText.stale(null, Double.doubleToLongBits(progress), correct, total)
+                        ? this.progressText.set(tr("litematicaplus.hud.progress",
+                                String.format(Locale.ROOT, "%.1f", progress * 100.0), correct, total).getString())
+                        : this.progressText.text();
+                graphics.text(this.font, text, x, this.top + 35, Theme.TEXT, false);
                 if (runtime.scoped()) {
                     Ui.right(graphics, this.font, tr("litematicaplus.hud.scoped").getString(), this.left + this.width - 12,
                             this.top + 35, Theme.WARNING);

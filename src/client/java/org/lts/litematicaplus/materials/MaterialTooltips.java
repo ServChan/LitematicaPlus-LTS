@@ -22,8 +22,9 @@ public final class MaterialTooltips {
 
     public static void register() {
         ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> {
-            if (!LitematicaPlusConfig.current().materialTooltips || Minecraft.getInstance().player == null
-                    || stack.isEmpty()) {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (!LitematicaPlusConfig.current().materialTooltips || minecraft.player == null || stack.isEmpty()
+                    || !minecraft.isSameThread()) {
                 return;
             }
             MaterialCache.Snapshot snapshot = MaterialCache.get();

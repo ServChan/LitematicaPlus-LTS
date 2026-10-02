@@ -69,6 +69,7 @@ public final class PreviewBuilder {
             if (model != null) {
                 return model;
             }
+            return buildVoxels(world, blocks, true, cancelled);
         }
         return buildVoxels(world, blocks, detailed && blocks > MODEL_BLOCK_LIMIT, cancelled);
     }
@@ -146,7 +147,18 @@ public final class PreviewBuilder {
         if (blocks > VOXEL_TARGET) {
             stride = (int) Math.max(1L, Math.ceil(Math.cbrt((double) volume / (VOXEL_TARGET * 4.0))));
         }
-        PreviewModel.Builder builder = new PreviewModel.Builder().simplified(simplified || stride > 1);
+        while (true) {
+            PreviewModel model = buildVoxels(world, stride, simplified || stride > 1, cancelled);
+            if (model != null) {
+                return model;
+            }
+            stride++;
+        }
+    }
+
+    private static PreviewModel buildVoxels(PreviewWorld world, int stride, boolean simplified,
+            BooleanSupplier cancelled) {
+        PreviewModel.Builder builder = new PreviewModel.Builder().simplified(simplified);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int visited = 0;
         for (PreviewWorld.Region region : world.regions()) {
@@ -173,6 +185,9 @@ public final class PreviewBuilder {
                             BlockState neighbour = world.getBlockState(cursor);
                             if (!neighbour.isAir() && (neighbour.canOcclude() || fluid && !neighbour.getFluidState().isEmpty())) {
                                 continue;
+                            }
+                            if (builder.quads() >= MODEL_QUAD_LIMIT) {
+                                return null;
                             }
                             builder.cubeFace(face, worldX, worldY, worldZ, stride, rgb, -1, fluid, fluid ? 0xC0 : 0xFF);
                         }

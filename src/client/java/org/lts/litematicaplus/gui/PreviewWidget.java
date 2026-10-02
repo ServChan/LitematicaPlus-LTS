@@ -23,6 +23,7 @@ final class PreviewWidget extends AbstractWidget {
     private PreviewService.Source source;
     private PreviewRaster.View view;
     private boolean dragged;
+    private final TextMemo simplifiedNote = new TextMemo();
 
     PreviewWidget(int x, int y, int width, int height, PreviewService.Source source, String name) {
         super(x, y, width, height, Component.translatable("litematicaplus.preview.narration", name));
@@ -63,8 +64,9 @@ final class PreviewWidget extends AbstractWidget {
                     size, size, size);
             graphics.disableScissor();
             if (entry.simplified()) {
-                Component note = Component.translatable("litematicaplus.preview.simplified");
-                String text = font.plainSubstrByWidth(note.getString(), width - 10);
+                String text = this.simplifiedNote.stale(font, width, 0L, 0L) ? this.simplifiedNote.set(font.plainSubstrByWidth(
+                        Component.translatable("litematicaplus.preview.simplified").getString(), width - 10))
+                        : this.simplifiedNote.text();
                 graphics.fill(x + 1, y + height - 12, x + 7 + font.width(text), y + height - 1, Theme.alpha(Theme.SURFACE, 0xD0));
                 graphics.text(font, text, x + 4, y + height - 10, Theme.WARNING, false);
             }

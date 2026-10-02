@@ -92,6 +92,8 @@ public final class PreviewModel {
         private float maxY = Float.NEGATIVE_INFINITY;
         private float maxZ = Float.NEGATIVE_INFINITY;
         private boolean simplified;
+        private final float[] faceXyz = new float[12];
+        private final int[] faceArgb = new int[4];
 
         public int quads() {
             return this.quads;
@@ -130,7 +132,7 @@ public final class PreviewModel {
 
         public void cubeFace(int face, float x, float y, float z, float size, int rgb, int texture, boolean isTranslucent,
                 int alpha) {
-            float[] xyz = new float[12];
+            float[] xyz = this.faceXyz;
             float[][] corners = CUBE[face];
             for (int i = 0; i < 4; i++) {
                 xyz[i * 3] = x + corners[i][0] * size;
@@ -138,7 +140,12 @@ public final class PreviewModel {
                 xyz[i * 3 + 2] = z + corners[i][2] * size;
             }
             int shaded = shade(rgb, CUBE_SHADE[face], alpha);
-            quad(xyz, CUBE_UV, new int[]{shaded, shaded, shaded, shaded}, texture, isTranslucent);
+            int[] argb = this.faceArgb;
+            argb[0] = shaded;
+            argb[1] = shaded;
+            argb[2] = shaded;
+            argb[3] = shaded;
+            quad(xyz, CUBE_UV, argb, texture, isTranslucent);
         }
 
         private static int shade(int rgb, float factor, int alpha) {

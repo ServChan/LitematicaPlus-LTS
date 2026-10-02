@@ -18,6 +18,18 @@ class PreviewRasterTest {
     }
 
     @Test
+    void sortableKeyKeepsFloatCompareOrder() {
+        float[] values = {Float.NEGATIVE_INFINITY, -1.0E9F, -2.5F, -1.0F, -Float.MIN_VALUE, -0.0F, 0.0F,
+                Float.MIN_VALUE, 1.0F, 2.5F, 1.0E9F, Float.POSITIVE_INFINITY, Float.NaN};
+        for (float a : values) {
+            for (float b : values) {
+                assertEquals(Integer.signum(Float.compare(a, b)),
+                        Integer.signum(Integer.compare(PreviewRaster.sortableKey(a), PreviewRaster.sortableKey(b))));
+            }
+        }
+    }
+
+    @Test
     void cubeFillsTheMiddleAndLeavesCornersTransparent() {
         int[] pixels = PreviewRaster.render(cube(0x808080, false, 0xFF), 64, PreviewRaster.View.DEFAULT, () -> false);
         assertEquals(0xFF, pixels[32 * 64 + 32] >>> 24);

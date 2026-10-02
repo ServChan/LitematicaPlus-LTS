@@ -544,7 +544,7 @@ public final class EntityAssist {
         interact(minecraft, frame);
         for (int i = 1; i < clicks; i++) {
             TickQueue.after(i * 2, () -> {
-                if (frame.isAlive() && minecraft.player != null
+                if (TickQueue.worldReady(minecraft) && !BreakAssist.busy(minecraft) && frame.isAlive()
                         && minecraft.player.isWithinEntityInteractionRange(frame, 1.0)) {
                     interact(minecraft, frame);
                 }

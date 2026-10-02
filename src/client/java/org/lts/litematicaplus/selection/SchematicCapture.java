@@ -32,6 +32,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.AABB;
+import org.lts.litematicaplus.schematic.LitematicCodec;
 import org.lts.litematicaplus.schematic.RegionBuilder;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
@@ -98,6 +99,13 @@ public final class SchematicCapture {
             return CompletableFuture.failedFuture(new LocalizedException("litematicaplus.area.error_nothing",
                     "Nothing selected"));
         }
+        for (Box box : boxes) {
+            if (LitematicCodec.tooLong((long) box.maxX() - box.minX() + 1L, (long) box.maxY() - box.minY() + 1L,
+                    (long) box.maxZ() - box.minZ() + 1L) || box.volume() > LitematicCodec.MAX_REGION_VOLUME) {
+                return CompletableFuture.failedFuture(new LocalizedException(
+                        "litematicaplus.error.selection_too_large", "Selection box '" + box.name() + "' is too large"));
+            }
+        }
         IntegratedServer server = minecraft.getSingleplayerServer();
         if (server != null) {
             if (volume(boxes) > MAX_SERVER_VOLUME) {
@@ -112,7 +120,7 @@ public final class SchematicCapture {
                             "litematicaplus.error.dimension_unloaded", "Dimension is not loaded"));
                 }
                 return snapshot(level, boxes, true);
-            }).thenApplyAsync(snapshot -> build(snapshot, boxes, name, author, description), Workers.io());
+            }).thenApplyAsync(snapshot -> build(snapshot, boxes, name, author, description), Workers.save());
         }
         if (volume(boxes) > MAX_CLIENT_VOLUME) {
             return CompletableFuture.failedFuture(new LocalizedException(
@@ -120,7 +128,7 @@ public final class SchematicCapture {
         }
         try {
             Snapshot snapshot = snapshot(minecraft.level, boxes, false);
-            return CompletableFuture.supplyAsync(() -> build(snapshot, boxes, name, author, description), Workers.io());
+            return CompletableFuture.supplyAsync(() -> build(snapshot, boxes, name, author, description), Workers.save());
         } catch (RuntimeException exception) {
             return CompletableFuture.failedFuture(exception);
         }

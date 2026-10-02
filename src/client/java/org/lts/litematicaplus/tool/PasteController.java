@@ -41,7 +41,6 @@ public final class PasteController {
     private static final int FILL_COMMAND_INTERVAL = 4;
     private static final int PLACE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE
             | Block.UPDATE_SUPPRESS_DROPS | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS | Block.UPDATE_SKIP_ON_PLACE;
-    private static final AtomicInteger IN_FLIGHT = new AtomicInteger();
 
     private record Operation(BlockPos pos, BlockState state, CompoundTag data) {
     }
@@ -56,6 +55,8 @@ public final class PasteController {
         boolean privileged;
         int commandCooldown;
         ResourceKey<Level> dimension;
+        ClientLevel level;
+        final AtomicInteger inFlight = new AtomicInteger();
         LitematicaPlusConfig.PasteReplace replace;
         boolean withData;
         long changed;
@@ -101,6 +102,10 @@ public final class PasteController {
         if (!allowed(minecraft, useDirect, "setblock")) {
             return;
         }
+        if (!upToDate(runtime)) {
+            Notify.actionBar("litematicaplus.message.paste_rebuilding");
+            return;
+        }
         PlacementVolume volume = runtime.volume();
         Job created = baseJob(minecraft, useDirect);
         created.volume = volume;
@@ -123,6 +128,11 @@ public final class PasteController {
         if (!useDirect && !created.privileged) {
             Notify.chat(Component.translatable("litematicaplus.message.paste_slow"));
         }
+    }
+
+    public static boolean upToDate(PlacementRuntime runtime) {
+        PlacementVolume volume = runtime == null ? null : runtime.volume();
+        return volume != null && volume.transform().equals(runtime.placement().transform());
     }
 
     public static void startDelete(Minecraft minecraft, List<AreaBox> boxes) {
@@ -184,11 +194,11 @@ public final class PasteController {
     private static Job baseJob(Minecraft minecraft, boolean direct) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         Job created = new Job();
-        IN_FLIGHT.set(0);
         created.direct = direct;
         created.privileged = minecraft.hasSingleplayerServer()
                 || minecraft.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
         created.dimension = minecraft.level.dimension();
+        created.level = minecraft.level;
         created.replace = config.pasteReplace;
         created.withData = config.pasteBlockEntityData;
         return created;
@@ -213,7 +223,7 @@ public final class PasteController {
         if (current == null) {
             return;
         }
-        if (minecraft.player == null || minecraft.level == null || minecraft.level.dimension() != current.dimension) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.level != current.level) {
             job = null;
             return;
         }
@@ -222,7 +232,7 @@ public final class PasteController {
             Notify.actionBar("litematicaplus.message.creative_required");
             return;
         }
-        if (current.direct && IN_FLIGHT.get() > 0) {
+        if (current.direct && current.inFlight.get() > 0) {
             return;
         }
         try {
@@ -348,7 +358,7 @@ public final class PasteController {
             }
         }
         if (operations != null && !operations.isEmpty()) {
-            dispatch(minecraft, current.dimension, operations);
+            dispatch(minecraft, current, operations);
         }
         return current.keyIndex >= current.keys.length;
     }
@@ -413,17 +423,19 @@ public final class PasteController {
         }
         if (operations != null && !operations.isEmpty()) {
             current.changed += operations.size();
-            dispatch(minecraft, current.dimension, operations);
+            dispatch(minecraft, current, operations);
         }
         return current.deleteBoxes.isEmpty();
     }
 
-    private static void dispatch(Minecraft minecraft, ResourceKey<Level> dimension, List<Operation> operations) {
+    private static void dispatch(Minecraft minecraft, Job owner, List<Operation> operations) {
         IntegratedServer server = minecraft.getSingleplayerServer();
         if (server == null) {
             return;
         }
-        IN_FLIGHT.incrementAndGet();
+        ResourceKey<Level> dimension = owner.dimension;
+        AtomicInteger inFlight = owner.inFlight;
+        inFlight.incrementAndGet();
         server.execute(() -> {
             try {
                 ServerLevel level = server.getLevel(dimension);
@@ -448,7 +460,7 @@ public final class PasteController {
                     }
                 }
             } finally {
-                IN_FLIGHT.decrementAndGet();
+                inFlight.decrementAndGet();
             }
         });
     }

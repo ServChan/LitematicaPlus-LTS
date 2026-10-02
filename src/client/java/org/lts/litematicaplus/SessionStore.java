@@ -77,6 +77,13 @@ public final class SessionStore {
     private static final class FileData {
         int schemaVersion = SCHEMA_VERSION;
         Map<String, ScopeData> scopes = new LinkedHashMap<>();
+
+        FileData snapshot() {
+            FileData copy = new FileData();
+            copy.schemaVersion = this.schemaVersion;
+            copy.scopes = new LinkedHashMap<>(this.scopes);
+            return copy;
+        }
     }
 
     private final Path path;
@@ -85,7 +92,7 @@ public final class SessionStore {
     private boolean readOnly;
     private boolean loaded;
     private volatile boolean retry;
-    private final AtomicReference<String> pending = new AtomicReference<>();
+    private final AtomicReference<FileData> pending = new AtomicReference<>();
 
     SessionStore(Path path) {
         this.path = path;
@@ -112,6 +119,13 @@ public final class SessionStore {
             }
             accept(recovered);
             return;
+        }
+        try {
+            AtomicFilePersistence.quarantine(this.path);
+        } catch (IOException exception) {
+            this.readOnly = true;
+            LitematicaPlusClient.LOGGER.warn("Could not set aside unreadable session file {}; keeping it read-only",
+                    this.path, exception);
         }
         this.data = new FileData();
     }
@@ -146,7 +160,7 @@ public final class SessionStore {
             String oldest = this.data.scopes.keySet().iterator().next();
             this.data.scopes.remove(oldest);
         }
-        this.pending.set(GSON.toJson(this.data));
+        this.pending.set(this.data.snapshot());
         try {
             Workers.writer().execute(this::writePending);
         } catch (RejectedExecutionException exception) {
@@ -160,28 +174,28 @@ public final class SessionStore {
         }
         this.loaded = true;
         this.data.scopes.put(key, sanitize(copy(scope)));
-        String json = GSON.toJson(this.data);
+        FileData snapshot = this.data.snapshot();
         synchronized (this.path) {
             this.pending.set(null);
-            writeNow(json);
+            writeNow(snapshot);
         }
     }
 
     private void writePending() {
         synchronized (this.path) {
-            String json = this.pending.getAndSet(null);
-            if (json != null) {
-                writeNow(json);
+            FileData snapshot = this.pending.getAndSet(null);
+            if (snapshot != null) {
+                writeNow(snapshot);
             }
         }
     }
 
-    private void writeNow(String json) {
+    private void writeNow(FileData snapshot) {
         synchronized (this.path) {
             try {
-                AtomicFilePersistence.write(this.path, this.backup, json);
+                AtomicFilePersistence.write(this.path, this.backup, GSON.toJson(snapshot));
                 this.retry = false;
-            } catch (IOException exception) {
+            } catch (IOException | RuntimeException exception) {
                 this.retry = true;
                 LitematicaPlusClient.LOGGER.error("Could not save session {}", this.path, exception);
             }

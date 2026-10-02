@@ -18,6 +18,7 @@ public final class Theme {
     public static final int SLOT_BORDER = 0xFF2E4053;
     public static final int ACCENT = 0xFF6FB7C9;
     public static final int ACCENT_DARK = 0xFF3E7F90;
+    public static final int ACCENT_HOVER = 0xFF4A90A2;
     public static final int ACCENT_TEXT = 0xFFF2F6FA;
     public static final int AMBER = 0xFFC9A05A;
     public static final int TEXT_BRIGHT = 0xFFE8EDF2;

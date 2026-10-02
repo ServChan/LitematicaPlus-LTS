@@ -63,19 +63,25 @@ public final class SpongeCodec {
         RegionBuilder builder = new RegionBuilder(fallbackName, 0, 0, 0, width, height, length);
         long count = 0L;
         int cursor = 0;
-        for (long index = 0L; index < volume && cursor < data.length; index++) {
+        long index = 0L;
+        for (; index < volume && cursor < data.length; index++) {
             int value = 0;
             int shift = 0;
+            boolean complete = false;
             while (cursor < data.length) {
                 byte next = data[cursor++];
                 value |= (next & 0x7F) << shift;
                 if ((next & 0x80) == 0) {
+                    complete = true;
                     break;
                 }
                 shift += 7;
                 if (shift > 28) {
                     throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic has a malformed block index");
                 }
+            }
+            if (!complete) {
+                throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic block data ends inside a block index");
             }
             BlockState state = value >= 0 && value < palette.length ? palette[value] : air;
             if (state.isAir()) {
@@ -88,6 +94,10 @@ public final class SpongeCodec {
             if (!state.is(Blocks.STRUCTURE_VOID)) {
                 count++;
             }
+        }
+        if (index < volume) {
+            throw new LocalizedException("litematicaplus.error.corrupt", "Sponge schematic block data is truncated: " + index
+                    + " of " + volume + " blocks");
         }
         ListTag tiles = blocks.getList("BlockEntities").or(() -> body.getList("BlockEntities"))
                 .or(() -> body.getList("TileEntities")).orElseGet(ListTag::new);
@@ -111,6 +121,7 @@ public final class SpongeCodec {
             builder.blockEntity(pos[0], pos[1], pos[2], nbt);
         }
         ListTag entities = body.getListOrEmpty("Entities");
+        int[] offset = body.getIntArray("Offset").filter(values -> values.length >= 3).orElse(null);
         for (int i = 0; i < entities.size(); i++) {
             CompoundTag entry = entities.getCompoundOrEmpty(i);
             ListTag pos = entry.getListOrEmpty("Pos");
@@ -118,8 +129,16 @@ public final class SpongeCodec {
             double y = pos.getDoubleOr(1, Double.NaN);
             double z = pos.getDoubleOr(2, Double.NaN);
             String id = entry.getStringOr("Id", entry.getStringOr("id", ""));
-            if (id.isEmpty() || !(x >= 0.0 && x <= width && y >= 0.0 && y <= height && z >= 0.0 && z <= length)) {
+            if (id.isEmpty()) {
                 continue;
+            }
+            if (!inside(x, y, z, width, height, length)) {
+                if (offset == null || !inside(x - offset[0], y - offset[1], z - offset[2], width, height, length)) {
+                    continue;
+                }
+                x -= offset[0];
+                y -= offset[1];
+                z -= offset[2];
             }
             CompoundTag nbt = entry.getCompound("Data").map(CompoundTag::copy).orElseGet(() -> {
                 CompoundTag copy = entry.copy();
@@ -146,6 +165,10 @@ public final class SpongeCodec {
         metadata.unknownStates = unresolved.count();
         metadata.format = "sponge";
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
+    }
+
+    private static boolean inside(double x, double y, double z, int width, int height, int length) {
+        return x >= 0.0 && x <= width && y >= 0.0 && y <= height && z >= 0.0 && z <= length;
     }
 
     private static CompoundTag body(CompoundTag root) {

@@ -15,6 +15,7 @@
     "HudMixin",
     "IrisCameraUniformsMixin",
     "LevelRendererMixin",
+    "LocalPlayerAccessor",
     "LocalPlayerMixin",
     "MinecraftMixin",
     "MouseHandlerMixin",

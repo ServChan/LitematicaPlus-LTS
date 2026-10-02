@@ -9,6 +9,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AbstractMountInventoryMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
@@ -33,6 +34,7 @@ final class TransferJob {
 
     private static final int MAX_STEPS = 600;
     private static final int INVENTORY_SLOTS = 36;
+    private static final int MOUNT_STORAGE_START = 2;
 
     private final Kind kind;
     private final Set<Item> only;
@@ -40,13 +42,14 @@ final class TransferJob {
     private final int containerId;
     private final Reference2LongMap<Item> startCounts;
     private int steps;
+    private boolean clicked;
 
     TransferJob(Kind kind, Set<Item> only, boolean everything, AbstractContainerMenu menu, Inventory inventory) {
         this.kind = kind;
         this.only = only;
         this.everything = everything;
         this.containerId = menu.containerId;
-        this.startCounts = MaterialList.countInventory(inventory);
+        this.startCounts = MaterialList.countTopLevel(inventory);
     }
 
     Kind kind() {
@@ -58,7 +61,7 @@ final class TransferJob {
     }
 
     long moved(Inventory inventory) {
-        Reference2LongMap<Item> now = MaterialList.countInventory(inventory);
+        Reference2LongMap<Item> now = MaterialList.countTopLevel(inventory);
         long total = 0L;
         for (Reference2LongMap.Entry<Item> entry : now.reference2LongEntrySet()) {
             long delta = entry.getLongValue() - this.startCounts.getLong(entry.getKey());
@@ -86,11 +89,20 @@ final class TransferJob {
         return slot.container == inventory;
     }
 
+    static boolean storageSlot(Slot slot, AbstractContainerMenu menu, Inventory inventory) {
+        return !playerSlot(slot, inventory)
+                && (!(menu instanceof AbstractMountInventoryMenu) || slot.index >= MOUNT_STORAGE_START);
+    }
+
     Outcome step(Minecraft minecraft, AbstractContainerMenu menu) {
         LocalPlayer player = minecraft.player;
-        if (player == null || minecraft.gameMode == null || menu.containerId != this.containerId
-                || !menu.getCarried().isEmpty()) {
+        if (player == null || minecraft.gameMode == null || menu.containerId != this.containerId) {
             return Outcome.INTERRUPTED;
+        }
+        boolean clickedBefore = this.clicked;
+        this.clicked = false;
+        if (!menu.getCarried().isEmpty()) {
+            return clickedBefore && recoverCursor(minecraft, menu) ? Outcome.RUNNING : Outcome.INTERRUPTED;
         }
         if (++this.steps > MAX_STEPS) {
             return Outcome.DONE;
@@ -113,7 +125,7 @@ final class TransferJob {
             }
             List<ClickPlanner.Source> sources = new ArrayList<>();
             for (Slot slot : menu.slots) {
-                if (!playerSlot(slot, inventory) && slot.hasItem() && slot.getItem().is(entry.item())
+                if (storageSlot(slot, menu, inventory) && slot.hasItem() && slot.getItem().is(entry.item())
                         && loose(slot.getItem())) {
                     sources.add(new ClickPlanner.Source(slot.index, slot.getItem().getCount()));
                 }
@@ -131,16 +143,16 @@ final class TransferJob {
                 if (target < 0) {
                     return Outcome.INVENTORY_FULL;
                 }
-                return click(minecraft, menu, ClickPlanner.split(split.slot(), split.count(), split.amount(), target),
-                        split.slot()) ? Outcome.RUNNING : Outcome.INTERRUPTED;
+                return click(minecraft, menu, inventory, ClickPlanner.split(split.slot(), split.count(), split.amount(),
+                        target), split.slot(), true) ? Outcome.RUNNING : Outcome.INTERRUPTED;
             }
-            return quickMove(minecraft, menu, first.slot()) ? Outcome.RUNNING : Outcome.INVENTORY_FULL;
+            return moveWhole(minecraft, menu, inventory, first.slot(), true) ? Outcome.RUNNING : Outcome.INVENTORY_FULL;
         }
         if (this.everything) {
             return Outcome.DONE;
         }
         for (Slot slot : menu.slots) {
-            if (playerSlot(slot, inventory) || !slot.hasItem() || loose(slot.getItem())) {
+            if (!storageSlot(slot, menu, inventory) || !slot.hasItem() || loose(slot.getItem())) {
                 continue;
             }
             ItemContainerContents contents = slot.getItem().get(DataComponents.CONTAINER);
@@ -149,7 +161,7 @@ final class TransferJob {
                 return entry != null && entry.shortfall() > 0L && concerns(inner.getItem());
             });
             if (useful) {
-                return quickMove(minecraft, menu, slot.index) ? Outcome.RUNNING : Outcome.INVENTORY_FULL;
+                return moveWhole(minecraft, menu, inventory, slot.index, true) ? Outcome.RUNNING : Outcome.INVENTORY_FULL;
             }
         }
         return Outcome.DONE;
@@ -199,10 +211,10 @@ final class TransferJob {
                 if (target < 0) {
                     return Outcome.CONTAINER_FULL;
                 }
-                return click(minecraft, menu, ClickPlanner.split(split.slot(), split.count(), split.amount(), target),
-                        split.slot()) ? Outcome.RUNNING : Outcome.INTERRUPTED;
+                return click(minecraft, menu, inventory, ClickPlanner.split(split.slot(), split.count(), split.amount(),
+                        target), split.slot(), false) ? Outcome.RUNNING : Outcome.INTERRUPTED;
             }
-            return quickMove(minecraft, menu, first.slot()) ? Outcome.RUNNING : Outcome.CONTAINER_FULL;
+            return moveWhole(minecraft, menu, inventory, first.slot(), false) ? Outcome.RUNNING : Outcome.CONTAINER_FULL;
         }
         return Outcome.DONE;
     }
@@ -233,7 +245,7 @@ final class TransferJob {
     private static int containerTarget(AbstractContainerMenu menu, Inventory inventory, ItemStack like, int amount) {
         int empty = -1;
         for (Slot slot : menu.slots) {
-            if (playerSlot(slot, inventory) || !slot.mayPlace(like)) {
+            if (!storageSlot(slot, menu, inventory) || !slot.mayPlace(like)) {
                 continue;
             }
             ItemStack stack = slot.getItem();
@@ -249,19 +261,70 @@ final class TransferJob {
         return empty;
     }
 
-    private boolean quickMove(Minecraft minecraft, AbstractContainerMenu menu, int slotIndex) {
-        Slot slot = menu.slots.get(slotIndex);
-        int before = slot.getItem().getCount();
-        ItemStack kind = slot.getItem().copy();
-        minecraft.gameMode.handleContainerInput(this.containerId, slotIndex, 0, ContainerInput.QUICK_MOVE, minecraft.player);
-        ItemStack after = slot.getItem();
-        return after.isEmpty() || !ItemStack.isSameItemSameComponents(after, kind) || after.getCount() < before;
+    private boolean moveWhole(Minecraft minecraft, AbstractContainerMenu menu, Inventory inventory, int slotIndex,
+            boolean toPlayer) {
+        ItemStack stack = menu.slots.get(slotIndex).getItem();
+        if (toPlayer && anyLocked()) {
+            int target = playerTarget(menu, inventory, stack, stack.getCount());
+            return target >= 0 && pickup(minecraft, menu, ClickPlanner.split(slotIndex, stack.getCount(),
+                    stack.getCount(), target), slotIndex);
+        }
+        return quickMove(minecraft, menu, inventory, slotIndex, toPlayer);
     }
 
-    private boolean click(Minecraft minecraft, AbstractContainerMenu menu, List<ClickPlanner.Click> clicks, int source) {
-        if (clicks.size() > ClickPlanner.MAX_SPLIT_CLICKS) {
-            return quickMove(minecraft, menu, source);
+    private static boolean anyLocked() {
+        if (!InventoryLocks.available()) {
+            return false;
         }
+        for (int index = 0; index < INVENTORY_SLOTS; index++) {
+            if (InventoryLocks.locked(index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean quickMove(Minecraft minecraft, AbstractContainerMenu menu, Inventory inventory, int slotIndex,
+            boolean toPlayer) {
+        ItemStack kind = menu.slots.get(slotIndex).getItem().copy();
+        long before = countSide(menu, inventory, kind, toPlayer);
+        this.clicked = true;
+        minecraft.gameMode.handleContainerInput(this.containerId, slotIndex, 0, ContainerInput.QUICK_MOVE, minecraft.player);
+        return countSide(menu, inventory, kind, toPlayer) > before;
+    }
+
+    private static long countSide(AbstractContainerMenu menu, Inventory inventory, ItemStack kind, boolean player) {
+        long total = 0L;
+        for (Slot slot : menu.slots) {
+            boolean side = player ? playerSlot(slot, inventory) : storageSlot(slot, menu, inventory);
+            if (side && ItemStack.isSameItemSameComponents(slot.getItem(), kind)) {
+                total += slot.getItem().getCount();
+            }
+        }
+        return total;
+    }
+
+    private boolean recoverCursor(Minecraft minecraft, AbstractContainerMenu menu) {
+        ItemStack carried = menu.getCarried();
+        int target = playerTarget(menu, minecraft.player.getInventory(), carried, carried.getCount());
+        if (target < 0) {
+            return false;
+        }
+        minecraft.gameMode.handleContainerInput(this.containerId, target, ClickPlanner.LEFT, ContainerInput.PICKUP,
+                minecraft.player);
+        return menu.getCarried().isEmpty();
+    }
+
+    private boolean click(Minecraft minecraft, AbstractContainerMenu menu, Inventory inventory,
+            List<ClickPlanner.Click> clicks, int source, boolean toPlayer) {
+        if (clicks.size() > ClickPlanner.MAX_SPLIT_CLICKS) {
+            return moveWhole(minecraft, menu, inventory, source, toPlayer);
+        }
+        return pickup(minecraft, menu, clicks, source);
+    }
+
+    private boolean pickup(Minecraft minecraft, AbstractContainerMenu menu, List<ClickPlanner.Click> clicks, int source) {
+        this.clicked = true;
         for (ClickPlanner.Click click : clicks) {
             minecraft.gameMode.handleContainerInput(this.containerId, click.slot(), click.button(), ContainerInput.PICKUP,
                     minecraft.player);

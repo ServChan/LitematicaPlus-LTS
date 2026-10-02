@@ -170,13 +170,24 @@ final class SettingsView extends TabView {
         if (!this.toolItemValid) {
             return;
         }
-        LitematicaPlusConfig.save(this.working);
+        LitematicaPlusConfig.save(this.working).thenAccept(written -> this.minecraft.execute(() -> saved(written)));
         this.working = LitematicaPlusConfig.currentCopy();
         this.toolItemText = this.working.toolItem;
         this.dirty = false;
-        this.status = tr("litematicaplus.settings.saved");
-        this.statusColor = Theme.SUCCESS;
+        this.status = Component.empty();
         this.screen.refresh();
+    }
+
+    private void saved(boolean written) {
+        if (!written) {
+            this.dirty = true;
+            this.status = tr("litematicaplus.settings.save_failed");
+            this.statusColor = Theme.DANGER;
+        } else if (!this.dirty) {
+            this.status = tr("litematicaplus.settings.saved");
+            this.statusColor = Theme.SUCCESS;
+        }
+        updateSave();
     }
 
     private List<Row> rows() {

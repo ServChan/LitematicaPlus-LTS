@@ -4,6 +4,7 @@ import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import org.lts.litematicaplus.verify.SectionVerdict;
 
 public final class SectionSlot {
+    static final int[] NO_SPECIALS = new int[0];
     public final long key;
     public final int originX;
     public final int originY;
@@ -22,10 +23,13 @@ public final class SectionSlot {
     int fillIndices;
     GpuBuffer lines;
     int lineIndices;
-    int[] specials = new int[0];
+    int[] specials = NO_SPECIALS;
     SectionVerdict verdict;
+    SectionVerdict[] pendingPlanes;
+    SectionVerdict[] usedPlanes;
     ScopeTally tally;
     int drawIndex = -1;
+    int specialIndex = -1;
     int failures;
     int appliedRevision = -1;
     int pendingRules;
@@ -92,6 +96,6 @@ public final class SectionSlot {
         this.ghostIndices = 0;
         this.fillIndices = 0;
         this.lineIndices = 0;
-        this.specials = new int[0];
+        this.specials = NO_SPECIALS;
     }
 }

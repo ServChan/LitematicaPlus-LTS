@@ -1,6 +1,7 @@
 package org.lts.litematicaplus.materials;
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,6 +47,9 @@ public final class ContainerHelper {
     private static int refreshIn;
     private static int statusHold;
     private static Int2IntOpenHashMap highlighted = new Int2IntOpenHashMap();
+    private static Item focusItem;
+    private static IntOpenHashSet focusSlots = new IntOpenHashSet();
+    private static long focusStamp;
 
     private ContainerHelper() {
     }
@@ -95,6 +99,8 @@ public final class ContainerHelper {
                     panel = null;
                     job = null;
                     highlighted = new Int2IntOpenHashMap();
+                    focusItem = null;
+                    focusSlots = new IntOpenHashSet();
                 }
             });
         });
@@ -206,14 +212,16 @@ public final class ContainerHelper {
         LocalPlayer player = minecraft.player;
         MaterialCache.Snapshot snapshot = MaterialCache.get();
         Int2IntOpenHashMap marks = new Int2IntOpenHashMap();
+        focusStamp++;
         if (player == null || snapshot.placement() == null) {
             highlighted = marks;
+            panel = null;
             return;
         }
         Reference2LongOpenHashMap<Item> here = new Reference2LongOpenHashMap<>();
         Reference2LongOpenHashMap<Item> boxed = new Reference2LongOpenHashMap<>();
         for (Slot slot : screen.getMenu().slots) {
-            if (TransferJob.playerSlot(slot, player.getInventory()) || !slot.hasItem()) {
+            if (!TransferJob.storageSlot(slot, screen.getMenu(), player.getInventory()) || !slot.hasItem()) {
                 continue;
             }
             ItemStack stack = slot.getItem();
@@ -244,15 +252,12 @@ public final class ContainerHelper {
         List<MaterialPanel.Row> rows = new ArrayList<>();
         boolean canDeposit = false;
         for (MaterialList.Entry entry : snapshot.entries()) {
-            if (entry.missing() <= 0L) {
-                continue;
-            }
             canDeposit |= entry.available() > entry.missing();
-            if (entry.shortfall() <= 0L) {
+            if (entry.missing() <= 0L || entry.shortfall() <= 0L) {
                 continue;
             }
             ItemStack icon = new ItemStack(entry.item());
-            rows.add(new MaterialPanel.Row(entry.item(), icon, icon.getHoverName().getString(), entry.shortfall(),
+            rows.add(new MaterialPanel.Row(entry.item(), icon, MaterialList.name(entry.item()), entry.shortfall(),
                     entry.missing(), entry.available(), here.getLong(entry.item()), boxed.getLong(entry.item())));
         }
         rows.sort(Comparator.<MaterialPanel.Row>comparingInt(row -> row.here() > 0L ? 0 : row.boxed() > 0L ? 1 : 2)
@@ -275,17 +280,40 @@ public final class ContainerHelper {
         int top = bounds.litematicaplus$topPos();
         List<Slot> slots = screen.getMenu().slots;
         Item focus = panel == null ? null : panel.hovered();
+        IntOpenHashSet focused = focusSlots(slots, focus);
         for (Slot slot : slots) {
             int mark = highlighted.getOrDefault(slot.index, 0);
-            boolean focused = focus != null && slot.hasItem() && contains(slot.getItem(), focus);
-            if (mark == 0 && !focused) {
+            boolean focusedSlot = focused.contains(slot.index);
+            if (mark == 0 && !focusedSlot) {
                 continue;
             }
             int x = left + slot.x;
             int y = top + slot.y;
-            graphics.fill(x, y, x + 16, y + 16, focused ? FOCUS_FILL : mark == 2 ? BOX_FILL : DIRECT_FILL);
-            graphics.outline(x - 1, y - 1, 18, 18, focused ? Theme.ACCENT : mark == 2 ? Theme.WARNING : Theme.SUCCESS);
+            graphics.fill(x, y, x + 16, y + 16, focusedSlot ? FOCUS_FILL : mark == 2 ? BOX_FILL : DIRECT_FILL);
+            graphics.outline(x - 1, y - 1, 18, 18, focusedSlot ? Theme.ACCENT : mark == 2 ? Theme.WARNING : Theme.SUCCESS);
         }
+    }
+
+    private static long focusComputedAt = -1L;
+
+    private static IntOpenHashSet focusSlots(List<Slot> slots, Item focus) {
+        if (focus == null) {
+            focusItem = null;
+            focusSlots.clear();
+            return focusSlots;
+        }
+        if (focus == focusItem && focusComputedAt == focusStamp) {
+            return focusSlots;
+        }
+        focusItem = focus;
+        focusComputedAt = focusStamp;
+        focusSlots.clear();
+        for (Slot slot : slots) {
+            if (slot.hasItem() && contains(slot.getItem(), focus)) {
+                focusSlots.add(slot.index);
+            }
+        }
+        return focusSlots;
     }
 
     private static boolean contains(ItemStack stack, Item item) {

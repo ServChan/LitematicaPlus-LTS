@@ -53,6 +53,8 @@ public final class PlacementEditorScreen extends Screen {
     private Vec3 dragAnchor;
     private BlockPos dragOrigin;
     private SchematicPlacement.LoadState knownState;
+    private FlatButton paste;
+    private final TextMemo progressText = new TextMemo();
 
     public PlacementEditorScreen(Screen parent, SchematicPlacement placement) {
         super(Component.translatable("litematicaplus.editor.title"));
@@ -149,8 +151,7 @@ public final class PlacementEditorScreen extends Screen {
                     rebuildWidgets();
                 }));
         y += ROW;
-        PlacementRuntime runtime = GhostEngine.get().runtime(this.placement.id());
-        FlatButton paste = addRenderableWidget(FlatButton.secondary(x, y, half,
+        this.paste = addRenderableWidget(FlatButton.secondary(x, y, half,
                 tr(this.pasteArmed > 0 ? "litematicaplus.placements.paste_confirm" : "litematicaplus.placements.paste"),
                 button -> {
                     if (this.pasteArmed > 0) {
@@ -162,13 +163,18 @@ public final class PlacementEditorScreen extends Screen {
                         rebuildWidgets();
                     }
                 }).withWarning(() -> this.pasteArmed > 0));
-        paste.active = this.minecraft.player != null && this.minecraft.player.hasInfiniteMaterials()
-                && !PasteController.active() && runtime != null && runtime.volume() != null;
+        this.paste.active = pasteAvailable();
         addRenderableWidget(FlatButton.secondary(secondX, y, lastHalf, tr("litematicaplus.editor.menu"),
                 button -> this.minecraft.gui.setScreen(new HubScreen(null, HubScreen.Tab.PLACEMENTS))));
         y += ROW;
         addRenderableWidget(FlatButton.primary(x, y, inner, tr("litematicaplus.editor.done"), button -> onClose()));
         this.hintTop = y + ROW + 4;
+    }
+
+    private boolean pasteAvailable() {
+        PlacementRuntime runtime = GhostEngine.get().runtime(this.placement.id());
+        return this.minecraft.player != null && this.minecraft.player.hasInfiniteMaterials()
+                && !PasteController.active() && runtime != null && runtime.volume() != null;
     }
 
     private void coordinate(int x, int y, int width, int axis, boolean editable) {
@@ -451,6 +457,9 @@ public final class PlacementEditorScreen extends Screen {
             this.rebuildPending = false;
             rebuildWidgets();
         }
+        if (this.paste != null) {
+            this.paste.active = pasteAvailable();
+        }
     }
 
     @Override
@@ -475,9 +484,13 @@ public final class PlacementEditorScreen extends Screen {
         } else {
             double progress = runtime.progress();
             Ui.progress(graphics, x, 17, inner, 4, progress, progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
-            Ui.clipped(graphics, this.font, tr("litematicaplus.hud.progress",
-                    String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                    runtime.totalBlocks()).getString(), x, 25, inner, Theme.TEXT_DIM);
+            long correct = runtime.count(MismatchType.CORRECT);
+            long total = runtime.totalBlocks();
+            String text = this.progressText.stale(null, Double.doubleToLongBits(progress), correct, total)
+                    ? this.progressText.set(tr("litematicaplus.hud.progress",
+                            String.format(Locale.ROOT, "%.1f", progress * 100.0), correct, total).getString())
+                    : this.progressText.text();
+            Ui.clipped(graphics, this.font, text, x, 25, inner, Theme.TEXT_DIM);
         }
         int hintLines = Math.min(6, (this.height - this.hintTop - 4) / 10);
         if (hintLines > 0) {
