@@ -79,7 +79,7 @@ public final class Blueprint {
 
     public static void section(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int width) {
         marker(graphics, x, y + 2, Theme.AMBER);
-        graphics.text(font, text, x + 6, y, Theme.ACCENT, false);
+        graphics.text(font, text, x + 6, y, Theme.ACCENT, true);
         int ruleX = x + 6 + font.width(text) + 6;
         if (width > 0 && ruleX < x + width) {
             dashed(graphics, ruleX, y + 4, x + width - ruleX, Theme.DIVIDER);

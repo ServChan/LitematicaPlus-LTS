@@ -179,16 +179,33 @@ public final class HubScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        if (!seeThrough()) {
+            super.extractBackground(graphics, mouseX, mouseY, delta);
+        }
+    }
+
+    private boolean seeThrough() {
+        return this.view != null && this.view.seeThrough();
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        graphics.fill(0, 0, this.width, this.height, Theme.BACKGROUND);
-        Blueprint.grid(graphics, this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width - this.sidebarWidth - 1,
-                this.height - Theme.HEADER_HEIGHT);
+        boolean clear = seeThrough();
+        if (clear) {
+            graphics.fill(this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width, Theme.HEADER_HEIGHT + 28,
+                    Theme.HUD_BACKGROUND);
+        } else {
+            graphics.fill(0, 0, this.width, this.height, Theme.BACKGROUND);
+            Blueprint.grid(graphics, this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width - this.sidebarWidth - 1,
+                    this.height - Theme.HEADER_HEIGHT);
+        }
         graphics.fill(0, 0, this.width, Theme.HEADER_HEIGHT, Theme.HEADER);
         graphics.fill(0, Theme.HEADER_HEIGHT - 1, this.width, Theme.HEADER_HEIGHT, Theme.DIVIDER);
         for (int tick = Blueprint.MAJOR; tick < this.width; tick += Blueprint.MAJOR) {
             graphics.fill(tick, Theme.HEADER_HEIGHT - 4, tick + 1, Theme.HEADER_HEIGHT - 1, Theme.DIVIDER);
         }
-        graphics.fill(0, Theme.HEADER_HEIGHT, this.sidebarWidth, this.height, Theme.SIDEBAR);
+        graphics.fill(0, Theme.HEADER_HEIGHT, this.sidebarWidth, this.height, clear ? Theme.HUD_BACKGROUND : Theme.SIDEBAR);
         Blueprint.ruler(graphics, this.sidebarWidth, Theme.HEADER_HEIGHT, this.height - Theme.HEADER_HEIGHT,
                 Theme.DIVIDER);
         graphics.outline(10, 9, 11, 11, Theme.ACCENT);

@@ -44,6 +44,10 @@ abstract class TabView {
     void tick() {
     }
 
+    boolean seeThrough() {
+        return false;
+    }
+
     void closed() {
     }
 

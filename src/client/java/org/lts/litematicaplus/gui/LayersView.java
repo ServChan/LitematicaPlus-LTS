@@ -237,14 +237,21 @@ final class LayersView extends TabView {
     }
 
     @Override
+    boolean seeThrough() {
+        return true;
+    }
+
+    @Override
     void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         Ui.section(graphics, this.font, tr("litematicaplus.overview.layers"), this.left, this.layerTop - 11, this.width);
         Ui.section(graphics, this.font, tr("litematicaplus.layers.clip_title"), this.left, this.clipTop - 11, this.width);
         Ui.section(graphics, this.font, tr("litematicaplus.layers.scope_title"), this.left, this.scopeTop - 11, this.width);
-        int lines = Math.min(5, (this.top + this.height - this.footerTop) / 10);
+        int lines = Math.min(Math.min(5, this.font.split(tr("litematicaplus.layers.hint"), this.width - 12).size()),
+                (this.top + this.height - this.footerTop - 8) / 10);
         if (lines > 0) {
-            Ui.wrapped(graphics, this.font, tr("litematicaplus.layers.hint"), this.left, this.footerTop, this.width, lines,
-                    Theme.TEXT_DIM, mouseX, mouseY);
+            Ui.panel(graphics, this.left, this.footerTop, this.width, lines * 10 + 8);
+            Ui.wrapped(graphics, this.font, tr("litematicaplus.layers.hint"), this.left + 6, this.footerTop + 5,
+                    this.width - 12, lines, Theme.TEXT_DIM, mouseX, mouseY);
         }
     }
 }
