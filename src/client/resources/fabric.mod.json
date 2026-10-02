@@ -9,7 +9,8 @@
   "environment": "client",
   "entrypoints": {
     "client": ["org.lts.litematicaplus.LitematicaPlusClient"],
-    "modmenu": ["org.lts.litematicaplus.compat.LitematicaPlusModMenu"]
+    "modmenu": ["org.lts.litematicaplus.compat.LitematicaPlusModMenu"],
+    "jade": ["org.lts.litematicaplus.compat.JadeCompat"]
   },
   "mixins": ["litematicaplus.client.mixins.json"],
   "depends": {
@@ -20,9 +21,13 @@
     "fabric-lifecycle-events-v1": "*",
     "fabric-rendering-v1": "*",
     "fabric-resource-loader-v1": "*",
-    "fabric-screen-api-v1": "*"
+    "fabric-screen-api-v1": "*",
+    "fabric-item-api-v1": "*"
   },
   "suggests": {
-    "modmenu": "*"
+    "modmenu": "*",
+    "jade": "*",
+    "stackcalculator": "*",
+    "inventoryprofilesnext": "*"
   }
 }

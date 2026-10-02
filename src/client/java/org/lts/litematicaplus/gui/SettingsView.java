@@ -217,6 +217,9 @@ final class SettingsView extends TabView {
                 rows.add(toggle("pick_block", c -> c.pickBlockEnabled, (c, v) -> c.pickBlockEnabled = v));
                 rows.add(toggle("placement_restriction", c -> c.placementRestriction, (c, v) -> c.placementRestriction = v));
                 rows.add(toggle("material_helper", c -> c.materialHelper, (c, v) -> c.materialHelper = v));
+                rows.add(toggle("material_panel", c -> c.materialPanel, (c, v) -> c.materialPanel = v));
+                rows.add(toggle("material_exact", c -> c.materialExactTake, (c, v) -> c.materialExactTake = v));
+                rows.add(toggle("material_tooltips", c -> c.materialTooltips, (c, v) -> c.materialTooltips = v));
                 rows.add(this::pasteReplaceRow);
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,

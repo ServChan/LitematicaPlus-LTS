@@ -69,23 +69,36 @@ final class MaterialsSuite {
         TestUi.use(context, world, 12);
         LitematicaPlusGameTest.require(context.computeOnClient(client -> client.gui.screen() instanceof AbstractContainerScreen),
                 "right click should open the chest");
-        String take = TestUi.text("litematicaplus.materials.take", 2);
-        LitematicaPlusGameTest.require(TestUi.hasLabel(context, take), "the chest should offer '" + take + "'");
+        String take = TestUi.text("litematicaplus.panel.take_all");
+        LitematicaPlusGameTest.require(TestUi.hasLabel(context, take), "the chest panel should offer '" + take + "'");
         context.takeScreenshot("12_material_helper");
         TestUi.clickLabel(context, take);
-        context.waitTicks(12);
+        context.waitTicks(20);
+        world.getConnection().waitForClientboundPackets();
         int gold = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
                 .countItem(Items.GOLD_BLOCK));
         boolean box = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
                 .contains(stack -> stack.is(Items.SHULKER_BOX)));
         int dirt = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
                 .countItem(Items.DIRT));
-        LitematicaPlusGameTest.require(gold == 2 && box && dirt == 0, "Take materials should move 2 gold blocks and the shulker box only, got gold "
-                + gold + " box " + box + " dirt " + dirt);
-        LitematicaPlusGameTest.require(TestUi.hasLabel(context, TestUi.text("litematicaplus.materials.take_none")),
-                "after taking, the chest should hold nothing more that is needed");
+        LitematicaPlusGameTest.require(gold == 3 && !box && dirt == 0,
+                "Take needed should move exactly 3 gold blocks and leave the shulker box, got gold " + gold + " box " + box
+                        + " dirt " + dirt);
+        context.takeScreenshot("12b_material_helper_taken");
+        world.getServer().runCommand("give @p minecraft:gold_block 10");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(15);
+        TestUi.clickLabel(context, TestUi.text("litematicaplus.panel.deposit"));
+        context.waitTicks(20);
+        world.getConnection().waitForClientboundPackets();
+        int kept = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
+                .countItem(Items.GOLD_BLOCK));
+        LitematicaPlusGameTest.require(kept == 3, "Put back extra should leave exactly the 3 needed gold blocks, got " + kept);
         context.setScreen(() -> null);
         context.waitTicks(5);
+        if (System.getProperty("litematicaplus.materialsOnly") != null) {
+            return;
+        }
 
         Path directory = MaterialExport.directory();
         context.setScreen(() -> new HubScreen(null, HubScreen.Tab.MATERIALS));

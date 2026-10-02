@@ -111,6 +111,9 @@ public final class LitematicaPlusConfig {
     public boolean useWorldCache = true;
     public boolean ghostsOnlyLoaded = true;
     public boolean materialHelper = true;
+    public boolean materialPanel = true;
+    public boolean materialExactTake = true;
+    public boolean materialTooltips = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
     public int pasteCommandsPerTick = 8;

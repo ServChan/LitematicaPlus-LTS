@@ -14,6 +14,8 @@ def fabricResourceLoaderVersion = project.fabric_resource_loader_version
 def fabricScreenApiVersion = project.fabric_screen_api_version
 def fabricApiVersion = project.fabric_api_version
 def localModMenu = file(project.modmenu_jar)
+def localJade = file(project.jade_jar)
+def fabricItemApiVersion = project.fabric_item_api_version
 
 base {
     archivesName = project.archives_base_name
@@ -55,6 +57,10 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-rendering-v1:${fabricRenderingVersion}"
     implementation "net.fabricmc.fabric-api:fabric-resource-loader-v1:${fabricResourceLoaderVersion}"
     implementation "net.fabricmc.fabric-api:fabric-screen-api-v1:${fabricScreenApiVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-item-api-v1:${fabricItemApiVersion}"
+    if (localJade.isFile()) {
+        compileOnly files(localJade)
+    }
 
     if (localModMenu.isFile()) {
         compileOnly files(localModMenu)

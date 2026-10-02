@@ -70,6 +70,11 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 mapView(context, world);
                 return;
             }
+            if (System.getProperty("litematicaplus.materialsOnly") != null) {
+                MaterialsSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
             if (System.getProperty("litematicaplus.lodOnly") != null) {
                 lodDepth(context, world);
                 return;

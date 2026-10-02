@@ -14,4 +14,7 @@ public interface AbstractContainerScreenAccessor {
 
     @Accessor("imageWidth")
     int litematicaplus$imageWidth();
+
+    @Accessor("imageHeight")
+    int litematicaplus$imageHeight();
 }

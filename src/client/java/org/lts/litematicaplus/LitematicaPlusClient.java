@@ -9,6 +9,7 @@ import net.minecraft.resources.Identifier;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerHelper;
+import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.render.TopView;
@@ -30,6 +31,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         Hotkeys.register();
         GhostRenderer.register();
         ContainerHelper.register();
+        MaterialTooltips.register();
         ClientTickEvents.END_CLIENT_TICK.register(LitematicaPlusClient::tick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
             Session.shutdown();
