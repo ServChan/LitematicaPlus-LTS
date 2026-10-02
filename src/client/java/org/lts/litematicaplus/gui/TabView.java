@@ -60,7 +60,7 @@ abstract class TabView {
     }
 
     protected EditBox field(int x, int y, int w, String value, Component hint, int maxLength) {
-        EditBox box = new EditBox(this.font, x, y, w, Theme.CONTROL_HEIGHT, hint);
+        EditBox box = new InkField(this.font, x, y, w, Theme.CONTROL_HEIGHT, hint);
         box.setMaxLength(maxLength);
         box.setValue(value == null ? "" : value);
         box.setHint(hint);

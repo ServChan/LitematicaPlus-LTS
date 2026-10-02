@@ -16,6 +16,7 @@
   "litematicaplus.tab.schematics": "Schematics",
   "litematicaplus.tab.placements": "Placements",
   "litematicaplus.tab.layers": "Layers",
+  "litematicaplus.hub.sheet": "SHEET %s/%s",
   "litematicaplus.tab.area": "Area",
   "litematicaplus.tab.materials": "Materials",
   "litematicaplus.tab.verifier": "Verifier",

@@ -131,7 +131,8 @@ public final class HubScreen extends Screen {
         int y = Theme.HEADER_HEIGHT + 8;
         for (Tab entry : Tab.values()) {
             FlatButton button = new FlatButton(0, y, this.sidebarWidth, 22, entry.title(), FlatButton.Style.TAB,
-                    pressed -> switchTab(entry)).withState(() -> this.tab == entry);
+                    pressed -> switchTab(entry)).withState(() -> this.tab == entry)
+                    .withIndex(String.format(java.util.Locale.ROOT, "%02d", entry.ordinal() + 1));
             addRenderableWidget(button);
             y += 23;
         }
@@ -180,25 +181,43 @@ public final class HubScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         graphics.fill(0, 0, this.width, this.height, Theme.BACKGROUND);
+        Blueprint.grid(graphics, this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width - this.sidebarWidth - 1,
+                this.height - Theme.HEADER_HEIGHT);
         graphics.fill(0, 0, this.width, Theme.HEADER_HEIGHT, Theme.HEADER);
         graphics.fill(0, Theme.HEADER_HEIGHT - 1, this.width, Theme.HEADER_HEIGHT, Theme.DIVIDER);
+        for (int tick = Blueprint.MAJOR; tick < this.width; tick += Blueprint.MAJOR) {
+            graphics.fill(tick, Theme.HEADER_HEIGHT - 4, tick + 1, Theme.HEADER_HEIGHT - 1, Theme.DIVIDER);
+        }
         graphics.fill(0, Theme.HEADER_HEIGHT, this.sidebarWidth, this.height, Theme.SIDEBAR);
-        graphics.fill(this.sidebarWidth, Theme.HEADER_HEIGHT, this.sidebarWidth + 1, this.height, Theme.DIVIDER);
-        graphics.fill(10, 9, 13, 21, Theme.ACCENT);
-        graphics.text(this.font, this.title, 19, 11, Theme.TEXT_BRIGHT, false);
+        Blueprint.ruler(graphics, this.sidebarWidth, Theme.HEADER_HEIGHT, this.height - Theme.HEADER_HEIGHT,
+                Theme.DIVIDER);
+        graphics.outline(10, 9, 11, 11, Theme.ACCENT);
+        graphics.fill(14, 13, 17, 16, Theme.AMBER);
+        String heading = this.title.getString().toUpperCase(java.util.Locale.ROOT);
+        graphics.text(this.font, heading, 27, 11, Theme.TEXT_BRIGHT, false);
+        Component sheet = Component.translatable("litematicaplus.hub.sheet",
+                String.format(java.util.Locale.ROOT, "%02d", this.tab.ordinal() + 1),
+                String.format(java.util.Locale.ROOT, "%02d", Tab.values().length));
+        int sheetX = 27 + this.font.width(heading) + 10;
+        graphics.fill(sheetX - 5, 9, sheetX - 4, 21, Theme.DIVIDER);
+        graphics.text(this.font, sheet, sheetX, 11, Theme.AMBER, false);
         String scope = Session.scope();
+        int titleRight = sheetX + this.font.width(sheet) + 14;
         if (SessionStore.get().readOnly()) {
             Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.error.session_read_only"),
-                    this.font.width(this.title) + 40, 11, this.width - this.font.width(this.title) - 52, 1,
-                    Theme.WARNING, mouseX, mouseY);
+                    titleRight, 11, this.width - titleRight - 12, 1, Theme.WARNING, mouseX, mouseY);
         } else if (!scope.isEmpty()) {
-            int scopeWidth = this.width - this.font.width(this.title) - 60;
+            int scopeWidth = this.width - titleRight - 12;
             String shown = this.font.width(scope) > scopeWidth
                     ? ".." + this.font.plainSubstrByWidth(scope, Math.max(0, scopeWidth - 8), true) : scope;
             Ui.right(graphics, this.font, shown, this.width - 12, 11, Theme.TEXT_DIM);
         }
         int contentX = this.sidebarWidth + Theme.PADDING;
-        Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 9, 1.5F, Theme.TEXT_BRIGHT);
+        Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 8, 1.5F, Theme.TEXT_BRIGHT);
+        int ruleY = Theme.HEADER_HEIGHT + 23;
+        Blueprint.dimension(graphics, contentX, ruleY, this.width - Theme.PADDING - contentX, Theme.DIVIDER);
+        graphics.fill(contentX, ruleY - 1, contentX + Math.round(this.font.width(this.tab.title()) * 1.5F), ruleY + 1,
+                Theme.ACCENT);
         if (this.view != null) {
             Component summary = this.view.summary();
             int titleWidth = Math.round(this.font.width(this.tab.title()) * 1.5F);

@@ -230,8 +230,9 @@ public final class Stepper extends AbstractWidget {
         int minusX = valueX - buttonWidth();
         int textY = y + (height - 8) / 2;
         if (this.labelled) {
-            graphics.fill(x, y, minusX, y + height, Theme.SURFACE_RAISED);
+            graphics.fill(x, y, minusX, y + height, Theme.SURFACE);
             graphics.outline(x, y, width, height, Theme.BORDER);
+            graphics.fill(x + 3, y + height - 4, minusX - 3, y + height - 3, Theme.alpha(Theme.DIVIDER, 0x80));
             int labelSpace = minusX - x;
             int inset = labelSpace < 40 ? 4 : 8;
             Ui.clipped(graphics, font, getMessage().getString(), x + inset, textY, labelSpace - inset - 2,
@@ -243,14 +244,19 @@ public final class Stepper extends AbstractWidget {
         if (this.buttons) {
             boolean minusHover = over && mouseX >= minusX && mouseX < valueX;
             boolean plusHover = over && mouseX >= plusX && mouseX < plusX + BUTTON_WIDTH;
-            graphics.fill(minusX, y, valueX, y + height, minusHover ? Theme.SURFACE_HOVER : Theme.CHIP);
-            graphics.fill(plusX, y, plusX + BUTTON_WIDTH, y + height, plusHover ? Theme.SURFACE_HOVER : Theme.CHIP);
+            graphics.fill(minusX, y, valueX, y + height, minusHover ? Theme.SURFACE_SELECTED : Theme.SURFACE);
+            graphics.fill(plusX, y, plusX + BUTTON_WIDTH, y + height, plusHover ? Theme.SURFACE_SELECTED : Theme.SURFACE);
+            graphics.fill(valueX, y + 3, valueX + 1, y + height - 3, Theme.DIVIDER);
+            graphics.fill(plusX - 1, y + 3, plusX, y + height - 3, Theme.DIVIDER);
             graphics.centeredText(font, "-", minusX + BUTTON_WIDTH / 2, textY,
                     value > this.min ? Theme.TEXT_BRIGHT : Theme.TEXT_DISABLED);
             graphics.centeredText(font, "+", plusX + BUTTON_WIDTH / 2, textY,
                     value < this.max ? Theme.TEXT_BRIGHT : Theme.TEXT_DISABLED);
         }
         graphics.outline(minusX, y, buttonWidth() * 2 + valueWidth, height, this.editing ? Theme.ACCENT : Theme.BORDER);
+        if (this.editing) {
+            Blueprint.ticks(graphics, valueX, y, valueWidth, height, Theme.AMBER);
+        }
         String shown;
         if (this.editing) {
             boolean caret = Util.getMillis() / 400L % 2L == 0L;

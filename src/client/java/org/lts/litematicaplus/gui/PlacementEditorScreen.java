@@ -460,11 +460,12 @@ public final class PlacementEditorScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         graphics.fill(this.panelX, 0, this.width, this.height, Theme.HUD_BACKGROUND);
-        graphics.fill(this.panelX, 0, this.panelX + 1, this.height, Theme.DIVIDER);
-        graphics.fill(this.panelX + 1, 0, this.panelX + 3, this.height, Theme.ACCENT);
+        Blueprint.grid(graphics, this.panelX + 1, 0, this.width - this.panelX - 1, this.height);
+        Blueprint.ruler(graphics, this.panelX, 0, this.height, Theme.BORDER);
         int x = this.panelX + PANEL_PADDING;
         int inner = PANEL_WIDTH - PANEL_PADDING * 2;
-        Ui.clipped(graphics, this.font, this.placement.name(), x, 6, inner, Theme.TEXT_BRIGHT);
+        Blueprint.marker(graphics, x, 8, Theme.AMBER);
+        Ui.clipped(graphics, this.font, this.placement.name(), x + 6, 6, inner - 6, Theme.TEXT_BRIGHT);
         PlacementRuntime runtime = GhostEngine.get().runtime(this.placement.id());
         PlacementVolume volume = runtime == null ? null : runtime.volume();
         if (this.placement.loadState() == SchematicPlacement.LoadState.FAILED) {
@@ -485,7 +486,12 @@ public final class PlacementEditorScreen extends Screen {
                     : "litematicaplus.editor.hint"), x, this.hintTop, inner, hintLines, Theme.TEXT_DIM, mouseX, mouseY);
         }
         if (TopView.active()) {
-            graphics.centeredText(this.font, tr("litematicaplus.editor.north"), this.panelX / 2, 6, Theme.TEXT_BRIGHT);
+            Component north = tr("litematicaplus.editor.north");
+            int northWidth = this.font.width(north) + 12;
+            int northX = this.panelX / 2 - northWidth / 2;
+            graphics.fill(northX, 3, northX + northWidth, 16, Theme.HUD_BACKGROUND);
+            Blueprint.frame(graphics, northX, 3, northWidth, 13, Theme.BORDER, Theme.AMBER);
+            graphics.centeredText(this.font, north, this.panelX / 2, 6, Theme.TEXT_BRIGHT);
         }
         super.extractRenderState(graphics, mouseX, mouseY, delta);
     }

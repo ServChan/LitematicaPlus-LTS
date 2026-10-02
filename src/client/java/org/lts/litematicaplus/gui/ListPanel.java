@@ -136,7 +136,7 @@ public final class ListPanel<T> extends AbstractWidget {
         int width = getWidth();
         int height = getHeight();
         graphics.fill(x, y, x + width, y + height, Theme.SURFACE);
-        graphics.outline(x, y, width, height, isFocused() ? Theme.FOCUS : Theme.BORDER);
+        Blueprint.frame(graphics, x, y, width, height, isFocused() ? Theme.FOCUS : Theme.DIVIDER, Theme.BORDER_STRONG);
         if (this.items.isEmpty()) {
             int centerY = y + height / 2;
             graphics.centeredText(font, this.emptyTitle, x + width / 2, centerY - 10, Theme.TEXT);
@@ -159,8 +159,14 @@ public final class ListPanel<T> extends AbstractWidget {
             if (isSelected) {
                 graphics.fill(innerX, rowY, innerX + innerWidth, rowY + this.rowHeight, Theme.SURFACE_SELECTED);
                 graphics.fill(innerX, rowY, innerX + 2, rowY + this.rowHeight, Theme.ACCENT);
+                graphics.fill(innerX + innerWidth - 3, rowY + 2, innerX + innerWidth - 2, rowY + this.rowHeight - 2,
+                        Theme.AMBER);
             } else if (hovered) {
                 graphics.fill(innerX, rowY, innerX + innerWidth, rowY + this.rowHeight, Theme.SURFACE_HOVER);
+            }
+            if (index + 1 < this.items.size()) {
+                Blueprint.dashed(graphics, innerX + 4, rowY + this.rowHeight - 1, innerWidth - 8,
+                        Theme.alpha(Theme.DIVIDER, 0xB0));
             }
             this.renderer.render(graphics, font, this.items.get(index), innerX, rowY, innerWidth, this.rowHeight,
                     isSelected, hovered);
@@ -169,10 +175,10 @@ public final class ListPanel<T> extends AbstractWidget {
         int max = maxScroll();
         if (max > 0) {
             int trackX = x + width - 5;
-            graphics.fill(trackX, innerY, trackX + 4, innerY + innerHeight, Theme.TRACK);
+            graphics.fill(trackX + 1, innerY, trackX + 2, innerY + innerHeight, Theme.DIVIDER);
             int thumb = Math.max(16, (int) ((long) innerHeight * innerHeight / (innerHeight + max)));
             int thumbY = innerY + Math.round((float) this.scroll / max * (innerHeight - thumb));
-            graphics.fill(trackX, thumbY, trackX + 4, thumbY + thumb, Theme.BORDER_STRONG);
+            graphics.fill(trackX, thumbY, trackX + 3, thumbY + thumb, Theme.ACCENT);
         }
     }
 

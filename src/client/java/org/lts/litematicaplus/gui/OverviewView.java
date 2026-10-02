@@ -157,12 +157,13 @@ final class OverviewView extends TabView {
                 chip(graphics, chipX, chipY, MismatchType.EXTRA, runtime);
             }
         }
-        Ui.label(graphics, this.font, tr("litematicaplus.overview.quick_toggles"), this.left, this.togglesTop - 11);
+        Ui.section(graphics, this.font, tr("litematicaplus.overview.quick_toggles"), this.left, this.togglesTop - 11,
+                this.toggleCount < 6 ? this.width - this.font.width(tr("litematicaplus.overview.more_toggles")) - 8 : this.width);
         if (this.toggleCount < 6) {
             Ui.right(graphics, this.font, tr("litematicaplus.overview.more_toggles").getString(), this.left + this.width,
                     this.togglesTop - 11, Theme.TEXT_DIM);
         }
-        Ui.label(graphics, this.font, tr("litematicaplus.overview.layers"), this.left, this.layerTop - 11);
+        Ui.section(graphics, this.font, tr("litematicaplus.overview.layers"), this.left, this.layerTop - 11, this.width);
         int footerTop = this.layerTop + Theme.CONTROL_HEIGHT + 6;
         int footerLines = Math.min(3, (this.top + this.height - footerTop) / 10);
         if (footerLines > 0) {

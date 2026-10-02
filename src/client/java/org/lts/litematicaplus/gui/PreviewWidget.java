@@ -49,8 +49,9 @@ final class PreviewWidget extends AbstractWidget {
         int width = getWidth();
         int height = getHeight();
         graphics.fill(x, y, x + width, y + height, Theme.TRACK);
-        int border = isFocused() ? Theme.FOCUS : isHovered() ? Theme.BORDER : Theme.DIVIDER;
-        graphics.outline(x, y, width, height, border);
+        Blueprint.grid(graphics, x + 1, y + 1, width - 2, height - 2);
+        int border = isFocused() ? Theme.FOCUS : isHovered() ? Theme.BORDER_STRONG : Theme.DIVIDER;
+        Blueprint.frame(graphics, x, y, width, height, border, Theme.ACCENT);
         Font font = Minecraft.getInstance().font;
         PreviewService.Entry entry = PreviewService.get(this.source);
         if (entry.status() == PreviewService.Status.READY && entry.texture() != null) {

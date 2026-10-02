@@ -13,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.gui.Blueprint;
 import org.lts.litematicaplus.gui.Theme;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -147,24 +148,29 @@ public final class InfoHud {
         if (targeted != null) {
             lines++;
         }
-        int height = PADDING * 2 + lines * LINE + (placement != null ? 6 : 0) + materials.size() * LINE
+        int height = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0) + materials.size() * LINE
                 + (materials.isEmpty() ? 0 : 4);
         int screenWidth = graphics.guiWidth();
         int x = config.hudRightSide ? screenWidth - WIDTH - 6 : 6;
         int y = 6;
         graphics.fill(x, y, x + WIDTH, y + height, Theme.HUD_BACKGROUND);
-        graphics.fill(x, y, x + 2, y + height, Theme.ACCENT);
+        Blueprint.grid(graphics, x + 1, y + 1, WIDTH - 2, height - 2);
+        Blueprint.frame(graphics, x, y, WIDTH, height, Theme.DIVIDER, Theme.ACCENT);
         int textX = x + PADDING + 2;
         int cursor = y + PADDING;
-        graphics.text(font, Component.translatable("litematicaplus.hud.title"), textX, cursor, Theme.ACCENT, false);
+        Blueprint.marker(graphics, textX, cursor + 2, Theme.AMBER);
+        graphics.text(font, Component.translatable("litematicaplus.hud.title"), textX + 6, cursor, Theme.ACCENT, false);
         if (tool) {
             Component mode = Component.translatable(ToolController.get().mode().translationKey());
             int modeWidth = font.width(mode) + 8;
             int modeX = x + WIDTH - PADDING - modeWidth;
-            graphics.fill(modeX, cursor - 1, modeX + modeWidth, cursor + 9, Theme.CHIP);
-            graphics.text(font, mode, modeX + 4, cursor, Theme.TEXT, false);
+            graphics.fill(modeX, cursor - 2, modeX + modeWidth, cursor + 9, Theme.alpha(Theme.ACCENT, 0x24));
+            graphics.outline(modeX, cursor - 2, modeWidth, 11, Theme.BORDER);
+            graphics.text(font, mode, modeX + 4, cursor, Theme.TEXT_BRIGHT, false);
         }
         cursor += LINE + 1;
+        Blueprint.dashed(graphics, textX, cursor - 2, WIDTH - PADDING * 2 - 2, Theme.DIVIDER);
+        cursor += 1;
         if (placement != null) {
             cursor = renderPlacement(graphics, font, placement, runtime, x, textX, cursor);
         }
@@ -225,7 +231,7 @@ public final class InfoHud {
         }
         if (!materials.isEmpty()) {
             cursor += 2;
-            graphics.fill(textX, cursor - 1, x + WIDTH - PADDING, cursor, Theme.DIVIDER);
+            Blueprint.dashed(graphics, textX, cursor - 1, WIDTH - PADDING * 2 - 2, Theme.DIVIDER);
             cursor += 2;
             for (MaterialList.Entry entry : materials) {
                 ItemStack stack = stackOf(entry.item());
@@ -264,10 +270,8 @@ public final class InfoHud {
         double progress = runtime.progress();
         int barX = textX;
         int barWidth = WIDTH - PADDING * 2 - 4;
-        graphics.fill(barX, cursor, barX + barWidth, cursor + 4, Theme.TRACK);
-        graphics.fill(barX, cursor, barX + (int) Math.round(barWidth * progress), cursor + 4,
-                progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
-        cursor += 6;
+        Blueprint.progress(graphics, barX, cursor, barWidth, 4, progress, progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
+        cursor += 7;
         Component progressText = Component.translatable("litematicaplus.hud.progress",
                 String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
                 runtime.totalBlocks());
