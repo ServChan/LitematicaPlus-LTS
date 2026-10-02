@@ -199,6 +199,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("lenient_states", c -> c.lenientStates, (c, v) -> c.lenientStates = v));
                 rows.add(toggle("trust_hidden", c -> c.trustHiddenBlocks, (c, v) -> c.trustHiddenBlocks = v));
                 rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
+                rows.add(toggle("count_visible_only", c -> c.countVisibleOnly, (c, v) -> c.countVisibleOnly = v));
                 rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
                 rows.add(toggle("selection_boxes", c -> c.renderSelectionBoxes, (c, v) -> c.renderSelectionBoxes = v));
                 rows.add(number("render_distance", () -> this.working.renderDistance,
@@ -214,6 +215,8 @@ final class SettingsView extends TabView {
                 rows.add(toggle("tool_enabled", c -> c.toolEnabled, (c, v) -> c.toolEnabled = v));
                 rows.add(this::toolItemRow);
                 rows.add(this::authorRow);
+                rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
+                rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
                 rows.add(toggle("pick_block", c -> c.pickBlockEnabled, (c, v) -> c.pickBlockEnabled = v));
                 rows.add(toggle("placement_restriction", c -> c.placementRestriction, (c, v) -> c.placementRestriction = v));
                 rows.add(toggle("material_helper", c -> c.materialHelper, (c, v) -> c.materialHelper = v));

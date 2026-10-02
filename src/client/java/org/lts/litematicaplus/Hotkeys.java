@@ -12,12 +12,14 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.gui.PlacementEditorScreen;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.util.Notify;
+import org.lts.litematicaplus.world.LayerRange;
 
 public final class Hotkeys {
     public record Entry(String name, KeyMapping mapping, Consumer<Minecraft> action) {
@@ -59,6 +61,8 @@ public final class Hotkeys {
         add("layer_mode", 0, minecraft -> ToolController.get().cycleLayerMode(minecraft));
         add("layer_up", 0, minecraft -> ToolController.get().shiftLayer(minecraft, 1));
         add("layer_down", 0, minecraft -> ToolController.get().shiftLayer(minecraft, -1));
+        add("open_layers", InputConstants.KEY_F7, minecraft -> minecraft.gui.setScreen(HubScreen.layers(null)));
+        add("toggle_clip", 0, Hotkeys::toggleClip);
         toggle("toggle_hold", "easy_place_hold", config -> config.easyPlaceHold, (config, value) -> config.easyPlaceHold = value);
         toggle("toggle_guard", "excavation_guard", config -> config.excavationGuard,
                 (config, value) -> config.excavationGuard = value);
@@ -89,6 +93,18 @@ public final class Hotkeys {
             Notify.actionBar("litematicaplus.message.toggled", Component.translatable("litematicaplus.option." + option),
                     Component.translatable(value ? "litematicaplus.state.on" : "litematicaplus.state.off"));
         });
+    }
+
+    private static void toggleClip(Minecraft minecraft) {
+        LayerRange.Clip clip = GhostEngine.get().clip();
+        if (!clip.xEnabled() && !clip.zEnabled()) {
+            minecraft.gui.setScreen(HubScreen.layers(null));
+            return;
+        }
+        GhostEngine.get().setClip(clip.withEnabled(!clip.enabled()));
+        Session.markDirty();
+        Notify.actionBar("litematicaplus.message.toggled", Component.translatable("litematicaplus.layers.clip_enabled"),
+                Component.translatable(!clip.enabled() ? "litematicaplus.state.on" : "litematicaplus.state.off"));
     }
 
     private static void editPlacement(Minecraft minecraft) {

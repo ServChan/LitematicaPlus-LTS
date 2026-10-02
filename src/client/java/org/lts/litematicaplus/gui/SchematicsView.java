@@ -21,6 +21,7 @@ import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.preview.PreviewService;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
 import org.lts.litematicaplus.util.Notify;
@@ -45,6 +46,8 @@ final class SchematicsView extends TabView {
     private Component metadataError;
     private int detailX;
     private int detailWidth;
+    private PreviewWidget preview;
+    private int previewSide;
 
     SchematicsView(HubScreen screen) {
         super(screen);
@@ -68,7 +71,8 @@ final class SchematicsView extends TabView {
 
     @Override
     void init() {
-        this.detailWidth = Math.max(130, Math.min(230, this.width * 42 / 100));
+        boolean previews = PreviewService.enabled();
+        this.detailWidth = Math.max(130, Math.min(previews ? 270 : 230, this.width * (previews ? 46 : 42) / 100));
         int listWidth = this.width - this.detailWidth - Theme.GAP;
         this.detailX = this.left + listWidth + Theme.GAP;
         EditBox search = field(this.left, this.top, listWidth, filter, tr("litematicaplus.schematics.search"), 64);
@@ -91,6 +95,15 @@ final class SchematicsView extends TabView {
                 button -> openFolder()));
         add(FlatButton.secondary(this.detailX + half + Theme.GAP, buttonY, this.detailWidth - half - Theme.GAP,
                 tr("litematicaplus.schematics.refresh"), button -> reload()));
+        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 2;
+        this.previewSide = previews ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
+        this.preview = null;
+        if (this.previewSide >= 64) {
+            this.preview = add(new PreviewWidget(this.detailX + 8, this.top + 8, this.detailWidth - 16, this.previewSide,
+                    previewSource(this.selected), previewName(this.selected)));
+        } else {
+            this.previewSide = 0;
+        }
         updateButtons();
         if (this.entries.isEmpty() && !this.loading) {
             reload();
@@ -177,10 +190,22 @@ final class SchematicsView extends TabView {
         this.list.selectItem(this.selected);
     }
 
+    private static PreviewService.Source previewSource(Entry entry) {
+        return entry == null || entry.directory() ? null
+                : PreviewService.Source.file(entry.path(), entry.size(), entry.modified());
+    }
+
+    private static String previewName(Entry entry) {
+        return entry == null ? "" : entry.name();
+    }
+
     private void select(Entry entry) {
         this.selected = entry;
         this.metadata = null;
         this.metadataError = null;
+        if (this.preview != null) {
+            this.preview.setSource(previewSource(entry), previewName(entry));
+        }
         updateButtons();
         if (entry == null || entry.directory()) {
             return;
@@ -285,6 +310,9 @@ final class SchematicsView extends TabView {
         int x = this.detailX + 8;
         int inner = this.detailWidth - 16;
         int y = this.top + 8;
+        if (this.preview != null && this.preview.visible) {
+            y += this.previewSide + 8;
+        }
         if (this.loading && this.entries.isEmpty()) {
             graphics.text(this.font, tr("litematicaplus.schematics.loading"), x, y, Theme.TEXT_DIM, false);
             return;
@@ -307,8 +335,10 @@ final class SchematicsView extends TabView {
             return;
         }
         SchematicMetadata meta = this.metadata;
-        Ui.chip(graphics, this.font, x, y, Component.literal(meta.format.toUpperCase(Locale.ROOT)), Theme.ACCENT);
-        y += 19;
+        if (this.preview == null || !this.preview.visible) {
+            Ui.chip(graphics, this.font, x, y, Component.literal(meta.format.toUpperCase(Locale.ROOT)), Theme.ACCENT);
+            y += 19;
+        }
         int limit = this.top + panelHeight - 10;
         if (meta.enclosingX > 0) {
             y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.size",

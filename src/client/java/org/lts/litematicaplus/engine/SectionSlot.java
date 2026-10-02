@@ -24,6 +24,7 @@ public final class SectionSlot {
     int lineIndices;
     int[] specials = new int[0];
     SectionVerdict verdict;
+    ScopeTally tally;
     int drawIndex = -1;
     int failures;
     int appliedRevision = -1;

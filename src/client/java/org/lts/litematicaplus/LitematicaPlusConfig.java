@@ -114,6 +114,9 @@ public final class LitematicaPlusConfig {
     public boolean materialPanel = true;
     public boolean materialExactTake = true;
     public boolean materialTooltips = true;
+    public boolean countVisibleOnly = true;
+    public boolean schematicPreview = true;
+    public boolean previewModels = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
     public int pasteCommandsPerTick = 8;

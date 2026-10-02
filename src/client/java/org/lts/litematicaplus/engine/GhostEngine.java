@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -73,6 +74,7 @@ public final class GhostEngine {
     private ClientLevel level;
     private BlockStateModelSet modelIdentity;
     private LayerRange layer = LayerRange.ALL;
+    private LayerRange scope;
     private SectionJob.Options options;
     private SectionJob.Options optionsWithoutGhost;
     private SectionJob.Options optionsOverlayOnly;
@@ -214,11 +216,95 @@ public final class GhostEngine {
     }
 
     public void setLayer(LayerRange range) {
-        LayerRange next = range == null ? LayerRange.ALL : range;
+        LayerRange next = (range == null ? LayerRange.ALL : range).withClip(this.layer.clip());
         if (!next.equals(this.layer)) {
             this.layer = next;
             markEverythingDirty();
+            refreshScope();
         }
+    }
+
+    public LayerRange.Clip clip() {
+        return this.layer.clip();
+    }
+
+    public void setClip(LayerRange.Clip clip) {
+        LayerRange next = this.layer.withClip(clip);
+        if (!next.equals(this.layer)) {
+            this.layer = next;
+            markEverythingDirty();
+            refreshScope();
+        }
+    }
+
+    public LayerRange scope() {
+        return this.scope;
+    }
+
+    private void refreshScope() {
+        LayerRange desired = LitematicaPlusConfig.current().countVisibleOnly && !this.layer.unrestricted() ? this.layer : null;
+        if (Objects.equals(desired, this.scope)) {
+            return;
+        }
+        this.scope = desired;
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            rescope(runtime);
+        }
+    }
+
+    private record TallyInput(SectionSlot slot, GhostSection section, SectionVerdict verdict) {
+    }
+
+    private void rescope(PlacementRuntime runtime) {
+        runtime.resetScope();
+        runtime.scope = this.scope;
+        PlacementVolume volume = runtime.volume;
+        if (this.scope == null || volume == null) {
+            return;
+        }
+        List<TallyInput> inputs = new ArrayList<>();
+        for (SectionSlot slot : runtime.slots.values()) {
+            if (slot.verdict != null) {
+                inputs.add(new TallyInput(slot, volume.section(slot.key), slot.verdict));
+            }
+        }
+        if (inputs.isEmpty()) {
+            return;
+        }
+        LayerRange target = this.scope;
+        int generation = runtime.scopeGeneration;
+        boolean[] solid = volume.solid();
+        runtime.scopeReady = false;
+        Minecraft minecraft = Minecraft.getInstance();
+        Runnable work = () -> {
+            ScopeTally.Scratch scratch = new ScopeTally.Scratch();
+            ScopeTally[] tallies = new ScopeTally[inputs.size()];
+            for (int i = 0; i < tallies.length; i++) {
+                TallyInput input = inputs.get(i);
+                tallies[i] = ScopeTally.compute(input.section(), solid, input.verdict(), target, input.slot().originX,
+                        input.slot().originY, input.slot().originZ, scratch);
+            }
+            minecraft.execute(() -> installTallies(runtime, generation, inputs, tallies));
+        };
+        try {
+            Workers.io().execute(work);
+        } catch (RejectedExecutionException exception) {
+            runtime.scopeReady = true;
+        }
+    }
+
+    private void installTallies(PlacementRuntime runtime, int generation, List<TallyInput> inputs, ScopeTally[] tallies) {
+        if (runtime.scopeGeneration != generation || this.runtimes.get(runtime.placement().id()) != runtime) {
+            return;
+        }
+        for (int i = 0; i < tallies.length; i++) {
+            SectionSlot slot = inputs.get(i).slot();
+            if (slot.tally == null && slot.verdict == inputs.get(i).verdict() && runtime.slots.get(slot.key) == slot) {
+                slot.tally = tallies[i];
+                runtime.addTally(slot.tally, 1);
+            }
+        }
+        runtime.scopeReady = true;
     }
 
     public void sync(List<SchematicPlacement> placements) {
@@ -319,6 +405,7 @@ public final class GhostEngine {
         runtime.volume = volume;
         runtime.building = false;
         runtime.resetTotals(volume.palette().length);
+        runtime.scope = this.scope;
         for (Long2ObjectMap.Entry<GhostSection> entry : volume.sections().long2ObjectEntrySet()) {
             GhostSection section = entry.getValue();
             if (section.insideCount() == 0) {
@@ -519,6 +606,7 @@ public final class GhostEngine {
             }
             for (SectionSlot slot : runtime.slots.values()) {
                 slot.verdict = null;
+                slot.tally = null;
                 slot.verdictRules = -1;
                 slot.inFlight = false;
                 slot.built = false;
@@ -552,6 +640,7 @@ public final class GhostEngine {
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
                 config.overlayFillAlpha, config.overlayLineAlpha);
         boolean blockEntities = config.renderBlockEntities;
+        refreshScope();
         if (!next.equals(this.options) || blockEntities != this.blockEntities) {
             boolean changed = this.options != null;
             this.options = next;
@@ -1019,6 +1108,15 @@ public final class GhostEngine {
         slot.verdictRules = slot.pendingRules;
         slot.appliedRevision = result.revision;
         runtime.add(result.verdict);
+        if (slot.tally != null) {
+            runtime.addTally(slot.tally, -1);
+            slot.tally = null;
+        }
+        if (runtime.scope != null && runtime.volume != null) {
+            slot.tally = ScopeTally.compute(runtime.volume.section(slot.key), runtime.volume.solid(), result.verdict,
+                    runtime.scope, slot.originX, slot.originY, slot.originZ);
+            runtime.addTally(slot.tally, 1);
+        }
         slot.closeBuffers();
         GpuDevice device = RenderSystem.getDevice();
         try {

@@ -477,7 +477,7 @@ public final class PlacementEditorScreen extends Screen {
             Ui.progress(graphics, x, 17, inner, 4, progress, progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
             Ui.clipped(graphics, this.font, tr("litematicaplus.hud.progress",
                     String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                    volume.totalBlocks()).getString(), x, 25, inner, Theme.TEXT_DIM);
+                    runtime.totalBlocks()).getString(), x, 25, inner, Theme.TEXT_DIM);
         }
         int hintLines = Math.min(6, (this.height - this.hintTop - 4) / 10);
         if (hintLines > 0) {

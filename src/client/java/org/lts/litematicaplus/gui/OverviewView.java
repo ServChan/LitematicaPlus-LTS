@@ -144,7 +144,11 @@ final class OverviewView extends TabView {
                         progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
                 graphics.text(this.font, tr("litematicaplus.hud.progress",
                         String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                        volume.totalBlocks()), x, this.top + 35, Theme.TEXT, false);
+                        runtime.totalBlocks()), x, this.top + 35, Theme.TEXT, false);
+                if (runtime.scoped()) {
+                    Ui.right(graphics, this.font, tr("litematicaplus.hud.scoped").getString(), this.left + this.width - 12,
+                            this.top + 35, Theme.WARNING);
+                }
                 int chipX = x;
                 int chipY = this.top + 47;
                 chipX = chip(graphics, chipX, chipY, MismatchType.MISSING, runtime);

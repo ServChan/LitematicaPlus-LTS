@@ -14,6 +14,7 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.preview.PreviewService;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.world.PlacementVolume;
 
@@ -65,6 +66,14 @@ final class PlacementsView extends TabView {
                     this.regionsPage = false;
                     this.screen.refresh();
                 }));
+        Schematic previewed = manager.selected() == null ? null : manager.selected().schematic();
+        int side = Math.min(listWidth, Math.min(this.height - Theme.ROW_HEIGHT * 3 - 6, this.height * 6 / 10));
+        if (PreviewService.enabled() && previewed != null && side >= 64) {
+            this.list.setHeight(this.height - side - 6);
+            add(new PreviewWidget(this.left, this.top + this.height - side, listWidth, side,
+                    PreviewService.Source.loaded(manager.selected().id().toString(), previewed),
+                    manager.selected().name()));
+        }
         this.list.setItems(placements);
         SchematicPlacement selected = manager.selected();
         this.list.selectItem(selected);

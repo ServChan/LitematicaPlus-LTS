@@ -13,6 +13,7 @@ public final class Workers {
     private static volatile ThreadPoolExecutor mesh;
     private static volatile ExecutorService io;
     private static volatile ExecutorService writer;
+    private static volatile ExecutorService preview;
 
     private Workers() {
     }
@@ -76,8 +77,26 @@ public final class Workers {
         return current;
     }
 
+    public static ExecutorService preview() {
+        ExecutorService current = preview;
+        if (current == null || current.isShutdown()) {
+            synchronized (Workers.class) {
+                current = preview;
+                if (current == null || current.isShutdown()) {
+                    current = Executors.newSingleThreadExecutor(factory("LitematicaPlus-Preview", Thread.MIN_PRIORITY + 1));
+                    preview = current;
+                }
+            }
+        }
+        return current;
+    }
+
     public static void shutdown() {
         synchronized (Workers.class) {
+            if (preview != null) {
+                preview.shutdownNow();
+                preview = null;
+            }
             if (writer != null) {
                 writer.shutdown();
                 try {

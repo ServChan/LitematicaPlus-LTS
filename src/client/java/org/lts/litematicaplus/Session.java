@@ -76,6 +76,14 @@ public final class Session {
         data.layer.single = layer.single();
         data.layer.min = layer.min();
         data.layer.max = layer.max();
+        LayerRange.Clip clip = layer.clip();
+        data.layer.clipEnabled = clip.enabled();
+        data.layer.clipX = clip.xEnabled();
+        data.layer.clipMinX = clip.minX();
+        data.layer.clipMaxX = clip.maxX();
+        data.layer.clipZ = clip.zEnabled();
+        data.layer.clipMinZ = clip.minZ();
+        data.layer.clipMaxZ = clip.maxZ();
         data.toolMode = ToolController.get().mode().name();
         return data;
     }
@@ -87,6 +95,7 @@ public final class Session {
                 PlacementManager.get().restore(new SessionStore.ScopeData());
                 SelectionManager.get().restore(new SessionStore.AreaData());
                 GhostEngine.get().setLayer(LayerRange.ALL);
+                GhostEngine.get().setClip(LayerRange.Clip.NONE);
                 return;
             }
             SessionStore.ScopeData data = SessionStore.get().scope(scope);
@@ -95,6 +104,8 @@ public final class Session {
             GhostEngine.get().setLayer(new LayerRange(parse(LayerRange.Mode.class, data.layer.mode, LayerRange.Mode.ALL),
                     parse(Direction.Axis.class, data.layer.axis, Direction.Axis.Y),
                     data.layer.single, data.layer.min, data.layer.max));
+            GhostEngine.get().setClip(new LayerRange.Clip(data.layer.clipEnabled, data.layer.clipX, data.layer.clipMinX,
+                    data.layer.clipMaxX, data.layer.clipZ, data.layer.clipMinZ, data.layer.clipMaxZ));
             ToolMode restored = parse(ToolMode.class, data.toolMode, ToolMode.AREA_SELECTION);
             ToolController.get().setMode(restored == ToolMode.PASTE || restored == ToolMode.DELETE
                     ? ToolMode.AREA_SELECTION : restored);

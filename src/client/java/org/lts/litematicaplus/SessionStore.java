@@ -45,6 +45,13 @@ public final class SessionStore {
         public int single;
         public int min;
         public int max;
+        public boolean clipEnabled;
+        public boolean clipX;
+        public int clipMinX;
+        public int clipMaxX;
+        public boolean clipZ;
+        public int clipMinZ;
+        public int clipMaxZ;
     }
 
     public static final class BoxData {

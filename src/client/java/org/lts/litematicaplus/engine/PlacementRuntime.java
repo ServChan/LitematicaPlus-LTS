@@ -8,6 +8,7 @@ import java.util.List;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.verify.SectionVerdict;
+import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class PlacementRuntime {
@@ -31,6 +32,13 @@ public final class PlacementRuntime {
     boolean building;
     int verifiedSections;
     int knownSections;
+    LayerRange scope;
+    boolean scopeReady = true;
+    int scopeGeneration;
+    final long[] scopedCounts = new long[MismatchType.VALUES.length];
+    long[] scopedTotals = new long[0];
+    long[] scopedCorrect = new long[0];
+    long scopedBlocks;
 
     PlacementRuntime(SchematicPlacement placement) {
         this.placement = placement;
@@ -72,8 +80,36 @@ public final class PlacementRuntime {
         return this.knownSections;
     }
 
+    public boolean scoped() {
+        return this.scope != null && this.scopeReady;
+    }
+
+    public boolean scopePending() {
+        return this.scope != null && !this.scopeReady;
+    }
+
     public long count(MismatchType type) {
+        return scoped() ? this.scopedCounts[type.ordinal()] : this.counts[type.ordinal()];
+    }
+
+    public long fullCount(MismatchType type) {
         return this.counts[type.ordinal()];
+    }
+
+    public long totalBlocks() {
+        PlacementVolume current = this.volume;
+        if (current == null) {
+            return 0L;
+        }
+        return scoped() ? this.scopedBlocks : current.totalBlocks();
+    }
+
+    public long[] totalByPalette() {
+        PlacementVolume current = this.volume;
+        if (current == null) {
+            return new long[0];
+        }
+        return scoped() ? this.scopedTotals : current.totalByPalette();
     }
 
     public long errors() {
@@ -82,15 +118,15 @@ public final class PlacementRuntime {
     }
 
     public long[] correctByPalette() {
-        return this.correctByPalette;
+        return scoped() ? this.scopedCorrect : this.correctByPalette;
     }
 
     public double progress() {
-        PlacementVolume current = this.volume;
-        if (current == null || current.totalBlocks() <= 0L) {
+        long total = totalBlocks();
+        if (total <= 0L) {
             return 0.0;
         }
-        return Math.min(1.0, (double) count(MismatchType.CORRECT) / current.totalBlocks());
+        return Math.min(1.0, (double) count(MismatchType.CORRECT) / total);
     }
 
     void add(SectionVerdict verdict) {
@@ -119,10 +155,41 @@ public final class PlacementRuntime {
         }
     }
 
+    void addTally(ScopeTally tally, int sign) {
+        if (tally == null) {
+            return;
+        }
+        for (int i = 0; i < tally.counts.length; i++) {
+            this.scopedCounts[i] += (long) sign * tally.counts[i];
+        }
+        this.scopedBlocks += (long) sign * tally.blocks;
+        for (int i = 0; i < tally.paletteIndices.length; i++) {
+            int index = tally.paletteIndices[i];
+            if (index < this.scopedTotals.length) {
+                this.scopedTotals[index] += (long) sign * tally.totals[i];
+                this.scopedCorrect[index] += (long) sign * tally.correct[i];
+            }
+        }
+    }
+
+    void resetScope() {
+        java.util.Arrays.fill(this.scopedCounts, 0L);
+        int size = this.correctByPalette.length;
+        this.scopedTotals = new long[size];
+        this.scopedCorrect = new long[size];
+        this.scopedBlocks = 0L;
+        this.scopeGeneration++;
+        this.scopeReady = true;
+        for (SectionSlot slot : this.slots.values()) {
+            slot.tally = null;
+        }
+    }
+
     void resetTotals(int paletteSize) {
         java.util.Arrays.fill(this.counts, 0L);
         this.correctByPalette = new long[paletteSize];
         this.verifiedSections = 0;
         this.knownSections = 0;
+        resetScope();
     }
 }

@@ -218,7 +218,7 @@ public final class SectionMesher {
         SectionJob.Options options = job.options();
         byte[] categories = verdict.categories();
         LayerRange layer = job.layer();
-        boolean layered = !layer.isAll();
+        boolean layered = !layer.unrestricted();
         BlockState[] world = job.world();
         long[] border = job.border();
         boolean surfaceOnly = !options.throughWalls() && world != null;

@@ -125,7 +125,7 @@ public final class InfoHud {
         if (placement != null) {
             lines += 3;
         }
-        if (!layer.isAll()) {
+        if (!layer.unrestricted()) {
             lines++;
         }
         if (box != null && !box.isEmpty()) {
@@ -168,8 +168,9 @@ public final class InfoHud {
         if (placement != null) {
             cursor = renderPlacement(graphics, font, placement, runtime, x, textX, cursor);
         }
-        if (!layer.isAll()) {
-            graphics.text(font, layerText(layer), textX, cursor, Theme.TEXT_DIM, false);
+        if (!layer.unrestricted()) {
+            graphics.text(font, font.plainSubstrByWidth(layerText(layer).getString(), WIDTH - PADDING * 2 - 4), textX,
+                    cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (box != null && !box.isEmpty()) {
@@ -267,9 +268,14 @@ public final class InfoHud {
         graphics.fill(barX, cursor, barX + (int) Math.round(barWidth * progress), cursor + 4,
                 progress >= 0.9999 ? Theme.SUCCESS : Theme.ACCENT);
         cursor += 6;
-        graphics.text(font, Component.translatable("litematicaplus.hud.progress",
+        Component progressText = Component.translatable("litematicaplus.hud.progress",
                 String.format(Locale.ROOT, "%.1f", progress * 100.0), runtime.count(MismatchType.CORRECT),
-                volume.totalBlocks()), textX, cursor, Theme.TEXT, false);
+                runtime.totalBlocks());
+        graphics.text(font, progressText, textX, cursor, Theme.TEXT, false);
+        if (runtime.scoped()) {
+            graphics.text(font, Component.translatable("litematicaplus.hud.scoped"), textX + font.width(progressText) + 6,
+                    cursor, Theme.WARNING, false);
+        }
         cursor += LINE;
         long wrong = runtime.count(MismatchType.WRONG_BLOCK) + runtime.count(MismatchType.WRONG_STATE);
         int cx = textX;
@@ -287,13 +293,34 @@ public final class InfoHud {
         return x + font.width(text) + 8;
     }
 
-    private static Component layerText(LayerRange layer) {
-        String axis = layer.axis().getName().toUpperCase(Locale.ROOT);
-        if (layer.mode() == LayerRange.Mode.RANGE) {
-            return Component.translatable("litematicaplus.hud.layer_range", axis, layer.min(), layer.max());
+    public static Component layerText(LayerRange layer) {
+        Component layerPart = null;
+        if (!layer.isAll()) {
+            String axis = layer.axis().getName().toUpperCase(Locale.ROOT);
+            layerPart = layer.mode() == LayerRange.Mode.RANGE
+                    ? Component.translatable("litematicaplus.hud.layer_range", axis, layer.min(), layer.max())
+                    : Component.translatable("litematicaplus.hud.layer_single",
+                            Component.translatable("litematicaplus.layer.mode." + layer.mode().name().toLowerCase(Locale.ROOT)), axis,
+                            layer.single());
         }
-        return Component.translatable("litematicaplus.hud.layer_single",
-                Component.translatable("litematicaplus.layer.mode." + layer.mode().name().toLowerCase(Locale.ROOT)),
-                axis, layer.single());
+        Component clipPart = null;
+        LayerRange.Clip clip = layer.clip();
+        if (clip.active()) {
+            StringBuilder bounds = new StringBuilder();
+            if (clip.xEnabled()) {
+                bounds.append("X ").append(clip.minX()).append("..").append(clip.maxX());
+            }
+            if (clip.zEnabled()) {
+                if (!bounds.isEmpty()) {
+                    bounds.append(", ");
+                }
+                bounds.append("Z ").append(clip.minZ()).append("..").append(clip.maxZ());
+            }
+            clipPart = Component.translatable("litematicaplus.hud.clip", bounds.toString());
+        }
+        if (layerPart != null && clipPart != null) {
+            return Component.empty().append(layerPart).append("; ").append(clipPart);
+        }
+        return layerPart != null ? layerPart : clipPart != null ? clipPart : Component.empty();
     }
 }

@@ -172,7 +172,7 @@ public final class MaterialList {
             return List.of();
         }
         BlockState[] palette = volume.palette();
-        long[] totals = volume.totalByPalette();
+        long[] totals = runtime.totalByPalette();
         long[] correct = runtime.correctByPalette();
         Reference2LongOpenHashMap<Item> totalByItem = new Reference2LongOpenHashMap<>();
         Reference2LongOpenHashMap<Item> missingByItem = new Reference2LongOpenHashMap<>();

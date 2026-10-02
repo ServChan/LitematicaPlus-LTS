@@ -127,8 +127,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             settle(context, placement);
             context.waitTicks(5);
             context.takeScreenshot("03_single_layer");
+            LayersSuite.run(context, placement, house, ORIGIN);
             context.runOnClient(client -> ToolController.get().applyLayer(LayerRange.ALL));
             settle(context, placement);
+            LayersSuite.preview(context, file);
 
             for (HubScreen.Tab tab : HubScreen.Tab.values()) {
                 context.setScreen(() -> new HubScreen(null, tab));
@@ -371,6 +373,11 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         click(context, scale, 150, 140);
         context.waitTicks(25);
         context.takeScreenshot("gui_schematic_details");
+        context.getInput().resizeWindow(1920, 1080);
+        context.waitTicks(60);
+        context.takeScreenshot("wide_schematic_preview");
+        context.getInput().resizeWindow(854, 480);
+        context.waitTicks(10);
         click(context, scale, 348, 194);
         context.waitTicks(10);
         int after = context.computeOnClient(client -> PlacementManager.get().placements().size());
