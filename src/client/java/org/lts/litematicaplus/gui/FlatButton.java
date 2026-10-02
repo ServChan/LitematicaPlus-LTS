@@ -90,11 +90,8 @@ public final class FlatButton extends AbstractButton {
         switch (this.style) {
             case PRIMARY -> {
                 graphics.fill(x, y, x + width, y + height, !this.active ? Theme.SURFACE
-                        : hovered ? Theme.ACCENT : Theme.ACCENT_DARK);
-                if (this.active) {
-                    graphics.fill(x, y, x + width, y + 1, Theme.alpha(Theme.TEXT_BRIGHT, hovered ? 0xC0 : 0x70));
-                    Blueprint.ticks(graphics, x - 2, y - 2, width + 4, height + 4, Theme.ACCENT);
-                } else {
+                        : hovered ? 0xFF4A90A2 : Theme.ACCENT_DARK);
+                if (!this.active) {
                     graphics.outline(x, y, width, height, Theme.DIVIDER);
                 }
                 centered(graphics, font, x, width, textY, this.active ? Theme.ACCENT_TEXT : Theme.TEXT_DISABLED);
@@ -108,7 +105,7 @@ public final class FlatButton extends AbstractButton {
             case TAB -> {
                 if (on) {
                     graphics.fill(x, y, x + width, y + height, Theme.SURFACE_SELECTED);
-                    graphics.fill(x, y, x + 2, y + height, Theme.ACCENT);
+                    graphics.fill(x, y, x + 2, y + height, Theme.ACCENT_DARK);
                 } else if (hovered) {
                     graphics.fill(x, y, x + width, y + height, Theme.SURFACE_HOVER);
                 }
@@ -123,7 +120,7 @@ public final class FlatButton extends AbstractButton {
             }
             case TOGGLE -> {
                 graphics.fill(x, y, x + width, y + height, hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
-                graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER : hovered ? Theme.ACCENT : Theme.BORDER);
+                graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
                 int switchX = x + width - 28;
                 graphics.text(font, shorten(font, getMessage().getString(), switchX - x - 12), x + 8, textY,
                         !this.active ? Theme.TEXT_DISABLED : on ? Theme.TEXT_BRIGHT : Theme.TEXT, false);
@@ -134,10 +131,7 @@ public final class FlatButton extends AbstractButton {
                 graphics.fill(x, y, x + width, y + height, !this.active ? Theme.alpha(Theme.SURFACE, 0x60)
                         : marked ? Theme.SURFACE_SELECTED : hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
                 graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER
-                        : marked || hovered ? Theme.ACCENT : Theme.BORDER);
-                if (marked) {
-                    Blueprint.ticks(graphics, x, y, width, height, Theme.AMBER);
-                }
+                        : marked ? Theme.ACCENT_DARK : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
                 centered(graphics, font, x, width, textY, !this.active ? Theme.TEXT_DISABLED
                         : this.warning.getAsBoolean() ? Theme.WARNING : marked || hovered ? Theme.TEXT_BRIGHT : Theme.TEXT);
             }

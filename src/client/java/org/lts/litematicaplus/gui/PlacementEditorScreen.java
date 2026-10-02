@@ -460,8 +460,7 @@ public final class PlacementEditorScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         graphics.fill(this.panelX, 0, this.width, this.height, Theme.HUD_BACKGROUND);
-        Blueprint.grid(graphics, this.panelX + 1, 0, this.width - this.panelX - 1, this.height);
-        Blueprint.ruler(graphics, this.panelX, 0, this.height, Theme.BORDER);
+        graphics.fill(this.panelX, 0, this.panelX + 1, this.height, Theme.BORDER);
         int x = this.panelX + PANEL_PADDING;
         int inner = PANEL_WIDTH - PANEL_PADDING * 2;
         Blueprint.marker(graphics, x, 8, Theme.AMBER);
@@ -490,7 +489,7 @@ public final class PlacementEditorScreen extends Screen {
             int northWidth = this.font.width(north) + 12;
             int northX = this.panelX / 2 - northWidth / 2;
             graphics.fill(northX, 3, northX + northWidth, 16, Theme.HUD_BACKGROUND);
-            Blueprint.frame(graphics, northX, 3, northWidth, 13, Theme.BORDER, Theme.AMBER);
+            graphics.outline(northX, 3, northWidth, 13, Theme.BORDER);
             graphics.centeredText(this.font, north, this.panelX / 2, 6, Theme.TEXT_BRIGHT);
         }
         super.extractRenderState(graphics, mouseX, mouseY, delta);

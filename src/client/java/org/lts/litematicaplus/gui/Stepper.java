@@ -232,7 +232,6 @@ public final class Stepper extends AbstractWidget {
         if (this.labelled) {
             graphics.fill(x, y, minusX, y + height, Theme.SURFACE);
             graphics.outline(x, y, width, height, Theme.BORDER);
-            graphics.fill(x + 3, y + height - 4, minusX - 3, y + height - 3, Theme.alpha(Theme.DIVIDER, 0x80));
             int labelSpace = minusX - x;
             int inset = labelSpace < 40 ? 4 : 8;
             Ui.clipped(graphics, font, getMessage().getString(), x + inset, textY, labelSpace - inset - 2,
@@ -253,10 +252,7 @@ public final class Stepper extends AbstractWidget {
             graphics.centeredText(font, "+", plusX + BUTTON_WIDTH / 2, textY,
                     value < this.max ? Theme.TEXT_BRIGHT : Theme.TEXT_DISABLED);
         }
-        graphics.outline(minusX, y, buttonWidth() * 2 + valueWidth, height, this.editing ? Theme.ACCENT : Theme.BORDER);
-        if (this.editing) {
-            Blueprint.ticks(graphics, valueX, y, valueWidth, height, Theme.AMBER);
-        }
+        graphics.outline(minusX, y, buttonWidth() * 2 + valueWidth, height, this.editing ? Theme.FOCUS : Theme.BORDER);
         String shown;
         if (this.editing) {
             boolean caret = Util.getMillis() / 400L % 2L == 0L;

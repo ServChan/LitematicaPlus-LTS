@@ -197,18 +197,12 @@ public final class HubScreen extends Screen {
                     Theme.HUD_BACKGROUND);
         } else {
             graphics.fill(0, 0, this.width, this.height, Theme.BACKGROUND);
-            Blueprint.grid(graphics, this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width - this.sidebarWidth - 1,
-                    this.height - Theme.HEADER_HEIGHT);
         }
         graphics.fill(0, 0, this.width, Theme.HEADER_HEIGHT, Theme.HEADER);
         graphics.fill(0, Theme.HEADER_HEIGHT - 1, this.width, Theme.HEADER_HEIGHT, Theme.DIVIDER);
-        for (int tick = Blueprint.MAJOR; tick < this.width; tick += Blueprint.MAJOR) {
-            graphics.fill(tick, Theme.HEADER_HEIGHT - 4, tick + 1, Theme.HEADER_HEIGHT - 1, Theme.DIVIDER);
-        }
         graphics.fill(0, Theme.HEADER_HEIGHT, this.sidebarWidth, this.height, clear ? Theme.HUD_BACKGROUND : Theme.SIDEBAR);
-        Blueprint.ruler(graphics, this.sidebarWidth, Theme.HEADER_HEIGHT, this.height - Theme.HEADER_HEIGHT,
-                Theme.DIVIDER);
-        graphics.outline(10, 9, 11, 11, Theme.ACCENT);
+        graphics.fill(this.sidebarWidth, Theme.HEADER_HEIGHT, this.sidebarWidth + 1, this.height, Theme.DIVIDER);
+        graphics.outline(10, 9, 11, 11, Theme.BORDER_STRONG);
         graphics.fill(14, 13, 17, 16, Theme.AMBER);
         String heading = this.title.getString().toUpperCase(java.util.Locale.ROOT);
         graphics.text(this.font, heading, 27, 11, Theme.TEXT_BRIGHT, false);
@@ -217,7 +211,7 @@ public final class HubScreen extends Screen {
                 String.format(java.util.Locale.ROOT, "%02d", Tab.values().length));
         int sheetX = 27 + this.font.width(heading) + 10;
         graphics.fill(sheetX - 5, 9, sheetX - 4, 21, Theme.DIVIDER);
-        graphics.text(this.font, sheet, sheetX, 11, Theme.AMBER, false);
+        graphics.text(this.font, sheet, sheetX, 11, Theme.TEXT_DIM, false);
         String scope = Session.scope();
         int titleRight = sheetX + this.font.width(sheet) + 14;
         if (SessionStore.get().readOnly()) {
@@ -232,9 +226,9 @@ public final class HubScreen extends Screen {
         int contentX = this.sidebarWidth + Theme.PADDING;
         Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 8, 1.5F, Theme.TEXT_BRIGHT);
         int ruleY = Theme.HEADER_HEIGHT + 23;
-        Blueprint.dimension(graphics, contentX, ruleY, this.width - Theme.PADDING - contentX, Theme.DIVIDER);
-        graphics.fill(contentX, ruleY - 1, contentX + Math.round(this.font.width(this.tab.title()) * 1.5F), ruleY + 1,
-                Theme.ACCENT);
+        graphics.fill(contentX, ruleY, this.width - Theme.PADDING, ruleY + 1, Theme.DIVIDER);
+        graphics.fill(contentX, ruleY, contentX + Math.round(this.font.width(this.tab.title()) * 1.5F), ruleY + 1,
+                Theme.ACCENT_DARK);
         if (this.view != null) {
             Component summary = this.view.summary();
             int titleWidth = Math.round(this.font.width(this.tab.title()) * 1.5F);

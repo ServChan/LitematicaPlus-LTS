@@ -154,18 +154,16 @@ public final class InfoHud {
         int x = config.hudRightSide ? screenWidth - WIDTH - 6 : 6;
         int y = 6;
         graphics.fill(x, y, x + WIDTH, y + height, Theme.HUD_BACKGROUND);
-        Blueprint.grid(graphics, x + 1, y + 1, WIDTH - 2, height - 2);
-        Blueprint.frame(graphics, x, y, WIDTH, height, Theme.DIVIDER, Theme.ACCENT);
+        graphics.outline(x, y, WIDTH, height, Theme.BORDER);
         int textX = x + PADDING + 2;
         int cursor = y + PADDING;
         Blueprint.marker(graphics, textX, cursor + 2, Theme.AMBER);
-        graphics.text(font, Component.translatable("litematicaplus.hud.title"), textX + 6, cursor, Theme.ACCENT, false);
+        graphics.text(font, Component.translatable("litematicaplus.hud.title"), textX + 6, cursor, Theme.TEXT_DIM, false);
         if (tool) {
             Component mode = Component.translatable(ToolController.get().mode().translationKey());
             int modeWidth = font.width(mode) + 8;
             int modeX = x + WIDTH - PADDING - modeWidth;
-            graphics.fill(modeX, cursor - 2, modeX + modeWidth, cursor + 9, Theme.alpha(Theme.ACCENT, 0x24));
-            graphics.outline(modeX, cursor - 2, modeWidth, 11, Theme.BORDER);
+            graphics.fill(modeX, cursor - 2, modeX + modeWidth, cursor + 9, Theme.CHIP);
             graphics.text(font, mode, modeX + 4, cursor, Theme.TEXT_BRIGHT, false);
         }
         cursor += LINE + 1;

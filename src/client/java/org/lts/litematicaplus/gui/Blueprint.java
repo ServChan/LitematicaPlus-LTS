@@ -5,21 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 public final class Blueprint {
-    public static final int MINOR = 8;
-    public static final int MAJOR = 32;
-
     private Blueprint() {
-    }
-
-    public static void grid(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
-        int right = x + width;
-        int bottom = y + height;
-        for (int line = (x + MINOR - 1) / MINOR * MINOR; line < right; line += MINOR) {
-            graphics.fill(line, y, line + 1, bottom, line % MAJOR == 0 ? Theme.GRID_MAJOR : Theme.GRID_MINOR);
-        }
-        for (int line = (y + MINOR - 1) / MINOR * MINOR; line < bottom; line += MINOR) {
-            graphics.fill(x, line, right, line + 1, line % MAJOR == 0 ? Theme.GRID_MAJOR : Theme.GRID_MINOR);
-        }
     }
 
     public static void frame(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int line, int tick) {
@@ -47,29 +33,13 @@ public final class Blueprint {
         }
     }
 
-    public static void dimension(GuiGraphicsExtractor graphics, int x, int y, int width, int color) {
-        graphics.fill(x, y, x + width, y + 1, color);
-        graphics.fill(x, y - 2, x + 1, y + 3, color);
-        graphics.fill(x + width - 1, y - 2, x + width, y + 3, color);
-    }
-
-    public static void ruler(GuiGraphicsExtractor graphics, int x, int y, int height, int color) {
-        graphics.fill(x, y, x + 1, y + height, color);
-        for (int step = 0; step < height; step += 4) {
-            int length = step % 32 == 0 ? 5 : step % 16 == 0 ? 3 : 1;
-            graphics.fill(x + 1, y + step, x + 1 + length, y + step + 1, color);
-        }
-    }
-
     public static void progress(GuiGraphicsExtractor graphics, int x, int y, int width, int height, double value,
             int color) {
-        int middle = y + height / 2;
-        graphics.fill(x, y, x + width, y + height, Theme.alpha(Theme.TRACK, 0x99));
-        dimension(graphics, x, middle, width, Theme.DIVIDER);
+        int top = y + Math.max(0, (height - 3) / 2);
+        graphics.fill(x, top, x + width, top + 3, Theme.TRACK);
         int filled = (int) Math.round(width * Math.max(0.0, Math.min(1.0, value)));
         if (filled > 0) {
-            graphics.fill(x, y, x + filled, y + height, color);
-            graphics.fill(x + filled - 1, y - 2, x + filled, y + height + 2, Theme.AMBER);
+            graphics.fill(x, top, x + filled, top + 3, Theme.alpha(color, 0xC0));
         }
     }
 
@@ -79,18 +49,14 @@ public final class Blueprint {
 
     public static void section(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int width) {
         marker(graphics, x, y + 2, Theme.AMBER);
-        graphics.text(font, text, x + 6, y, Theme.ACCENT, true);
-        int ruleX = x + 6 + font.width(text) + 6;
-        if (width > 0 && ruleX < x + width) {
-            dashed(graphics, ruleX, y + 4, x + width - ruleX, Theme.DIVIDER);
-        }
+        graphics.text(font, text, x + 6, y, Theme.TEXT_DIM, true);
     }
 
     public static void toggle(GuiGraphicsExtractor graphics, int x, int y, boolean on, boolean active) {
         int width = 22;
         int height = 10;
-        int line = !active ? Theme.TEXT_DISABLED : on ? Theme.ACCENT : Theme.BORDER;
-        graphics.fill(x, y, x + width, y + height, on && active ? Theme.alpha(Theme.ACCENT, 0x40) : Theme.TRACK);
+        int line = !active ? Theme.DIVIDER : on ? Theme.ACCENT_DARK : Theme.BORDER;
+        graphics.fill(x, y, x + width, y + height, Theme.TRACK);
         graphics.outline(x, y, width, height, line);
         int knobX = on ? x + width - 8 : x + 2;
         graphics.fill(knobX, y + 2, knobX + 6, y + height - 2, !active ? Theme.TEXT_DISABLED : on ? Theme.ACCENT : Theme.TEXT_DIM);

@@ -13,15 +13,12 @@ public final class Ui {
 
     public static void panel(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
         graphics.fill(x, y, x + width, y + height, Theme.SURFACE);
-        Blueprint.frame(graphics, x, y, width, height, Theme.DIVIDER, Theme.BORDER_STRONG);
+        graphics.outline(x, y, width, height, Theme.BORDER);
     }
 
     public static void raised(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int spine) {
         graphics.fill(x, y, x + width, y + height, Theme.SURFACE_RAISED);
-        Blueprint.frame(graphics, x, y, width, height, Theme.BORDER, Theme.ACCENT);
-        if (spine != 0) {
-            graphics.fill(x + 6, y - 1, x + 26, y + 1, Theme.AMBER);
-        }
+        Blueprint.frame(graphics, x, y, width, height, Theme.BORDER, Theme.BORDER_STRONG);
     }
 
     public static void progress(GuiGraphicsExtractor graphics, int x, int y, int width, int height, double value, int color) {
@@ -33,12 +30,10 @@ public final class Ui {
     }
 
     public static int chip(GuiGraphicsExtractor graphics, Font font, int x, int y, Component text, int color, int textColor) {
-        int width = font.width(text) + 17;
-        graphics.fill(x, y, x + width, y + 13, Theme.alpha(color, 0x1C));
-        graphics.outline(x, y, width, 13, Theme.alpha(color, 0x99));
-        graphics.fill(x + 4, y + 4, x + 9, y + 9, color);
-        graphics.text(font, text, x + 12, y + 3, textColor, false);
-        return x + width + 5;
+        int width = font.width(text) + 10;
+        graphics.fill(x, y + 4, x + 5, y + 9, textColor == Theme.TEXT_DIM ? Theme.TEXT_DISABLED : color);
+        graphics.text(font, text, x + 9, y + 3, textColor == Theme.TEXT_DIM ? Theme.TEXT_DIM : Theme.TEXT, false);
+        return x + width + 8;
     }
 
     public static void label(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y) {
@@ -87,7 +82,7 @@ public final class Ui {
 
     public static void slot(GuiGraphicsExtractor graphics, ItemStack stack, int x, int y) {
         graphics.fill(x, y, x + 18, y + 18, Theme.SLOT);
-        Blueprint.frame(graphics, x, y, 18, 18, Theme.SLOT_BORDER, Theme.BORDER);
+        graphics.outline(x, y, 18, 18, Theme.SLOT_BORDER);
         graphics.fakeItem(stack, x + 1, y + 1);
     }
 
@@ -95,12 +90,6 @@ public final class Ui {
             Component title, Component hint) {
         panel(graphics, x, y, width, height);
         int centerY = y + height / 2;
-        if (height >= 140) {
-            int crossX = x + width / 2;
-            graphics.fill(crossX - 12, centerY - 40, crossX + 13, centerY - 39, Theme.BORDER);
-            graphics.fill(crossX, centerY - 52, crossX + 1, centerY - 27, Theme.BORDER);
-            graphics.outline(crossX - 6, centerY - 46, 13, 13, Theme.AMBER);
-        }
         heading(graphics, font, title, x + (width - Math.round(font.width(title) * 1.5F)) / 2, centerY - 22, 1.5F,
                 Theme.TEXT_BRIGHT);
         int hintWidth = Math.min(width - 32, 320);

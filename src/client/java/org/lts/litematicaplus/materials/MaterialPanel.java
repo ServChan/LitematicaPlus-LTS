@@ -204,10 +204,9 @@ final class MaterialPanel {
         }
         int right = this.x + this.width;
         graphics.fill(this.x, this.y, right, this.y + this.height, Theme.BACKGROUND);
-        Blueprint.grid(graphics, this.x + 1, this.y + TITLE, this.width - 2, this.height - TITLE - 1);
         graphics.fill(this.x + 1, this.y + 1, right - 1, this.y + TITLE, Theme.HEADER);
         graphics.fill(this.x + 1, this.y + TITLE - 1, right - 1, this.y + TITLE, Theme.DIVIDER);
-        Blueprint.frame(graphics, this.x, this.y, this.width, this.height, Theme.BORDER, Theme.ACCENT);
+        graphics.outline(this.x, this.y, this.width, this.height, Theme.BORDER);
         Blueprint.marker(graphics, this.x + 5, this.y + 6, Theme.AMBER);
         graphics.text(this.font, this.font.plainSubstrByWidth(this.title.getString(), this.width - 16), this.x + 11,
                 this.y + 4, Theme.TEXT_BRIGHT, false);
@@ -221,7 +220,7 @@ final class MaterialPanel {
         }
         drawRight(graphics, Component.translatable("litematicaplus.panel.column.need").getString(), right - 6, columnsY,
                 Theme.TEXT_DIM);
-        Blueprint.dashed(graphics, this.x + 4, listTop() - 2, this.width - 8, Theme.BORDER);
+        graphics.fill(this.x + 4, listTop() - 2, this.x + this.width - 4, listTop() - 1, Theme.DIVIDER);
         Row hover = rowAt(mouseX, mouseY);
         this.hovered = hover == null ? null : hover.item();
         if (this.rows.isEmpty()) {
@@ -233,7 +232,7 @@ final class MaterialPanel {
             int rowY = listTop() + i * ROW;
             if (row == hover) {
                 graphics.fill(this.x + 2, rowY, right - 2, rowY + ROW, Theme.SURFACE_HOVER);
-                graphics.fill(this.x + 2, rowY, this.x + 4, rowY + ROW, Theme.ACCENT);
+                graphics.fill(this.x + 2, rowY, this.x + 4, rowY + ROW, Theme.ACCENT_DARK);
             }
             graphics.fakeItem(row.icon(), this.x + 4, rowY + 1);
             int nameRight = right - 8 - NUMBER_COLUMN * (compact ? 1 : 2);
@@ -264,13 +263,13 @@ final class MaterialPanel {
             int max = this.rows.size() - visibleRows();
             int thumbY = trackTop + (trackHeight - thumb) * this.scroll / Math.max(1, max);
             graphics.fill(right - 2, trackTop, right - 1, trackTop + trackHeight, Theme.DIVIDER);
-            graphics.fill(right - 3, thumbY, right - 1, thumbY + thumb, Theme.ACCENT);
+            graphics.fill(right - 3, thumbY, right - 1, thumbY + thumb, Theme.BORDER_STRONG);
         }
         if (this.takeButton != null) {
             this.takeButton.extractRenderState(graphics, mouseX, mouseY, delta);
             this.depositButton.extractRenderState(graphics, mouseX, mouseY, delta);
         }
-        Blueprint.dashed(graphics, this.x + 4, listBottom(), this.width - 8, Theme.BORDER);
+        graphics.fill(this.x + 4, listBottom(), this.x + this.width - 4, listBottom() + 1, Theme.DIVIDER);
         graphics.text(this.font, this.font.plainSubstrByWidth(this.status.getString(), this.width - 10), this.x + 5,
                 listBottom() + 3, this.statusColor, false);
         if (hover != null) {

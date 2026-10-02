@@ -58,12 +58,7 @@ public final class InkField extends EditBox {
         int width = this.outerWidth;
         int height = this.outerHeight;
         graphics.fill(x, y, x + width, y + height, Theme.TRACK);
-        graphics.outline(x, y, width, height, focused ? Theme.ACCENT : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
-        graphics.fill(x + INSET - 2, y + height - 4, x + width - INSET + 2, y + height - 3,
-                focused ? Theme.alpha(Theme.ACCENT, 0x90) : Theme.alpha(Theme.DIVIDER, 0xC0));
-        if (focused) {
-            Blueprint.ticks(graphics, x, y, width, height, Theme.AMBER);
-        }
+        graphics.outline(x, y, width, height, focused ? Theme.FOCUS : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
         super.extractWidgetRenderState(graphics, mouseX, mouseY, delta);
     }
 }
