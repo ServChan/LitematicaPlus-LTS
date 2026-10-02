@@ -76,9 +76,13 @@ public final class BreakAssist {
         return !PlacementSolver.orientationMatches(world, PlacementSolver.baseState(target));
     }
 
+    public static boolean active() {
+        return !CLEARING.isEmpty();
+    }
+
     public static void start(Minecraft minecraft, BlockPos pos) {
         BlockPos key = pos.immutable();
-        if (!CLEARING.add(key)) {
+        if (!CLEARING.isEmpty() || !CLEARING.add(key)) {
             return;
         }
         LocalPlayer player = minecraft.player;

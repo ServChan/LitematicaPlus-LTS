@@ -200,6 +200,7 @@ final class EasyPlaceSuite {
         strayBlockCheck(context, world);
         interactBehindGhost(context, world);
         supportUnderSnow(context, world);
+        survivalBreakWrong(context, world);
 
         context.runOnClient(client -> {
             LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -336,6 +337,64 @@ final class EasyPlaceSuite {
                 + " " + (support.getX() + 1) + " " + (support.getY() + 1) + " " + (support.getZ() + 1) + " minecraft:air");
         LitematicaPlusGameTest.require(dirt, "easy place should reach the enclosed support block under a snow ghost");
         LitematicaPlusGameTest.require(layered, "the snow layer should go on once its support is placed");
+    }
+
+    private static void survivalBreakWrong(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos spot = BASE.offset(-18, 0, 0);
+        RegionBuilder builder = new RegionBuilder("Wrong", 0, 0, 0, 1, 1, 1);
+        builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Wrong";
+        Schematic schematic = new Schematic(metadata, Map.of("Wrong", builder.build()));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/wrong.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        world.getServer().runCommand("setblock " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " minecraft:stone");
+        world.getServer().runCommand("gamemode survival @p");
+        world.getServer().runCommand("clear @p");
+        world.getServer().runCommand("item replace entity @p hotbar.1 with minecraft:diamond_pickaxe");
+        world.getServer().runCommand("item replace entity @p hotbar.2 with minecraft:dirt 4");
+        world.getServer().runCommand("tp @p " + (spot.getX() + 0.5) + " " + spot.getY() + " " + (spot.getZ() - 1.5) + " 0 37");
+        world.getConnection().waitForClientboundPackets();
+        context.runOnClient(client -> {
+            client.player.getInventory().setSelectedSlot(0);
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.breakWrongBlocks = true;
+            config.autoToolSwitch = true;
+            LitematicaPlusConfig.save(config);
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, spot));
+        context.waitFor(client -> GhostEngine.get().categoryAt(spot.getX(), spot.getY(), spot.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.WRONG_BLOCK, 400);
+        context.waitTicks(6);
+        boolean dirt = false;
+        for (int attempt = 0; attempt < 6 && !dirt; attempt++) {
+            context.getInput().holdMouseFor(InputConstants.MOUSE_BUTTON_RIGHT, 20);
+            for (int wait = 0; wait < 15 && !dirt; wait++) {
+                context.waitTicks(2);
+                dirt = world.getServer().computeOnServer(server -> server.overworld().getBlockState(spot)
+                        .is(net.minecraft.world.level.block.Blocks.DIRT));
+            }
+        }
+        context.takeScreenshot("10d_survival_break_wrong");
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.breakWrongBlocks = false;
+            config.autoToolSwitch = false;
+            LitematicaPlusConfig.save(config);
+            PlacementManager.get().remove(placement);
+        });
+        world.getServer().runCommand("gamemode creative @p");
+        world.getServer().runCommand("clear @p");
+        world.getServer().runCommand("setblock " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " minecraft:air");
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(dirt, "in survival the wrong stone should be mined out and replaced with dirt");
     }
 
     private static int indexOf(String name) {

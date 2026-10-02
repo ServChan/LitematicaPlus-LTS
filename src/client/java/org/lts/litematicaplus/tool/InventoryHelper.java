@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.mixin.MultiPlayerGameModeInvoker;
 
 public final class InventoryHelper {
     private static final int HOTBAR_SIZE = 9;
@@ -92,6 +93,7 @@ public final class InventoryHelper {
         int found = find(inventory, matches);
         if (found >= 0 && found < HOTBAR_SIZE) {
             inventory.setSelectedSlot(found);
+            ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
             return true;
         }
         if (found >= HOTBAR_SIZE && player.containerMenu == player.inventoryMenu) {
@@ -114,6 +116,7 @@ public final class InventoryHelper {
         }
         ItemStack stack = creative.copy();
         inventory.setSelectedSlot(slot);
+        ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
         inventory.setItem(slot, stack);
         minecraft.gameMode.handleCreativeModeItemAdd(stack, menuSlot(slot));
         return true;

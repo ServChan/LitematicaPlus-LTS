@@ -18,6 +18,7 @@
     "LocalPlayerMixin",
     "MinecraftMixin",
     "MouseHandlerMixin",
+    "MultiPlayerGameModeInvoker",
     "MultiPlayerGameModeMixin"
   ],
   "injectors": {

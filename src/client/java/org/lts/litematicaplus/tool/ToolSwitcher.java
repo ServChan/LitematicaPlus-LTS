@@ -7,6 +7,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.mixin.MultiPlayerGameModeInvoker;
 
 public final class ToolSwitcher {
     private ToolSwitcher() {
@@ -32,8 +33,10 @@ public final class ToolSwitcher {
             return;
         }
         if (slot < 9) {
-            inventory.setSelectedSlot(slot);
-            player.connection.send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(slot));
+            if (slot != inventory.getSelectedSlot()) {
+                inventory.setSelectedSlot(slot);
+                ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
+            }
         } else if (player.containerMenu == player.inventoryMenu) {
             minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.getSelectedSlot(),
                     ContainerInput.SWAP, player);
