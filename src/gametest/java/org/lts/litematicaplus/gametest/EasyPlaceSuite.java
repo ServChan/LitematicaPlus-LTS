@@ -198,6 +198,8 @@ final class EasyPlaceSuite {
         LitematicaPlusGameTest.require(!screenOpen, "no container or sign screen may stay open after easy place");
 
         strayBlockCheck(context, world);
+        interactBehindGhost(context, world);
+        supportUnderSnow(context, world);
 
         context.runOnClient(client -> {
             LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -233,6 +235,107 @@ final class EasyPlaceSuite {
         });
         LitematicaPlusGameTest.require(extra == 0, "holding use on a finished schematic block placed " + extra
                 + " stray blocks next to it");
+    }
+
+    private static void interactBehindGhost(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos ghost = BASE.offset(-6, 1, 0);
+        BlockPos table = ghost.south();
+        RegionBuilder builder = new RegionBuilder("Ghost", 0, 0, 0, 1, 1, 1);
+        builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Ghost";
+        Schematic schematic = new Schematic(metadata, Map.of("Ghost", builder.build()));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/ghost.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        world.getServer().runCommand("setblock " + table.getX() + " " + table.getY() + " " + table.getZ()
+                + " minecraft:crafting_table");
+        world.getServer().runCommand("tp @p " + (ghost.getX() + 0.5) + " " + (ghost.getY() - 1) + " "
+                + (ghost.getZ() - 1.5) + " 0 0");
+        world.getServer().runCommand("item replace entity @p weapon.mainhand with minecraft:stone");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, ghost));
+        context.waitFor(client -> GhostEngine.get().categoryAt(ghost.getX(), ghost.getY(), ghost.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.MISSING, 400);
+        context.waitTicks(6);
+        context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+        context.waitFor(client -> client.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.CraftingScreen,
+                100);
+        boolean stillEmpty = world.getServer().computeOnServer(server -> server.overworld().getBlockState(ghost).isAir());
+        context.takeScreenshot("10b_interact_behind_ghost");
+        context.setScreen(() -> null);
+        context.runOnClient(client -> PlacementManager.get().remove(placement));
+        world.getServer().runCommand("setblock " + table.getX() + " " + table.getY() + " " + table.getZ()
+                + " minecraft:air");
+        world.getServer().runCommand("setblock " + ghost.getX() + " " + ghost.getY() + " " + ghost.getZ()
+                + " minecraft:air");
+        LitematicaPlusGameTest.require(stillEmpty, "a click on a crafting table must open it, not place the ghost in front");
+    }
+
+    private static void supportUnderSnow(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos support = BASE.offset(-12, 0, 0);
+        BlockPos snow = support.above();
+        RegionBuilder builder = new RegionBuilder("Snow", 0, 0, 0, 1, 2, 1);
+        builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
+        builder.set(0, 1, 0, net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Snow";
+        Schematic schematic = new Schematic(metadata, Map.of("Snow", builder.build()));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/snow.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        for (BlockPos side : new BlockPos[]{support.north(), support.south(), support.east(), support.west()}) {
+            world.getServer().runCommand("setblock " + side.getX() + " " + side.getY() + " " + side.getZ()
+                    + " minecraft:stone");
+        }
+        world.getServer().runCommand("setblock " + support.getX() + " " + support.getY() + " " + support.getZ()
+                + " minecraft:air");
+        world.getServer().runCommand("tp @p " + (support.getX() + 0.5) + " " + (support.getY() + 1) + " "
+                + (support.getZ() - 0.5) + " 0 67");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, support));
+        context.waitFor(client -> GhostEngine.get().categoryAt(support.getX(), support.getY(), support.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.MISSING
+                && GhostEngine.get().categoryAt(snow.getX(), snow.getY(), snow.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.MISSING, 400);
+        context.waitTicks(6);
+        boolean dirt = false;
+        for (int attempt = 0; attempt < 4 && !dirt; attempt++) {
+            context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+            for (int wait = 0; wait < 20 && !dirt; wait++) {
+                context.waitTicks(2);
+                dirt = world.getServer().computeOnServer(server -> server.overworld().getBlockState(support)
+                        .is(net.minecraft.world.level.block.Blocks.DIRT));
+            }
+        }
+        context.waitTicks(10);
+        boolean layered = false;
+        for (int attempt = 0; attempt < 4 && dirt && !layered; attempt++) {
+            context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+            for (int wait = 0; wait < 20 && !layered; wait++) {
+                context.waitTicks(2);
+                layered = world.getServer().computeOnServer(server -> server.overworld().getBlockState(snow)
+                        .is(net.minecraft.world.level.block.Blocks.SNOW));
+            }
+        }
+        context.takeScreenshot("10c_support_under_snow");
+        context.runOnClient(client -> PlacementManager.get().remove(placement));
+        world.getServer().runCommand("fill " + (support.getX() - 1) + " " + support.getY() + " " + (support.getZ() - 1)
+                + " " + (support.getX() + 1) + " " + (support.getY() + 1) + " " + (support.getZ() + 1) + " minecraft:air");
+        LitematicaPlusGameTest.require(dirt, "easy place should reach the enclosed support block under a snow ghost");
+        LitematicaPlusGameTest.require(layered, "the snow layer should go on once its support is placed");
     }
 
     private static int indexOf(String name) {

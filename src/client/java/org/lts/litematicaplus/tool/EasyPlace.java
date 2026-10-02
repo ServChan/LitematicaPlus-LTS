@@ -160,6 +160,9 @@ public final class EasyPlace {
         if (!active(config)) {
             return config.placementRestriction && restricted(minecraft, 0);
         }
+        if (config.easyPlaceAllowInteraction && !sessionConsumed && interacting(minecraft)) {
+            return false;
+        }
         boolean target = config.entityPlacement && EntityAssist.hasTarget(minecraft)
                 || GhostRaycast.trace(minecraft, candidate -> isActionable(minecraft, candidate)) != null;
         if (target) {
@@ -231,8 +234,19 @@ public final class EasyPlace {
                 && target.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
             return Step.NONE;
         }
+        if (!supported(level, pos, target)) {
+            return Step.NONE;
+        }
         return level.isUnobstructed(base, pos, CollisionContext.placementContext(minecraft.player))
                 ? Step.PLACE : Step.NONE;
+    }
+
+    static boolean supported(ClientLevel level, BlockPos pos, BlockState target) {
+        try {
+            return target.canSurvive(level, pos);
+        } catch (RuntimeException exception) {
+            return true;
+        }
     }
 
     public static boolean isInteractable(ClientLevel level, BlockPos pos, BlockState state) {

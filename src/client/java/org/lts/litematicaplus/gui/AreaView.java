@@ -243,6 +243,20 @@ final class AreaView extends TabView {
         });
     }
 
+    private int step(GuiGraphicsExtractor graphics, int number, Component text, int y, int limit) {
+        int textX = this.detailX + 20;
+        int textWidth = this.detailWidth - 20;
+        int lines = this.font.split(text, textWidth).size();
+        if (y + lines * 9 > limit) {
+            return limit;
+        }
+        graphics.fill(this.detailX, y - 2, this.detailX + 13, y + 11, Theme.SURFACE_RAISED);
+        graphics.outline(this.detailX, y - 2, 13, 13, Theme.BORDER);
+        graphics.centeredText(this.font, Integer.toString(number), this.detailX + 7, y + 1, Theme.AMBER);
+        graphics.textWithWordWrap(this.font, text, textX, y, textWidth, Theme.TEXT_DIM, false);
+        return y + Math.max(13, lines * 9) + 8;
+    }
+
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, AreaBox box, int x, int y, int rowWidth,
             int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
@@ -261,8 +275,27 @@ final class AreaView extends TabView {
             Ui.label(graphics, this.font, tr("litematicaplus.area.corner_second"), this.detailX,
                     this.cornerTop + 12 + Theme.CONTROL_HEIGHT + 2);
         } else {
-            graphics.textWithWordWrap(this.font, tr("litematicaplus.area.tool_hint",
-                    LitematicaPlusConfig.current().toolItem), this.detailX, this.top + 2, this.detailWidth, Theme.TEXT_DIM, false);
+            int y = this.top + 2;
+            int limit = this.saveTop - 14;
+            Component[] steps = {tr("litematicaplus.area.step1", LitematicaPlusConfig.current().toolItem),
+                    tr("litematicaplus.area.step2"), tr("litematicaplus.area.step3")};
+            int needed = 0;
+            for (Component text : steps) {
+                needed += Math.max(13, this.font.split(text, this.detailWidth - 20).size() * 9) + 8;
+            }
+            int introHeight = this.font.split(tr("litematicaplus.area.intro"), this.detailWidth).size() * 9 + 10;
+            if (y + introHeight + needed <= limit) {
+                graphics.textWithWordWrap(this.font, tr("litematicaplus.area.intro"), this.detailX, y, this.detailWidth,
+                        Theme.TEXT, false);
+                y += introHeight;
+            }
+            y = step(graphics, 1, steps[0], y, limit);
+            y = step(graphics, 2, steps[1], y, limit);
+            y = step(graphics, 3, steps[2], y, limit);
+            if (y + 20 < limit) {
+                graphics.textWithWordWrap(this.font, tr("litematicaplus.area.step_note"), this.detailX, y + 4,
+                        this.detailWidth, Theme.TEXT_DIM, false);
+            }
         }
         Ui.label(graphics, this.font, tr("litematicaplus.area.save_label"), this.detailX, this.saveTop);
         int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 1;
