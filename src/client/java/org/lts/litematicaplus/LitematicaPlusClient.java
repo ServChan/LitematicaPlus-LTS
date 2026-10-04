@@ -6,13 +6,16 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
+import org.lts.litematicaplus.compat.LitematicaConflict;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerHelper;
+import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.render.TopView;
+import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.tool.Substitutes;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.util.Workers;
@@ -31,7 +34,9 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         Hotkeys.register();
         GhostRenderer.register();
         ContainerHelper.register();
+        EnderChestMemory.register();
         MaterialTooltips.register();
+        LitematicaConflict.register();
         ClientTickEvents.END_CLIENT_TICK.register(LitematicaPlusClient::tick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
             Session.shutdown();
@@ -49,6 +54,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         GhostEngine.get().tick(minecraft);
         ToolController.get().tick(minecraft);
         InfoHud.tick(minecraft);
+        InventoryHighlight.tick(minecraft);
         TopView.tick(minecraft);
         Hotkeys.tick(minecraft);
     }

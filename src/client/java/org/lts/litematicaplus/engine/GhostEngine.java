@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +28,7 @@ import net.minecraft.client.renderer.block.FluidStateModelSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -82,6 +84,7 @@ public final class GhostEngine {
     private SectionJob.Options optionsOverlayOnly;
     private int inFlight;
     private boolean blockEntities;
+    private boolean materialSwap = LitematicaPlusConfig.current().materialSwap;
     private long ticks;
     private int maxGhostIndices;
     private int maxFillIndices;
@@ -138,6 +141,26 @@ public final class GhostEngine {
 
     public int inFlight() {
         return this.inFlight;
+    }
+
+    public boolean insideAnyVolume(int x, int y, int z) {
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            PlacementVolume volume = runtime.volume;
+            if (volume != null && runtime.placement().enabled() && volume.paletteIndexAt(x, y, z) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public BlockState schematicStateAnywhere(int x, int y, int z) {
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            PlacementVolume volume = runtime.volume;
+            if (volume != null && runtime.placement().enabled() && volume.paletteIndexAt(x, y, z) >= 0) {
+                return volume.stateAt(x, y, z);
+            }
+        }
+        return null;
     }
 
     public PlacementRuntime runtimeAt(int x, int y, int z) {
@@ -266,6 +289,11 @@ public final class GhostEngine {
     }
 
     public List<Mismatch> nearestMismatches(PlacementRuntime runtime, Vec3 from, int limit, boolean[] typeEnabled) {
+        return nearestMismatches(runtime, from, limit, typeEnabled, null);
+    }
+
+    public List<Mismatch> nearestMismatches(PlacementRuntime runtime, Vec3 from, int limit, boolean[] typeEnabled,
+            boolean[] paletteFilter) {
         List<Mismatch> result = new ArrayList<>();
         PlacementVolume volume = runtime == null ? null : runtime.volume;
         if (volume == null || limit <= 0) {
@@ -306,10 +334,18 @@ public final class GhostEngine {
             }
             SectionSlot slot = candidate.slot();
             byte[] categories = slot.verdict.categories();
+            GhostSection filtered = paletteFilter == null ? null : volume.section(slot.key);
             for (int index = 0; index < GhostSection.VOLUME; index++) {
                 byte category = categories[index];
                 if (!wanted[category]) {
                     continue;
+                }
+                if (filtered != null) {
+                    short value = filtered.get(index);
+                    int paletteIndex = value & 0xFFFF;
+                    if (value == GhostSection.OUTSIDE || paletteIndex >= paletteFilter.length || !paletteFilter[paletteIndex]) {
+                        continue;
+                    }
                 }
                 int x = slot.originX + (index & 15);
                 int y = slot.originY + (index >> 8);
@@ -530,6 +566,8 @@ public final class GhostEngine {
         runtime.building = true;
         PlacementTransform transform = placement.transform();
         Set<String> disabled = new HashSet<>(placement.disabledRegions());
+        Map<Block, Block> replacements = LitematicaPlusConfig.current().materialSwap
+                ? new HashMap<>(placement.replacements()) : Map.of();
         PlacementRuntime target = runtime;
         Minecraft minecraft = Minecraft.getInstance();
         try {
@@ -538,7 +576,7 @@ public final class GhostEngine {
                     return;
                 }
                 try {
-                    PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled);
+                    PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled, replacements);
                     minecraft.execute(() -> install(target, token, volume));
                 } catch (Throwable exception) {
                     LitematicaPlusClient.LOGGER.error("Could not build placement '{}'", placement.name(), exception);
@@ -817,9 +855,18 @@ public final class GhostEngine {
 
     private void refreshOptions() {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (config.materialSwap != this.materialSwap) {
+            this.materialSwap = config.materialSwap;
+            for (PlacementRuntime runtime : new ArrayList<>(this.runtimes.values())) {
+                if (!runtime.placement().replacements().isEmpty()) {
+                    rebuild(runtime.placement());
+                }
+            }
+        }
         boolean render = config.renderEnabled;
         SectionJob.Options next = new SectionJob.Options(render && config.renderGhostBlocks,
-                render && config.renderOverlay, config.renderCollidingBlocks, config.lenientStates,
+                render && config.renderOverlay, config.renderCollidingBlocks, config.lenientStates, config.looseBlocks,
+                config.soilInterchangeable,
                 config.trustHiddenBlocks && !Minecraft.getInstance().hasSingleplayerServer(),
                 config.overlayThroughWalls, config.useWorldCache,
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
@@ -831,10 +878,14 @@ public final class GhostEngine {
             this.options = next;
             this.blockEntities = blockEntities;
             this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(),
-                    next.lenientStates(), next.trustHidden(), next.throughWalls(), next.worldCache(), next.showMissing(), next.showExtra(), next.showWrongBlock(),
+                    next.lenientStates(), next.looseBlocks(), next.soilSwap(), next.trustHidden(), next.throughWalls(),
+                    next.worldCache(),
+                    next.showMissing(), next.showExtra(), next.showWrongBlock(),
                     next.showWrongState(), next.fillAlpha(), next.lineAlpha());
             this.optionsOverlayOnly = new SectionJob.Options(false, next.overlay() && next.throughWalls(),
-                    next.renderColliding(), next.lenientStates(), next.trustHidden(), next.throughWalls(), next.worldCache(),
+                    next.renderColliding(), next.lenientStates(), next.looseBlocks(), next.soilSwap(), next.trustHidden(),
+                    next.throughWalls(),
+                    next.worldCache(),
                     next.showMissing(), next.showExtra(), next.showWrongBlock(), next.showWrongState(), next.fillAlpha(),
                     next.lineAlpha());
             if (changed) {
@@ -1123,7 +1174,8 @@ public final class GhostEngine {
     }
 
     private static int rules(SectionJob.Options options) {
-        return options == null ? 0 : (options.lenientStates() ? 1 : 0) | (options.trustHidden() ? 2 : 0);
+        return options == null ? 0 : (options.lenientStates() ? 1 : 0) | (options.trustHidden() ? 2 : 0)
+                | (options.looseBlocks() ? 4 : 0) | (options.soilSwap() ? 8 : 0);
     }
 
     private void requeue(PlacementRuntime runtime, int from, int found) {

@@ -63,6 +63,7 @@ public final class Hotkeys {
         add("layer_down", 0, minecraft -> ToolController.get().shiftLayer(minecraft, -1));
         add("open_layers", InputConstants.KEY_F7, minecraft -> minecraft.gui.setScreen(HubScreen.layers(null)));
         add("toggle_clip", 0, Hotkeys::toggleClip);
+        add("open_materials", 0, minecraft -> minecraft.gui.setScreen(HubScreen.materials(null)));
         toggle("toggle_hold", "easy_place_hold", config -> config.easyPlaceHold, (config, value) -> config.easyPlaceHold = value);
         toggle("toggle_guard", "excavation_guard", config -> config.excavationGuard,
                 (config, value) -> config.excavationGuard = value);
@@ -72,6 +73,8 @@ public final class Hotkeys {
                 (config, value) -> config.breakWrongBlocks = value);
         toggle("toggle_substitutes", "easy_place_substitutes", config -> config.easyPlaceSubstitutes,
                 (config, value) -> config.easyPlaceSubstitutes = value);
+        toggle("toggle_inventory_highlight", "inventory_highlight", config -> config.inventoryHighlight,
+                (config, value) -> config.inventoryHighlight = value);
         takeMaterials = add("take_materials", 0, minecraft -> { });
     }
 

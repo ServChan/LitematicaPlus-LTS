@@ -24,6 +24,7 @@ public final class HubScreen extends Screen {
         LAYERS("layers"),
         AREA("area"),
         MATERIALS("materials"),
+        REPLACEMENTS("replacements"),
         VERIFIER("verifier"),
         SETTINGS("settings");
 
@@ -65,6 +66,10 @@ public final class HubScreen extends Screen {
 
     public static HubScreen layers(Screen parent) {
         return new HubScreen(parent, Tab.LAYERS);
+    }
+
+    public static HubScreen materials(Screen parent) {
+        return new HubScreen(parent, Tab.MATERIALS);
     }
 
     public Tab tab() {
@@ -164,12 +169,13 @@ public final class HubScreen extends Screen {
     protected void init() {
         this.sidebarWidth = this.width < 440 ? 86 : Theme.SIDEBAR_WIDTH;
         int y = Theme.HEADER_HEIGHT + 8;
+        int pitch = Math.max(15, Math.min(23, (this.height - y - 2) / Tab.values().length));
         for (Tab entry : Tab.values()) {
-            FlatButton button = new FlatButton(0, y, this.sidebarWidth, 22, entry.title(), FlatButton.Style.TAB,
+            FlatButton button = new FlatButton(0, y, this.sidebarWidth, pitch - 1, entry.title(), FlatButton.Style.TAB,
                     pressed -> switchTab(entry)).withState(() -> this.tab == entry)
                     .withIndex(String.format(java.util.Locale.ROOT, "%02d", entry.ordinal() + 1));
             addRenderableWidget(button);
-            y += 23;
+            y += pitch;
         }
         if (this.view == null) {
             this.view = create(this.tab);
@@ -189,6 +195,7 @@ public final class HubScreen extends Screen {
             case LAYERS -> new LayersView(this);
             case AREA -> new AreaView(this);
             case MATERIALS -> new MaterialsView(this);
+            case REPLACEMENTS -> new ReplacementsView(this);
             case VERIFIER -> new VerifierView(this);
             case SETTINGS -> new SettingsView(this);
         };

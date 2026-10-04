@@ -1,10 +1,13 @@
 package org.lts.litematicaplus.placement;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.schematic.Schematic;
@@ -27,6 +30,7 @@ public final class SchematicPlacement {
     private boolean enabled = true;
     private boolean locked;
     private final Set<String> disabledRegions = new LinkedHashSet<>();
+    private final Map<Block, Block> replacements = new LinkedHashMap<>();
     private Schematic schematic;
     private LoadState loadState = LoadState.LOADING;
     private Component error = Component.empty();
@@ -113,6 +117,10 @@ public final class SchematicPlacement {
 
     public Set<String> disabledRegions() {
         return this.disabledRegions;
+    }
+
+    public Map<Block, Block> replacements() {
+        return this.replacements;
     }
 
     public Schematic schematic() {

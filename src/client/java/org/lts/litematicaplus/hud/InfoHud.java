@@ -37,7 +37,8 @@ import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class InfoHud {
-    private static final int WIDTH = 176;
+    public static final int WIDTH = 176;
+    private static final int MARGIN = 6;
     private static final int PADDING = 6;
     private static final int LINE = 10;
     private static final int TEXT_WIDTH = WIDTH - PADDING * 2 - 4;
@@ -121,7 +122,7 @@ public final class InfoHud {
         if (!visible || ticks % 10 != 0 && !appeared) {
             return;
         }
-        SchematicPlacement placement = PlacementManager.get().selected();
+        SchematicPlacement placement = PlacementManager.get().visibleSelection();
         if (config.hudMaterialLines <= 0 || placement == null) {
             materials = List.of();
             return;
@@ -154,17 +155,29 @@ public final class InfoHud {
         return text(memo, font, key, 0L, 0L, 0L, () -> Component.translatable(key));
     }
 
+    public static int left(int screenWidth, float fraction) {
+        return MARGIN + Math.round(fraction * Math.max(0, screenWidth - WIDTH - MARGIN * 2));
+    }
+
+    public static int top(int screenHeight, int height, float fraction) {
+        return MARGIN + Math.round(fraction * Math.max(0, screenHeight - height - MARGIN * 2));
+    }
+
     public static void render(Minecraft minecraft, GuiGraphicsExtractor graphics) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!visible(minecraft, config)) {
-            return;
+        if (visible(minecraft, config)) {
+            renderAt(minecraft, graphics, config.hudX, config.hudY);
         }
+    }
+
+    public static int renderAt(Minecraft minecraft, GuiGraphicsExtractor graphics, float fractionX, float fractionY) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
         boolean tool = ToolController.get().holdingTool(minecraft);
-        SchematicPlacement placement = PlacementManager.get().selected();
+        SchematicPlacement placement = PlacementManager.get().visibleSelection();
         NoteTuner.Progress tuned = config.noteTuningHud ? tuning : null;
         boolean tuningActive = tuned != null && tuned.blocks() > 0;
         if (placement == null && !tool && !PasteController.active() && !GhostRenderer.failed() && !tuningActive) {
-            return;
+            return 0;
         }
         Font font = minecraft.font;
         PlacementRuntime runtime = placement == null ? null : GhostEngine.get().runtime(placement.id());
@@ -199,9 +212,8 @@ public final class InfoHud {
         }
         int height = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0) + rows.size() * LINE
                 + (rows.isEmpty() ? 0 : 4);
-        int screenWidth = graphics.guiWidth();
-        int x = config.hudRightSide ? screenWidth - WIDTH - 6 : 6;
-        int y = 6;
+        int x = left(graphics.guiWidth(), fractionX);
+        int y = top(graphics.guiHeight(), height, fractionY);
         graphics.fill(x, y, x + WIDTH, y + height, Theme.HUD_BACKGROUND);
         graphics.outline(x, y, WIDTH, height, Theme.BORDER);
         int textX = x + PADDING + 2;
@@ -317,6 +329,7 @@ public final class InfoHud {
                 cursor += LINE;
             }
         }
+        return height;
     }
 
     private static int renderPlacement(GuiGraphicsExtractor graphics, Font font, SchematicPlacement placement,
@@ -331,8 +344,7 @@ public final class InfoHud {
             return cursor + LINE * 2 + 6;
         }
         if (volume == null) {
-            graphics.text(font, text(STATE, font, placement.enabled() ? "litematicaplus.hud.loading"
-                    : "litematicaplus.hud.disabled"), textX, cursor, Theme.TEXT_DIM, false);
+            graphics.text(font, text(STATE, font, "litematicaplus.hud.loading"), textX, cursor, Theme.TEXT_DIM, false);
             return cursor + LINE * 2 + 6;
         }
         double progress = runtime.progress();

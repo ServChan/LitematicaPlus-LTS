@@ -96,7 +96,7 @@ public final class SectionMesher {
             }
         }
         SectionVerdict verdict = job.world() == null && job.remembered() != null ? job.remembered()
-                : SectionVerdict.compute(section, volume.globalIds(), volume.solid(), job.world(), options.lenientStates(),
+                : SectionVerdict.compute(section, volume.globalIds(), volume.solid(), job.world(), options.lenientStates(), options.looseBlocks(), options.soilSwap(),
                         options.trustHidden(), job.border());
         int sectionX = SectionPos.x(job.sectionKey());
         int sectionY = SectionPos.y(job.sectionKey());

@@ -19,7 +19,7 @@ import org.lts.litematicaplus.util.AtomicFilePersistence;
 import org.lts.litematicaplus.util.Workers;
 
 public final class LitematicaPlusConfig {
-    private static final int CURRENT_CONFIG_VERSION = 4;
+    private static final int CURRENT_CONFIG_VERSION = 5;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
     private static final AtomicReference<Pending> PENDING = new AtomicReference<>();
@@ -81,9 +81,14 @@ public final class LitematicaPlusConfig {
     public boolean showWrongBlock = true;
     public boolean showWrongState = true;
     public boolean lenientStates = true;
+    public boolean looseBlocks = false;
+    public boolean soilInterchangeable = true;
+    public boolean toolUseGuard = true;
     public boolean hudEnabled = true;
     public int hudMaterialLines = 6;
     public boolean hudRightSide = false;
+    public float hudX = 0.0F;
+    public float hudY = 0.0F;
     public boolean toolEnabled = true;
     public String toolItem = "minecraft:stick";
     public boolean easyPlaceEnabled = false;
@@ -98,6 +103,8 @@ public final class LitematicaPlusConfig {
     public boolean easyPlaceRotationRevert = true;
     public boolean easyPlaceAllowInteraction = true;
     public boolean easyPlaceFinishStates = true;
+    public boolean easyPlaceIgnite = true;
+    public boolean easyPlaceWaterlog = false;
     public boolean easyPlaceObserverDetect = false;
     public boolean easyPlaceIgnoreItemData = false;
     public boolean easyPlaceSubstitutes = false;
@@ -120,11 +127,16 @@ public final class LitematicaPlusConfig {
     public boolean materialPanel = true;
     public boolean materialExactTake = true;
     public boolean materialTooltips = true;
+    public boolean materialHelperFollowsRender = true;
+    public boolean enderChestMaterials = true;
+    public boolean materialSwap = true;
     public boolean countVisibleOnly = true;
     public boolean schematicPreview = true;
     public boolean previewModels = true;
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
+    public int lockedHotbarSlots = 0;
+    public boolean inventoryHighlight = false;
     public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
@@ -219,6 +231,10 @@ public final class LitematicaPlusConfig {
         return this.easyPlacePreset.ticks(this.easyPlaceDelayTicks);
     }
 
+    public boolean hotbarSlotLocked(int slot) {
+        return slot >= 0 && slot < 9 && (this.lockedHotbarSlots & 1 << slot) != 0;
+    }
+
     public int resolvedWorkerThreads() {
         if (this.workerThreads > 0) {
             return this.workerThreads;
@@ -261,6 +277,11 @@ public final class LitematicaPlusConfig {
                 config.snapshotBudgetMicros = 600;
             }
         }
+        if (config.configVersion < 5) {
+            config.hudX = config.hudRightSide ? 1.0F : 0.0F;
+            config.hudY = 0.0F;
+            config.hudRightSide = false;
+        }
         return config;
     }
 
@@ -274,6 +295,9 @@ public final class LitematicaPlusConfig {
         config.meshUploadsPerFrame = clamp(config.meshUploadsPerFrame, 1, 256);
         config.snapshotBudgetMicros = clamp(config.snapshotBudgetMicros, 200, 10000);
         config.hudMaterialLines = clamp(config.hudMaterialLines, 0, 16);
+        config.hudX = (float) clamp(config.hudX, 0.0, 1.0);
+        config.hudY = (float) clamp(config.hudY, 0.0, 1.0);
+        config.lockedHotbarSlots &= 0x1FF;
         config.easyPlaceDelayTicks = clamp(config.easyPlaceDelayTicks, 0, 20);
         config.pasteCommandsPerTick = clamp(config.pasteCommandsPerTick, 1, 16);
         config.easyPlaceRotationLeadTicks = clamp(config.easyPlaceRotationLeadTicks, 0, 3);

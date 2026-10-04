@@ -64,6 +64,28 @@ public final class InventoryHelper {
         return ensure(minecraft, stack -> stack.is(single.getItem()), single);
     }
 
+    public static boolean ensureMatching(Minecraft minecraft, Predicate<ItemStack> matches, ItemStack creative) {
+        return minecraft.player != null && ensure(minecraft, matches, creative);
+    }
+
+    public static boolean selectEmptyHand(Minecraft minecraft) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || minecraft.gameMode == null) {
+            return false;
+        }
+        Inventory inventory = player.getInventory();
+        if (inventory.getSelectedItem().isEmpty()) {
+            return true;
+        }
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (inventory.getItem(slot).isEmpty()) {
+                select(minecraft, inventory, slot);
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean hasExactStack(Minecraft minecraft, ItemStack wanted) {
         LocalPlayer player = minecraft.player;
         return player != null && !wanted.isEmpty()
@@ -92,19 +114,20 @@ public final class InventoryHelper {
         }
         int found = find(inventory, matches);
         if (found >= 0 && found < HOTBAR_SIZE) {
-            inventory.setSelectedSlot(found);
-            ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
+            select(minecraft, inventory, found);
             return true;
         }
         if (found >= HOTBAR_SIZE && player.containerMenu == player.inventoryMenu) {
-            minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, found, inventory.getSelectedSlot(),
-                    ContainerInput.SWAP, player);
-            return true;
+            return swapIntoHotbar(minecraft, player, found);
         }
         if (!player.hasInfiniteMaterials()) {
             return false;
         }
-        int slot = inventory.getSuitableHotbarSlot();
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        int slot = config.lockedHotbarSlots == 0 ? inventory.getSuitableHotbarSlot() : freeHotbarSlot(inventory, config);
+        if (slot < 0) {
+            return false;
+        }
         ItemStack displaced = inventory.getItem(slot);
         if (!displaced.isEmpty()) {
             int free = inventory.getFreeSlot();
@@ -115,11 +138,47 @@ public final class InventoryHelper {
             }
         }
         ItemStack stack = creative.copy();
-        inventory.setSelectedSlot(slot);
-        ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
+        select(minecraft, inventory, slot);
         inventory.setItem(slot, stack);
         minecraft.gameMode.handleCreativeModeItemAdd(stack, menuSlot(slot));
         return true;
+    }
+
+    static boolean swapIntoHotbar(Minecraft minecraft, LocalPlayer player, int inventorySlot) {
+        Inventory inventory = player.getInventory();
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        int target = config.hotbarSlotLocked(inventory.getSelectedSlot()) ? freeHotbarSlot(inventory, config)
+                : inventory.getSelectedSlot();
+        if (target < 0) {
+            return false;
+        }
+        select(minecraft, inventory, target);
+        minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, inventorySlot, target,
+                ContainerInput.SWAP, player);
+        return true;
+    }
+
+    static void select(Minecraft minecraft, Inventory inventory, int slot) {
+        inventory.setSelectedSlot(slot);
+        ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
+    }
+
+    static int freeHotbarSlot(Inventory inventory, LitematicaPlusConfig config) {
+        int start = inventory.getSelectedSlot();
+        int fallback = -1;
+        for (int offset = 0; offset < HOTBAR_SIZE; offset++) {
+            int slot = (start + offset) % HOTBAR_SIZE;
+            if (config.hotbarSlotLocked(slot)) {
+                continue;
+            }
+            if (inventory.getItem(slot).isEmpty()) {
+                return slot;
+            }
+            if (fallback < 0) {
+                fallback = slot;
+            }
+        }
+        return fallback;
     }
 
     private static int menuSlot(int inventorySlot) {

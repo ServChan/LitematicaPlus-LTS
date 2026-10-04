@@ -53,6 +53,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
+        if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("litematica")) {
+            litematicaConflict(context);
+            return;
+        }
         TestWorldSave save;
         int expectedPlacements;
         for (HubScreen.Tab tab : HubScreen.Tab.values()) {
@@ -60,6 +64,9 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             context.waitTicks(4);
         }
         context.takeScreenshot("00_title_settings");
+        context.setScreen(() -> new org.lts.litematicaplus.gui.LitematicaConflictScreen(null, "0.29.1"));
+        context.waitTicks(4);
+        context.takeScreenshot("00b_litematica_conflict");
         context.setScreen(() -> null);
         context.waitTicks(4);
         try (TestSingleplayerContext world = context.worldBuilder()
@@ -72,6 +79,11 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             }
             if (System.getProperty("litematicaplus.materialsOnly") != null) {
                 MaterialsSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
+            if (System.getProperty("litematicaplus.featuresOnly") != null) {
+                FeaturesSuite.run(context, world);
                 checkHealthy();
                 return;
             }
@@ -261,6 +273,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             EasyPlaceSuite.run(context, world);
             EntitySuite.run(context, world);
             MaterialsSuite.run(context, world);
+            FeaturesSuite.run(context, world);
 
             context.runOnClient(client -> {
                 LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -633,6 +646,19 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
 
     private static void checkHealthy() {
         check(!GhostRenderer.failed(), "schematic renderer reported a failure");
+    }
+
+    private static void litematicaConflict(ClientGameTestContext context) {
+        context.waitFor(client -> client.gui.screen() instanceof org.lts.litematicaplus.gui.LitematicaConflictScreen, 400);
+        context.takeScreenshot("00c_litematica_conflict_on_start");
+        context.setScreen(() -> null);
+        try (TestSingleplayerContext world = context.worldBuilder()
+                .adjustSettings(settings -> settings.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE))
+                .create()) {
+            world.getConnection().waitForChunksRender();
+            context.waitTicks(40);
+            context.takeScreenshot("00d_litematica_conflict_chat");
+        }
     }
 
     static void require(boolean condition, String message) {

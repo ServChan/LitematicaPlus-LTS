@@ -171,6 +171,10 @@ public final class MaterialList {
     }
 
     public static List<Entry> compute(PlacementRuntime runtime, Inventory inventory, Sort sort) {
+        return compute(runtime, inventory, sort, true);
+    }
+
+    public static List<Entry> compute(PlacementRuntime runtime, Inventory inventory, Sort sort, boolean withEnderChest) {
         PlacementVolume volume = runtime == null ? null : runtime.volume();
         if (volume == null) {
             return List.of();
@@ -193,6 +197,11 @@ public final class MaterialList {
             });
         }
         Reference2LongMap<Item> available = inventory == null ? new Reference2LongOpenHashMap<>() : countInventory(inventory);
+        if (withEnderChest && inventory != null && EnderChestMemory.counted()) {
+            for (Reference2LongMap.Entry<Item> stored : EnderChestMemory.counts().reference2LongEntrySet()) {
+                available.put(stored.getKey(), available.getLong(stored.getKey()) + stored.getLongValue());
+            }
+        }
         List<Entry> entries = new ArrayList<>(totalByItem.size());
         for (Reference2LongMap.Entry<Item> entry : totalByItem.reference2LongEntrySet()) {
             Item item = entry.getKey();
@@ -225,13 +234,21 @@ public final class MaterialList {
         };
     }
 
-    static Reference2LongMap<Item> countTopLevel(Inventory inventory) {
+    public static Reference2LongMap<Item> countTopLevel(Inventory inventory) {
         Reference2LongOpenHashMap<Item> counts = new Reference2LongOpenHashMap<>();
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
             ItemStack stack = inventory.getItem(slot);
             if (!stack.isEmpty()) {
                 counts.addTo(stack.getItem(), stack.getCount());
             }
+        }
+        return counts;
+    }
+
+    public static Reference2LongMap<Item> countStacks(Iterable<ItemStack> stacks) {
+        Reference2LongOpenHashMap<Item> counts = new Reference2LongOpenHashMap<>();
+        for (ItemStack stack : stacks) {
+            add(counts, stack, 1);
         }
         return counts;
     }

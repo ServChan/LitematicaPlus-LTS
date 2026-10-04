@@ -8,13 +8,17 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.AbstractCandleBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.CandleCakeBlock;
 import net.minecraft.world.level.block.ComparatorBlock;
 import net.minecraft.world.level.block.DaylightDetectorBlock;
@@ -36,6 +40,7 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.block.state.properties.RedstoneSide;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
@@ -47,7 +52,11 @@ public final class FollowUps {
         NONE,
         INTERACT,
         USE_ITEM,
-        TUNE
+        TUNE,
+        IGNITE,
+        DOUSE,
+        EMPTY_HAND,
+        BUCKET
     }
 
     public record Action(Kind kind, Item item, Direction face, Direction look) {
@@ -115,7 +124,7 @@ public final class FollowUps {
                     ? interact() : Action.NONE;
         }
         if (block instanceof TrapDoorBlock && block != Blocks.IRON_TRAPDOOR) {
-            return openDiffers(level, pos, target, world) ? interact() : Action.NONE;
+            return openDiffers(level, pos, target, world) ? interact() : stateActions(target, world);
         }
         if (block instanceof DoorBlock door && door.type().canOpenByHand()) {
             return openDiffers(level, pos, target, world) ? interact() : Action.NONE;
@@ -147,12 +156,42 @@ public final class FollowUps {
                 return new Action(Kind.USE_ITEM, block.asItem(), present == SlabType.BOTTOM ? Direction.UP : Direction.DOWN,
                         null);
             }
-            return Action.NONE;
+            return stateActions(target, world);
         }
         for (IntegerProperty property : STACKABLE) {
             if (target.hasProperty(property)) {
-                return target.getValue(property) > world.getValue(property)
-                        ? new Action(Kind.USE_ITEM, block.asItem(), Direction.UP, null) : Action.NONE;
+                if (target.getValue(property) > world.getValue(property)) {
+                    return new Action(Kind.USE_ITEM, block.asItem(), Direction.UP, null);
+                }
+                break;
+            }
+        }
+        return stateActions(target, world);
+    }
+
+    static Action stateActions(BlockState target, BlockState world) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        boolean wet = world.hasProperty(BlockStateProperties.WATERLOGGED) && world.getValue(BlockStateProperties.WATERLOGGED);
+        if (config.easyPlaceWaterlog && target.hasProperty(BlockStateProperties.WATERLOGGED)
+                && world.hasProperty(BlockStateProperties.WATERLOGGED)) {
+            boolean wanted = target.getValue(BlockStateProperties.WATERLOGGED);
+            if (wanted != wet) {
+                return new Action(Kind.BUCKET, wanted ? Items.WATER_BUCKET : Items.BUCKET, Direction.UP, null);
+            }
+        }
+        Block block = target.getBlock();
+        if (config.easyPlaceIgnite && target.hasProperty(BlockStateProperties.LIT) && world.hasProperty(BlockStateProperties.LIT)
+                && (block instanceof AbstractCandleBlock || block instanceof CampfireBlock)) {
+            boolean wanted = target.getValue(BlockStateProperties.LIT);
+            boolean lit = world.getValue(BlockStateProperties.LIT);
+            if (wanted && !lit && !wet) {
+                return new Action(Kind.IGNITE, Items.FLINT_AND_STEEL, Direction.UP, null);
+            }
+            if (!wanted && lit && block instanceof CampfireBlock) {
+                return new Action(Kind.DOUSE, Items.AIR, Direction.UP, null);
+            }
+            if (!wanted && lit && !(block instanceof CandleCakeBlock)) {
+                return new Action(Kind.EMPTY_HAND, Items.AIR, Direction.UP, null);
             }
         }
         return Action.NONE;
@@ -245,6 +284,7 @@ public final class FollowUps {
             return;
         }
         boolean sneakBlocked = player.isSecondaryUseActive() && (action.kind() == Kind.INTERACT
+                || action.kind() == Kind.EMPTY_HAND
                 || action.kind() == Kind.USE_ITEM && action.item() != net.minecraft.world.item.Items.ENDER_EYE);
         if (!TickQueue.worldReady(minecraft) || sneakBlocked || BreakAssist.busy(minecraft)) {
             int remaining = TickQueue.worldReady(minecraft) && !sneakBlocked ? budget : budget - 1;
@@ -274,6 +314,23 @@ public final class FollowUps {
             Notify.actionBar("litematicaplus.message.item_missing", new ItemStack(action.item()).getHoverName());
             return false;
         }
+        if (action.kind() == Kind.BUCKET) {
+            return useBucket(minecraft, pos, action.item());
+        }
+        if (action.kind() == Kind.IGNITE && !InventoryHelper.ensureMatching(minecraft,
+                stack -> stack.is(Items.FLINT_AND_STEEL) || stack.is(Items.FIRE_CHARGE), new ItemStack(Items.FLINT_AND_STEEL))) {
+            Notify.actionBar("litematicaplus.message.item_missing", new ItemStack(Items.FLINT_AND_STEEL).getHoverName());
+            return false;
+        }
+        if (action.kind() == Kind.DOUSE && !InventoryHelper.ensureMatching(minecraft,
+                stack -> stack.is(ItemTags.SHOVELS), new ItemStack(Items.WOODEN_SHOVEL))) {
+            Notify.actionBar("litematicaplus.message.shovel_missing");
+            return false;
+        }
+        if (action.kind() == Kind.EMPTY_HAND && !InventoryHelper.selectEmptyHand(minecraft)) {
+            Notify.actionBar("litematicaplus.message.no_empty_hand");
+            return false;
+        }
         Direction face = action.kind() == Kind.INTERACT
                 ? Direction.getApproximateNearest(player.getEyePosition().subtract(Vec3.atCenterOf(pos))) : action.face();
         BlockHitResult hit = new BlockHitResult(new Vec3(pos.getX() + 0.5 + face.getStepX() * 0.5,
@@ -290,6 +347,36 @@ public final class FollowUps {
             player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getInteractAnimation(), false);
         }
         if (rotate && LitematicaPlusConfig.current().easyPlaceRotationRevert) {
+            LookLock.sendRealRotation(minecraft);
+        }
+        return true;
+    }
+
+    private static boolean useBucket(Minecraft minecraft, BlockPos pos, Item item) {
+        LocalPlayer player = minecraft.player;
+        Vec3 eye = player.getEyePosition();
+        Vec3 center = Vec3.atCenterOf(pos);
+        ClipContext.Fluid fluid = item == Items.BUCKET ? ClipContext.Fluid.SOURCE_ONLY : ClipContext.Fluid.NONE;
+        BlockHitResult clip = minecraft.level.clip(new ClipContext(eye, center.add(center.subtract(eye).normalize()),
+                ClipContext.Block.OUTLINE, fluid, player));
+        if (clip.getType() != HitResult.Type.BLOCK || !clip.getBlockPos().equals(pos)) {
+            return false;
+        }
+        if (!InventoryHelper.ensureInHand(minecraft, item)) {
+            Notify.actionBar("litematicaplus.message.item_missing", new ItemStack(item).getHoverName());
+            return false;
+        }
+        Vec3 delta = center.subtract(eye);
+        float yaw = (float) (Math.toDegrees(Math.atan2(delta.z, delta.x)) - 90.0);
+        float pitch = (float) -Math.toDegrees(Math.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z)));
+        PlacementSolver.Plan plan = new PlacementSolver.Plan(clip, true, yaw, pitch, false, true);
+        LookLock.sendRotation(minecraft, yaw, pitch);
+        InteractionResult result = PlacementSolver.withPlan(player, plan,
+                () -> minecraft.gameMode.useItem(player, InteractionHand.MAIN_HAND));
+        if (result instanceof InteractionResult.Success) {
+            player.swing(InteractionHand.MAIN_HAND, player.getMainHandItem().getInteractAnimation(), false);
+        }
+        if (LitematicaPlusConfig.current().easyPlaceRotationRevert) {
             LookLock.sendRealRotation(minecraft);
         }
         return true;

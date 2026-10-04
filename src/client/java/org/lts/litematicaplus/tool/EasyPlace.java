@@ -11,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -42,6 +43,7 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.verify.StateComparator;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class EasyPlace {
@@ -171,7 +173,7 @@ public final class EasyPlace {
         if (!active(config)) {
             return config.placementRestriction && restricted(minecraft, 0);
         }
-        if (config.easyPlaceAllowInteraction && !sessionConsumed && interacting(minecraft)) {
+        if (config.easyPlaceAllowInteraction && !sessionConsumed && interacting(minecraft) && !itemStateAimed(minecraft)) {
             return false;
         }
         boolean target = config.entityPlacement && EntityAssist.hasTarget(minecraft)
@@ -275,6 +277,20 @@ public final class EasyPlace {
             return false;
         }
         return isInteractable(minecraft.level, blockHit.getBlockPos(), minecraft.level.getBlockState(blockHit.getBlockPos()));
+    }
+
+    private static boolean itemStateAimed(Minecraft minecraft) {
+        if (!LitematicaPlusConfig.current().easyPlaceFinishStates || !(minecraft.hitResult instanceof BlockHitResult hit)
+                || hit.getType() != HitResult.Type.BLOCK) {
+            return false;
+        }
+        BlockPos pos = hit.getBlockPos();
+        BlockState target = GhostEngine.get().schematicStateAt(pos.getX(), pos.getY(), pos.getZ());
+        if (target == null || target.isAir()) {
+            return false;
+        }
+        FollowUps.Kind kind = FollowUps.next(minecraft.level, pos, target, minecraft.level.getBlockState(pos)).kind();
+        return kind == FollowUps.Kind.IGNITE || kind == FollowUps.Kind.DOUSE || kind == FollowUps.Kind.BUCKET;
     }
 
     private static boolean insideAnyPlacement(BlockPos pos) {
@@ -394,8 +410,33 @@ public final class EasyPlace {
         if (player.hasInfiniteMaterials() || InventoryHelper.has(player.getInventory(), item, config)) {
             return item;
         }
+        Item alternative = alternativeItem(player.getInventory(), target, config);
+        if (alternative != Items.AIR) {
+            return alternative;
+        }
         if (config.easyPlaceSubstitutes) {
             return Substitutes.find(player.getInventory(), target);
+        }
+        return Items.AIR;
+    }
+
+    private static Item alternativeItem(Inventory inventory, BlockState target, LitematicaPlusConfig config) {
+        Block wanted = PlacementSolver.baseState(target).getBlock();
+        boolean soil = config.soilInterchangeable && StateComparator.isSoil(wanted);
+        if (!soil && !config.looseBlocks) {
+            return Items.AIR;
+        }
+        StateComparator comparator = StateComparator.get();
+        for (int slot = 0; slot < 36; slot++) {
+            if (!(inventory.getItem(slot).getItem() instanceof BlockItem blockItem) || blockItem.getBlock() == wanted) {
+                continue;
+            }
+            Block candidate = blockItem.getBlock();
+            boolean fits = soil && StateComparator.isSoil(candidate)
+                    || config.looseBlocks && comparator.sameGroup(wanted, candidate);
+            if (fits && InventoryHelper.has(inventory, blockItem, config)) {
+                return blockItem;
+            }
         }
         return Items.AIR;
     }

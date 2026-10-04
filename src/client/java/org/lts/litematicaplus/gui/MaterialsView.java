@@ -19,6 +19,7 @@ import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.hud.InfoHud;
+import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialExport;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.materials.MaterialReport;
@@ -52,8 +53,15 @@ final class MaterialsView extends TabView {
 
     @Override
     Component summary() {
-        return this.status != null ? this.status
-                : tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        if (this.status != null) {
+            return this.status;
+        }
+        Component summary = tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        if (!EnderChestMemory.counted()) {
+            return summary;
+        }
+        return summary.copy().append(" · ").append(tr(EnderChestMemory.known() ? "litematicaplus.materials.ender_counted"
+                : "litematicaplus.materials.ender_unknown"));
     }
 
     private void status(Component message) {

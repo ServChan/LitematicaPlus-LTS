@@ -37,6 +37,7 @@ public final class SessionStore {
         public boolean enabled = true;
         public boolean locked;
         public List<String> disabledRegions = new ArrayList<>();
+        public Map<String, String> replacements = new LinkedHashMap<>();
     }
 
     public static final class LayerData {
@@ -252,6 +253,10 @@ public final class SessionStore {
                 entry.disabledRegions = new ArrayList<>();
             }
             entry.disabledRegions.removeIf(name -> name == null);
+            if (entry.replacements == null) {
+                entry.replacements = new LinkedHashMap<>();
+            }
+            entry.replacements.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null);
         }
         scope.selectedPlacement = scope.selectedPlacement == null ? "" : scope.selectedPlacement;
         scope.toolMode = scope.toolMode == null ? "" : scope.toolMode;

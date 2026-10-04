@@ -62,6 +62,28 @@ class LitematicaPlusConfigTest {
     }
 
     @Test
+    void rightSideHudMigratesToTheRightEdge(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("config.json");
+        Files.writeString(file, "{\"configVersion\": 4, \"hudRightSide\": true}");
+        LitematicaPlusConfig config = LitematicaPlusConfig.load(file);
+        assertEquals(1.0F, config.hudX);
+        assertEquals(0.0F, config.hudY);
+        assertFalse(config.hudRightSide);
+    }
+
+    @Test
+    void hudPositionAndLockedSlotsStayInRange(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("config.json");
+        Files.writeString(file, "{\"hudX\": 3.5, \"hudY\": -1, \"lockedHotbarSlots\": -1}");
+        LitematicaPlusConfig config = LitematicaPlusConfig.load(file);
+        assertEquals(1.0F, config.hudX);
+        assertEquals(0.0F, config.hudY);
+        assertEquals(0x1FF, config.lockedHotbarSlots);
+        assertTrue(config.hotbarSlotLocked(8));
+        assertFalse(config.hotbarSlotLocked(9));
+    }
+
+    @Test
     void workerThreadsResolveToAtLeastOne() {
         LitematicaPlusConfig config = new LitematicaPlusConfig();
         assertTrue(config.resolvedWorkerThreads() >= 1);

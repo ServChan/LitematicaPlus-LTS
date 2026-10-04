@@ -60,7 +60,7 @@ public final class MaterialCache {
             return new Snapshot(placement, List.of(), Map.of());
         }
         List<MaterialList.Entry> entries = MaterialList.compute(runtime, minecraft.player.getInventory(),
-                MaterialList.Sort.SHORTFALL);
+                MaterialList.Sort.SHORTFALL, false);
         Reference2ObjectOpenHashMap<Item, MaterialList.Entry> byItem = new Reference2ObjectOpenHashMap<>();
         for (MaterialList.Entry entry : entries) {
             byItem.put(entry.item(), entry);

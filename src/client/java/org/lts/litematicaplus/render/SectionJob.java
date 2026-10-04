@@ -34,6 +34,8 @@ public record SectionJob(
             boolean overlay,
             boolean renderColliding,
             boolean lenientStates,
+            boolean looseBlocks,
+            boolean soilSwap,
             boolean trustHidden,
             boolean throughWalls,
             boolean worldCache,

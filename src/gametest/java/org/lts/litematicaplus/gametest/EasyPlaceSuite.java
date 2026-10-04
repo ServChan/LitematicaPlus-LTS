@@ -201,6 +201,7 @@ final class EasyPlaceSuite {
         interactBehindGhost(context, world);
         supportUnderSnow(context, world);
         survivalBreakWrong(context, world);
+        lockedSlotKeepsTool(context, world);
 
         context.runOnClient(client -> {
             LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -395,6 +396,65 @@ final class EasyPlaceSuite {
         world.getServer().runCommand("setblock " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " minecraft:air");
         world.getConnection().waitForClientboundPackets();
         LitematicaPlusGameTest.require(dirt, "in survival the wrong stone should be mined out and replaced with dirt");
+    }
+
+    private static void lockedSlotKeepsTool(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos spot = BASE.offset(-24, 0, 0);
+        RegionBuilder builder = new RegionBuilder("Locked", 0, 0, 0, 1, 1, 1);
+        builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Locked";
+        Schematic schematic = new Schematic(metadata, Map.of("Locked", builder.build()));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/locked.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        world.getServer().runCommand("setblock " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " minecraft:air");
+        world.getServer().runCommand("gamemode survival @p");
+        world.getServer().runCommand("clear @p");
+        world.getServer().runCommand("item replace entity @p hotbar.0 with minecraft:diamond_pickaxe");
+        world.getServer().runCommand("item replace entity @p inventory.5 with minecraft:dirt 4");
+        world.getServer().runCommand("tp @p " + (spot.getX() + 0.5) + " " + spot.getY() + " " + (spot.getZ() - 1.5) + " 0 37");
+        world.getConnection().waitForClientboundPackets();
+        context.runOnClient(client -> {
+            client.player.getInventory().setSelectedSlot(0);
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.lockedHotbarSlots = 1;
+            LitematicaPlusConfig.save(config);
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, spot));
+        context.waitFor(client -> GhostEngine.get().categoryAt(spot.getX(), spot.getY(), spot.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.MISSING, 400);
+        context.waitTicks(6);
+        boolean dirt = false;
+        for (int attempt = 0; attempt < 4 && !dirt; attempt++) {
+            context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+            for (int wait = 0; wait < 15 && !dirt; wait++) {
+                context.waitTicks(2);
+                dirt = world.getServer().computeOnServer(server -> server.overworld().getBlockState(spot)
+                        .is(net.minecraft.world.level.block.Blocks.DIRT));
+            }
+        }
+        world.getConnection().waitForClientboundPackets();
+        boolean toolKept = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().getFirst()
+                .getInventory().getItem(0).is(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.lockedHotbarSlots = 0;
+            LitematicaPlusConfig.save(config);
+            PlacementManager.get().remove(placement);
+        });
+        world.getServer().runCommand("gamemode creative @p");
+        world.getServer().runCommand("clear @p");
+        world.getServer().runCommand("setblock " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " minecraft:air");
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(dirt, "easy place should take dirt from the main inventory into a free hotbar slot");
+        LitematicaPlusGameTest.require(toolKept, "the pickaxe in the locked hotbar slot must stay where it is");
     }
 
     private static int indexOf(String name) {

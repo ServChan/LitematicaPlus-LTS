@@ -49,6 +49,17 @@ class PlacementVolumeTest {
     }
 
     @Test
+    void replacementsSwapBlocksAndKeepTheirShape() {
+        PlacementVolume volume = PlacementVolume.build(schematic(), PlacementTransform.IDENTITY, Set.of(),
+                Map.of(Blocks.STONE, Blocks.BRICKS, Blocks.OAK_STAIRS, Blocks.STONE_BRICK_STAIRS));
+        assertSame(Blocks.BRICKS.defaultBlockState(), volume.stateAt(0, 0, 0));
+        BlockState stairs = volume.stateAt(19, 1, 2);
+        assertSame(Blocks.STONE_BRICK_STAIRS, stairs.getBlock());
+        assertEquals(Direction.NORTH, stairs.getValue(BlockStateProperties.HORIZONTAL_FACING));
+        assertSame(Blocks.GLASS.defaultBlockState(), volume.stateAt(0, 5, 0));
+    }
+
+    @Test
     void identityPlacementKeepsPositionsAndCountsBlocks() {
         PlacementVolume volume = PlacementVolume.build(schematic(), new PlacementTransform(10, 64, 10, Rotation.NONE, Mirror.NONE), Set.of());
         assertSame(Blocks.STONE.defaultBlockState(), volume.stateAt(10, 64, 10));

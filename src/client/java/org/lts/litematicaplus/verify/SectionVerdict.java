@@ -45,7 +45,7 @@ public final class SectionVerdict {
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
             boolean lenient) {
-        return compute(section, globalIds, solid, world, lenient, false, null);
+        return compute(section, globalIds, solid, world, lenient, false, false, false, null);
     }
 
     public static boolean borderSolid(long[] border, int face, int a, int b) {
@@ -157,7 +157,7 @@ public final class SectionVerdict {
     }
 
     public static SectionVerdict compute(GhostSection section, int[] globalIds, boolean[] solid, BlockState[] world,
-            boolean lenient, boolean trustHidden, long[] border) {
+            boolean lenient, boolean loose, boolean soilSwap, boolean trustHidden, long[] border) {
         byte[] categories = new byte[GhostSection.VOLUME];
         int[] counts = new int[TYPES];
         int[] correct = new int[globalIds.length];
@@ -191,7 +191,7 @@ public final class SectionVerdict {
                 lastId = worldId;
             }
             int paletteIndex = value & 0xFFFF;
-            MismatchType type = comparator.compare(globalIds[paletteIndex], worldId, lenient);
+            MismatchType type = comparator.compare(globalIds[paletteIndex], worldId, lenient, loose, soilSwap);
             if (trustHidden && type == MismatchType.WRONG_BLOCK && hidden(world, border, i)) {
                 type = MismatchType.CORRECT;
             }

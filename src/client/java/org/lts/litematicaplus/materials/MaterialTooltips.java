@@ -24,7 +24,7 @@ public final class MaterialTooltips {
         ItemTooltipCallback.EVENT.register((stack, context, flag, lines) -> {
             Minecraft minecraft = Minecraft.getInstance();
             if (!LitematicaPlusConfig.current().materialTooltips || minecraft.player == null || stack.isEmpty()
-                    || !minecraft.isSameThread()) {
+                    || !minecraft.isSameThread() || !ContainerHelper.schematicShown()) {
                 return;
             }
             MaterialCache.Snapshot snapshot = MaterialCache.get();

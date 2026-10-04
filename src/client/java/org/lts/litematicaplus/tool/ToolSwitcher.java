@@ -4,10 +4,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusConfig;
-import org.lts.litematicaplus.mixin.MultiPlayerGameModeInvoker;
+import org.lts.litematicaplus.engine.GhostEngine;
 
 public final class ToolSwitcher {
     private ToolSwitcher() {
@@ -15,7 +14,8 @@ public final class ToolSwitcher {
 
     public static void switchFor(Minecraft minecraft, BlockPos pos, boolean force) {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!force && (!config.autoToolSwitch || !config.easyPlaceEnabled)) {
+        if (!force && (!config.autoToolSwitch
+                || !GhostEngine.get().insideAnyVolume(pos.getX(), pos.getY(), pos.getZ()))) {
             return;
         }
         LocalPlayer player = minecraft.player;
@@ -34,12 +34,10 @@ public final class ToolSwitcher {
         }
         if (slot < 9) {
             if (slot != inventory.getSelectedSlot()) {
-                inventory.setSelectedSlot(slot);
-                ((MultiPlayerGameModeInvoker) minecraft.gameMode).litematicaplus$ensureHasSentCarriedItem();
+                InventoryHelper.select(minecraft, inventory, slot);
             }
         } else if (player.containerMenu == player.inventoryMenu) {
-            minecraft.gameMode.handleContainerInput(player.inventoryMenu.containerId, slot, inventory.getSelectedSlot(),
-                    ContainerInput.SWAP, player);
+            InventoryHelper.swapIntoHotbar(minecraft, player, slot);
         }
     }
 }

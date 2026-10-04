@@ -27,6 +27,7 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.verify.StateComparator;
 
 public final class BreakAssist {
     private static final Set<Block> TERRAIN = Set.of(Blocks.DIRT, Blocks.GRASS_BLOCK, Blocks.COARSE_DIRT, Blocks.DIRT_PATH);
@@ -55,6 +56,14 @@ public final class BreakAssist {
         }
         if (config.easyPlaceSubstitutes && Substitutes.accepts(target, world)) {
             return false;
+        }
+        if (config.soilInterchangeable && StateComparator.isSoil(PlacementSolver.baseState(target).getBlock())
+                && StateComparator.isSoil(world.getBlock())) {
+            return false;
+        }
+        if (config.looseBlocks && StateComparator.get().sameGroup(PlacementSolver.baseState(target).getBlock(),
+                world.getBlock())) {
+            target = StateComparator.transferProperties(target, world.getBlock());
         }
         Block wanted = PlacementSolver.baseState(target).getBlock();
         if (config.terrainAutoReplace && world.getBlock() != wanted && TERRAIN.contains(world.getBlock())

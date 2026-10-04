@@ -25,6 +25,7 @@ import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.tool.EntityAssist;
+import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.PlacementVolume;
 
@@ -38,6 +39,8 @@ public final class BoxRenderer {
     private static final int SELECTION_ACTIVE_FILL = 0x2055FF55;
     private static final int CORNER_FIRST_COLOR = 0xFFFF5555;
     private static final int CORNER_SECOND_COLOR = 0xFF5B8CFF;
+    private static final int HIGHLIGHT_COLOR = 0xFF9BF07A;
+    private static final int HIGHLIGHT_FILL = 0x309BF07A;
     private static final double MAX_DISTANCE = 768.0;
     private static final double TOP_VIEW_DISTANCE = 2560.0;
     private static final NativeWriter LINES = new NativeWriter(1 << 12);
@@ -117,6 +120,12 @@ public final class BoxRenderer {
                     box(LINES, null, camera, placement.x() - 0.03, placement.y() - 0.03, placement.z() - 0.03,
                             placement.x() + 1.03, placement.y() + 1.03, placement.z() + 1.03, ORIGIN_COLOR, 3.0F, 0);
                 }
+            }
+        }
+        if (visible && config.renderEnabled && config.inventoryHighlight) {
+            for (BlockPos pos : InventoryHighlight.positions()) {
+                box(LINES, FILLS, camera, pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02, pos.getX() + 0.98,
+                        pos.getY() + 0.98, pos.getZ() + 0.98, HIGHLIGHT_COLOR, 2.0F, HIGHLIGHT_FILL);
             }
         }
         if (visible && config.entityPlacement) {

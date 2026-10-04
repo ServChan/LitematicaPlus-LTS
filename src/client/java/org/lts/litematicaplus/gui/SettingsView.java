@@ -208,6 +208,9 @@ final class SettingsView extends TabView {
                 rows.add(toggle("render_colliding", c -> c.renderCollidingBlocks, (c, v) -> c.renderCollidingBlocks = v));
                 rows.add(toggle("render_block_entities", c -> c.renderBlockEntities, (c, v) -> c.renderBlockEntities = v));
                 rows.add(toggle("lenient_states", c -> c.lenientStates, (c, v) -> c.lenientStates = v));
+                rows.add(toggle("loose_blocks", c -> c.looseBlocks, (c, v) -> c.looseBlocks = v));
+                rows.add(toggle("soil_interchangeable", c -> c.soilInterchangeable, (c, v) -> c.soilInterchangeable = v));
+                rows.add(toggle("inventory_highlight", c -> c.inventoryHighlight, (c, v) -> c.inventoryHighlight = v));
                 rows.add(toggle("trust_hidden", c -> c.trustHiddenBlocks, (c, v) -> c.trustHiddenBlocks = v));
                 rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
                 rows.add(toggle("count_visible_only", c -> c.countVisibleOnly, (c, v) -> c.countVisibleOnly = v));
@@ -216,7 +219,7 @@ final class SettingsView extends TabView {
                 rows.add(number("render_distance", () -> this.working.renderDistance,
                         v -> this.working.renderDistance = v, 32, 2048, 32));
                 rows.add(toggle("hud_enabled", c -> c.hudEnabled, (c, v) -> c.hudEnabled = v));
-                rows.add(toggle("hud_right_side", c -> c.hudRightSide, (c, v) -> c.hudRightSide = v));
+                rows.add(this::hudPositionRow);
                 rows.add(number("hud_material_lines", () -> this.working.hudMaterialLines,
                         v -> this.working.hudMaterialLines = v, 0, 16, 1));
                 rows.add(toggle("note_tuning_hud", c -> c.noteTuningHud, (c, v) -> c.noteTuningHud = v));
@@ -229,11 +232,16 @@ final class SettingsView extends TabView {
                 rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
                 rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
                 rows.add(toggle("pick_block", c -> c.pickBlockEnabled, (c, v) -> c.pickBlockEnabled = v));
+                rows.add(this::lockedSlotsRow);
                 rows.add(toggle("placement_restriction", c -> c.placementRestriction, (c, v) -> c.placementRestriction = v));
                 rows.add(toggle("material_helper", c -> c.materialHelper, (c, v) -> c.materialHelper = v));
+                rows.add(toggle("material_follows_render", c -> c.materialHelperFollowsRender,
+                        (c, v) -> c.materialHelperFollowsRender = v));
                 rows.add(toggle("material_panel", c -> c.materialPanel, (c, v) -> c.materialPanel = v));
                 rows.add(toggle("material_exact", c -> c.materialExactTake, (c, v) -> c.materialExactTake = v));
                 rows.add(toggle("material_tooltips", c -> c.materialTooltips, (c, v) -> c.materialTooltips = v));
+                rows.add(toggle("ender_chest_materials", c -> c.enderChestMaterials, (c, v) -> c.enderChestMaterials = v));
+                rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
                 rows.add(this::pasteReplaceRow);
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
@@ -255,6 +263,8 @@ final class SettingsView extends TabView {
                         (c, v) -> c.easyPlaceStrictOrientation = v));
                 rows.add(toggle("easy_place_air", c -> c.easyPlaceAirPlacement, (c, v) -> c.easyPlaceAirPlacement = v));
                 rows.add(toggle("easy_place_finish", c -> c.easyPlaceFinishStates, (c, v) -> c.easyPlaceFinishStates = v));
+                rows.add(toggle("easy_place_ignite", c -> c.easyPlaceIgnite, (c, v) -> c.easyPlaceIgnite = v));
+                rows.add(toggle("easy_place_waterlog", c -> c.easyPlaceWaterlog, (c, v) -> c.easyPlaceWaterlog = v));
                 rows.add(toggle("easy_place_interaction", c -> c.easyPlaceAllowInteraction,
                         (c, v) -> c.easyPlaceAllowInteraction = v));
                 rows.add(toggle("easy_place_restrict", c -> c.easyPlaceRestrictArea, (c, v) -> c.easyPlaceRestrictArea = v));
@@ -267,6 +277,7 @@ final class SettingsView extends TabView {
                 rows.add(this::substitutesRow);
                 rows.add(toggle("entity_placement", c -> c.entityPlacement, (c, v) -> c.entityPlacement = v));
                 rows.add(toggle("excavation_guard", c -> c.excavationGuard, (c, v) -> c.excavationGuard = v));
+                rows.add(toggle("tool_use_guard", c -> c.toolUseGuard, (c, v) -> c.toolUseGuard = v));
                 rows.add(toggle("excavation_guard_outside", c -> c.excavationGuardOutside,
                         (c, v) -> c.excavationGuardOutside = v));
                 rows.add(toggle("excavation_guard_correct", c -> c.excavationGuardCorrect,
@@ -468,6 +479,29 @@ final class SettingsView extends TabView {
             this.working.defaultAuthor = value;
             changed();
         });
+    }
+
+    private void hudPositionRow(int x, int y, int width) {
+        describe(add(FlatButton.secondary(x, y, width, tr("litematicaplus.option.hud_position"), button ->
+                this.minecraft.gui.setScreen(new HudLayoutScreen(this.screen, this.working.hudX, this.working.hudY,
+                        (hudX, hudY) -> {
+                            LitematicaPlusConfig applied = LitematicaPlusConfig.currentCopy();
+                            applied.hudX = hudX;
+                            applied.hudY = hudY;
+                            LitematicaPlusConfig.save(applied);
+                            this.working.hudX = hudX;
+                            this.working.hudY = hudY;
+                        })))), "hud_position");
+    }
+
+    private void lockedSlotsRow(int x, int y, int width) {
+        SlotLockStrip strip = add(new SlotLockStrip(x, y, width, tr("litematicaplus.option.locked_slots"),
+                () -> this.working.lockedHotbarSlots, value -> {
+                    this.working.lockedHotbarSlots = value;
+                    changed();
+                }));
+        strip.setTooltip(Tooltip.create(tr("litematicaplus.option.locked_slots").copy().append("\n")
+                .append(tr("litematicaplus.option.locked_slots.tip"))));
     }
 
     private void pasteReplaceRow(int x, int y, int width) {

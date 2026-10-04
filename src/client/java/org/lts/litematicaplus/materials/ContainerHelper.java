@@ -57,7 +57,7 @@ public final class ContainerHelper {
     public static void register() {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (!(screen instanceof AbstractContainerScreen<?> container) || !isStorage(container)
-                    || !LitematicaPlusConfig.current().materialHelper || PlacementManager.get().selected() == null) {
+                    || !LitematicaPlusConfig.current().materialHelper || !schematicShown()) {
                 return;
             }
             if (open != container) {
@@ -104,6 +104,10 @@ public final class ContainerHelper {
                 }
             });
         });
+    }
+
+    public static boolean schematicShown() {
+        return PlacementManager.get().announcedSelection() != null;
     }
 
     public static boolean isStorage(Screen screen) {

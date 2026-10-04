@@ -188,6 +188,9 @@ public final class ToolController {
     public boolean onUse(Minecraft minecraft) {
         if (!holdingTool(minecraft)) {
             boolean consumed = EasyPlace.onUse(minecraft);
+            if (!consumed && ToolGuard.blocks(minecraft)) {
+                return true;
+            }
             if (!consumed) {
                 BlockEntityAssist.userInteracted();
             }

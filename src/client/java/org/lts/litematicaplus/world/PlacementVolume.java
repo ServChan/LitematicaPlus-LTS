@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -22,6 +23,7 @@ import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicRegion;
 import org.lts.litematicaplus.util.LocalizedException;
+import org.lts.litematicaplus.verify.StateComparator;
 
 public final class PlacementVolume {
     public static final int MAX_PALETTE = 0xFFFE;
@@ -122,6 +124,11 @@ public final class PlacementVolume {
     }
 
     public static PlacementVolume build(Schematic schematic, PlacementTransform transform, Set<String> disabledRegions) {
+        return build(schematic, transform, disabledRegions, Map.of());
+    }
+
+    public static PlacementVolume build(Schematic schematic, PlacementTransform transform, Set<String> disabledRegions,
+            Map<Block, Block> replacements) {
         List<BlockState> palette = new ArrayList<>();
         Reference2IntMap<BlockState> lookup = new Reference2IntOpenHashMap<>();
         lookup.defaultReturnValue(-1);
@@ -147,6 +154,10 @@ public final class PlacementVolume {
                     continue;
                 }
                 BlockState state = transform.apply(regionPalette[i]);
+                Block replacement = replacements.get(state.getBlock());
+                if (replacement != null) {
+                    state = StateComparator.transferProperties(state, replacement);
+                }
                 int index = lookup.getInt(state);
                 if (index < 0) {
                     if (palette.size() >= MAX_PALETTE) {

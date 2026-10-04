@@ -16,7 +16,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.LitematicaPlusClient;
@@ -84,6 +87,15 @@ public final class PlacementManager {
 
     public List<SchematicPlacement> placements() {
         return Collections.unmodifiableList(this.placements);
+    }
+
+    public SchematicPlacement announcedSelection() {
+        return LitematicaPlusConfig.current().materialHelperFollowsRender ? visibleSelection() : selected();
+    }
+
+    public SchematicPlacement visibleSelection() {
+        SchematicPlacement placement = selected();
+        return placement != null && placement.enabled() && LitematicaPlusConfig.current().renderEnabled ? placement : null;
     }
 
     public SchematicPlacement selected() {
@@ -185,6 +197,26 @@ public final class PlacementManager {
             placement.disabledRegions().add(region);
         }
         geometryChanged(placement);
+    }
+
+    public void setReplacement(SchematicPlacement placement, Block from, Block to) {
+        boolean changed = to == null || to == from ? placement.replacements().remove(from) != null
+                : placement.replacements().put(from, to) != to;
+        if (changed) {
+            geometryChanged(placement);
+        }
+    }
+
+    public void clearReplacements(SchematicPlacement placement) {
+        if (!placement.replacements().isEmpty()) {
+            placement.replacements().clear();
+            geometryChanged(placement);
+        }
+    }
+
+    private static Block blockById(String id) {
+        Identifier parsed = id == null ? null : Identifier.tryParse(id);
+        return parsed == null ? null : BuiltInRegistries.BLOCK.getOptional(parsed).orElse(null);
     }
 
     public void reload(SchematicPlacement placement) {
@@ -309,6 +341,13 @@ public final class PlacementManager {
             placement.setEnabled(entry.enabled);
             placement.setLocked(entry.locked);
             placement.disabledRegions().addAll(entry.disabledRegions);
+            for (Map.Entry<String, String> pair : entry.replacements.entrySet()) {
+                Block from = blockById(pair.getKey());
+                Block to = blockById(pair.getValue());
+                if (from != null && to != null && from != to) {
+                    placement.replacements().put(from, to);
+                }
+            }
             this.placements.add(placement);
             if (entry.id.equals(data.selectedPlacement)) {
                 this.selected = id;
@@ -335,6 +374,10 @@ public final class PlacementManager {
             entry.enabled = placement.enabled();
             entry.locked = placement.locked();
             entry.disabledRegions = new ArrayList<>(placement.disabledRegions());
+            for (Map.Entry<Block, Block> pair : placement.replacements().entrySet()) {
+                entry.replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
+                        BuiltInRegistries.BLOCK.getKey(pair.getValue()).toString());
+            }
             data.placements.add(entry);
         }
         data.selectedPlacement = this.selected == null ? "" : this.selected.toString();
