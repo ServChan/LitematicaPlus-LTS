@@ -3,7 +3,7 @@
 [![Minecraft Version](https://img.shields.io/badge/Minecraft-26.3-brightgreen?style=flat-square&logo=minecraft)](README.md)
 [![Platform](https://img.shields.io/badge/Platform-Fabric-blue?style=flat-square&logo=fabric)](README.md)
 [![Java Target](https://img.shields.io/badge/Java-25-orange?style=flat-square&logo=openjdk)](README.md)
-[![Mod Version](https://img.shields.io/badge/Version-1.0.0--LTS.02-purple?style=flat-square)](README.md)
+[![Mod Version](https://img.shields.io/badge/Version-1.0.0-purple?style=flat-square)](README.md)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
 Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes `.litematic` files.
@@ -101,7 +101,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 1. **Fabric Loader** `0.19.3+` и **Fabric API** `0.161.0+26.3`.
 2. Отключите Litematica, MaLiLib и EasyPlaceFix, если они стоят: их функции уже внутри мода. Мод ставится вместо Litematica, а не вместе с ней: если обе лежат в `mods/`, при запуске поверх главного меню появится предупреждение.
-3. Скопируйте `litematica-plus-lts-1.0.0-LTS.02.jar` из `build/libs/` в папку `mods/`.
+3. Скопируйте `litematica-plus-lts-1.0.0.jar` из `build/libs/` в папку `mods/`.
 4. **Mod Menu** — опционально, открывает меню мода из списка модов.
 
 **Требования:** Minecraft `26.3` · Java `25` · только клиент.
@@ -112,7 +112,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 .\gradlew.bat clean build
 ```
 
-Готовый JAR: `build/libs/litematica-plus-lts-1.0.0-LTS.02.jar`.
+Готовый JAR: `build/libs/litematica-plus-lts-1.0.0.jar`.
 
 Проверка на своих схемах (только чтение): `.\gradlew.bat test --tests "*SampleLibraryTest*" "-PsampleDir=<папка schematics>"`. Автоматический тест в игре (создаёт мир, размещает схему, проверяет подсветку, вставку, сохранение, лёгкую установку 33 видов блоков, сущности, помощник материалов, экспорт, редактор размещения, назначение клавиш и делает скриншоты): `.\gradlew.bat runClientGameTest`.
 
@@ -211,7 +211,7 @@ The menu (`K`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layer
 
 1. **Fabric Loader** `0.19.3+` and **Fabric API** `0.161.0+26.3`.
 2. Disable Litematica, MaLiLib and EasyPlaceFix if they are installed: their features are already inside the mod. The mod replaces Litematica rather than going alongside it: if both are in `mods/`, a warning appears over the title screen at startup.
-3. Copy `litematica-plus-lts-1.0.0-LTS.02.jar` from `build/libs/` into `mods/`.
+3. Copy `litematica-plus-lts-1.0.0.jar` from `build/libs/` into `mods/`.
 4. **Mod Menu** — optional, opens the mod's menu from the mod list.
 
 **Requirements:** Minecraft `26.3` · Java `25` · client-only.
@@ -222,7 +222,7 @@ The menu (`K`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layer
 .\gradlew.bat clean build
 ```
 
-Output JAR: `build/libs/litematica-plus-lts-1.0.0-LTS.02.jar`.
+Output JAR: `build/libs/litematica-plus-lts-1.0.0.jar`.
 
 Check your own schematics (read-only): `.\gradlew.bat test --tests "*SampleLibraryTest*" "-PsampleDir=<schematics folder>"`. Automated in-game test (creates a world, places a schematic, checks highlights, paste, saving, easy place for 33 kinds of blocks, entities, the material helper, export, the placement editor and key binding, and takes screenshots): `.\gradlew.bat runClientGameTest`.
 

@@ -6,6 +6,7 @@
   "description": "Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes .litematic files.",
   "authors": ["LTS_Server"],
   "license": "MIT",
+  "icon": "assets/litematicaplus/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": ["org.lts.litematicaplus.LitematicaPlusClient"],
