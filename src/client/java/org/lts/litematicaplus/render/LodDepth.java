@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.render;
 
+import org.lts.litematicaplus.compat.Addons;
+import org.lts.litematicaplus.compat.Addon;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
@@ -138,8 +140,7 @@ public final class LodDepth {
             return mergedView;
         } catch (RuntimeException | LinkageError exception) {
             failed = true;
-            LitematicaPlusClient.LOGGER.warn("Could not merge Voxy terrain depth, schematic parts over distant terrain are hidden instead",
-                    exception);
+            Addons.report(Addon.VOXY, "litematicaplus.addon.problem.lod_merge_failed", exception);
             return fallback;
         }
     }

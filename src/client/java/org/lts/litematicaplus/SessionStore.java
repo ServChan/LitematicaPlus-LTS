@@ -36,6 +36,7 @@ public final class SessionStore {
         public String mirror = "NONE";
         public boolean enabled = true;
         public boolean locked;
+        public String serverId = "";
         public List<String> disabledRegions = new ArrayList<>();
         public Map<String, String> replacements = new LinkedHashMap<>();
     }
@@ -249,6 +250,7 @@ public final class SessionStore {
             entry.file = limit(entry.file, 4096);
             entry.rotation = entry.rotation == null ? "NONE" : entry.rotation;
             entry.mirror = entry.mirror == null ? "NONE" : entry.mirror;
+            entry.serverId = entry.serverId == null ? "" : entry.serverId;
             if (entry.disabledRegions == null) {
                 entry.disabledRegions = new ArrayList<>();
             }

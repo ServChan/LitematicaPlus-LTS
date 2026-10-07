@@ -55,6 +55,10 @@ abstract class TabView {
         return false;
     }
 
+    boolean keyReleased(KeyEvent event) {
+        return false;
+    }
+
     boolean mouseClicked(MouseButtonEvent event) {
         return false;
     }

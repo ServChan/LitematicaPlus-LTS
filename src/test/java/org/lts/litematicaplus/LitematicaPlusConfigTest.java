@@ -42,6 +42,20 @@ class LitematicaPlusConfigTest {
     }
 
     @Test
+    void hotkeyModifiersKeepOnlyKnownBits(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("config.json");
+        Files.writeString(file, """
+                {"hotkeyModifiers": {"open_menu": 1, "toggle_render": 13, "layer_up": 0, "layer_down": null}}
+                """);
+        LitematicaPlusConfig config = LitematicaPlusConfig.load(file);
+        assertEquals(1, config.hotkeyModifiers.get("open_menu"));
+        assertEquals(5, config.hotkeyModifiers.get("toggle_render"));
+        assertFalse(config.hotkeyModifiers.containsKey("layer_up"));
+        assertFalse(config.hotkeyModifiers.containsKey("layer_down"));
+        assertTrue(LitematicaPlusConfig.load(directory.resolve("absent.json")).hotkeyModifiers.isEmpty());
+    }
+
+    @Test
     void invalidToolItemFallsBackToTheStick(@TempDir Path directory) throws IOException {
         Path file = directory.resolve("config.json");
         Files.writeString(file, "{\"toolItem\": \"not an id!\"}");

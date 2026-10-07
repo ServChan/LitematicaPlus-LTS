@@ -32,6 +32,7 @@ public final class JadeCompat implements IWailaPlugin {
 
     @Override
     public void registerClient(IWailaClientRegistration registration) {
+        Addons.markJadeRegistered();
         registration.registerBlockComponent(SchematicProvider.INSTANCE, Block.class);
         registration.addRayTraceCallback((hit, accessor, original) -> ghost(registration, accessor));
     }

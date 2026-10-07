@@ -33,6 +33,7 @@ final class PlacementsView extends TabView {
     private int regionsTop;
     private int knownCount = -1;
     private SchematicPlacement.LoadState knownState;
+    private boolean knownLocked;
     private Schematic knownSchematic;
     private int listScroll;
     private final Map<SchematicPlacement, TextMemo> statusText = new IdentityHashMap<>();
@@ -85,6 +86,7 @@ final class PlacementsView extends TabView {
         this.list.selectItem(selected);
         this.list.setScroll(this.listScroll);
         this.knownState = selected == null ? null : selected.loadState();
+        this.knownLocked = selected != null && selected.locked();
         this.knownSchematic = selected == null ? null : selected.schematic();
         if (selected == null) {
             return;
@@ -227,7 +229,8 @@ final class PlacementsView extends TabView {
         }
         SchematicPlacement selected = PlacementManager.get().selected();
         boolean stateChanged = selected != null
-                && (selected.loadState() != this.knownState || selected.schematic() != this.knownSchematic);
+                && (selected.loadState() != this.knownState || selected.schematic() != this.knownSchematic
+                || selected.locked() != this.knownLocked);
         if (expired || stateChanged || PlacementManager.get().placements().size() != this.knownCount) {
             this.screen.refresh();
         }

@@ -15,6 +15,7 @@ import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.render.TopView;
+import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.tool.Substitutes;
 import org.lts.litematicaplus.tool.ToolController;
@@ -37,6 +38,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         EnderChestMemory.register();
         MaterialTooltips.register();
         LitematicaConflict.register();
+        SyncmaticaClient.register();
         ClientTickEvents.END_CLIENT_TICK.register(LitematicaPlusClient::tick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
             Session.shutdown();
@@ -57,5 +59,6 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         InventoryHighlight.tick(minecraft);
         TopView.tick(minecraft);
         Hotkeys.tick(minecraft);
+        SyncmaticaClient.get().tick();
     }
 }

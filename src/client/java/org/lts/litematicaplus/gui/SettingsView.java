@@ -61,6 +61,8 @@ final class SettingsView extends TabView {
     private int authorX = -1;
     private int authorY;
     private KeyMapping listening;
+    private int listeningModifiers;
+    private int pendingModifierKey = -1;
     private boolean bindingsChanged;
     private Component status = Component.empty();
     private int statusColor = Theme.TEXT_DIM;
@@ -244,6 +246,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
                 rows.add(this::pasteReplaceRow);
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
+                rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
                         v -> this.working.pasteCommandsPerTick = v, 1, 16, 1));
             }
@@ -385,12 +388,18 @@ final class SettingsView extends TabView {
     private void hotkeyRow(Hotkeys.Entry entry, int x, int y, int width) {
         KeyMapping mapping = entry.mapping();
         boolean active = this.listening == mapping;
-        Component key = active ? tr("litematicaplus.hotkeys.listening")
-                : mapping.isUnbound() ? tr("litematicaplus.hotkeys.unbound") : mapping.getTranslatedKeyMessage();
+        int modifiers = Hotkeys.modifiers(entry.name());
+        Component key = active ? Hotkeys.label(this.listeningModifiers, tr("litematicaplus.hotkeys.listening"))
+                : mapping.isUnbound() ? tr("litematicaplus.hotkeys.unbound")
+                : Hotkeys.label(modifiers, mapping.getTranslatedKeyMessage());
         List<Component> conflicts = new ArrayList<>();
         if (!mapping.isUnbound()) {
             for (KeyMapping other : this.minecraft.options.keyMappings) {
-                if (other != mapping && mapping.same(other)) {
+                if (other == mapping || !mapping.same(other)) {
+                    continue;
+                }
+                Hotkeys.Entry ours = Hotkeys.entry(other);
+                if (ours != null ? Hotkeys.modifiers(ours.name()) == modifiers : modifiers == 0) {
                     conflicts.add(Component.translatable(other.getName()));
                 }
             }
@@ -398,6 +407,8 @@ final class SettingsView extends TabView {
         FlatButton button = add(FlatButton.secondary(x, y, width,
                 tr("litematicaplus.hotkeys.row", Component.translatable(mapping.getName()), key), pressed -> {
                     this.listening = active ? null : mapping;
+                    this.listeningModifiers = 0;
+                    this.pendingModifierKey = -1;
                     this.screen.refresh();
                 }).withState(() -> this.listening == mapping).withWarning(() -> !conflicts.isEmpty()));
         MutableComponent tip = tr("litematicaplus.hotkeys.tip").copy();
@@ -411,10 +422,18 @@ final class SettingsView extends TabView {
         button.setTooltip(Tooltip.create(tip));
     }
 
-    private void bind(InputConstants.Key key) {
+    private void bind(InputConstants.Key key, int modifiers) {
         this.listening.setKey(key);
         KeyMapping.resetMapping();
+        Hotkeys.Entry entry = Hotkeys.entry(this.listening);
+        if (entry != null) {
+            int mask = key == InputConstants.UNKNOWN ? 0 : modifiers;
+            Hotkeys.setModifiers(entry.name(), mask);
+            Hotkeys.apply(this.working, entry.name(), mask);
+        }
         this.listening = null;
+        this.listeningModifiers = 0;
+        this.pendingModifierKey = -1;
         this.bindingsChanged = true;
         this.screen.refresh();
     }
@@ -424,7 +443,27 @@ final class SettingsView extends TabView {
         if (this.listening == null) {
             return false;
         }
-        bind(event.key() == InputConstants.KEY_ESCAPE ? InputConstants.UNKNOWN : InputConstants.getKey(event));
+        if (event.key() == InputConstants.KEY_ESCAPE) {
+            bind(InputConstants.UNKNOWN, 0);
+            return true;
+        }
+        int bit = Hotkeys.modifierBit(event.key());
+        if (bit != 0) {
+            this.listeningModifiers |= bit;
+            this.pendingModifierKey = event.key();
+            this.screen.refresh();
+            return true;
+        }
+        bind(InputConstants.getKey(event), Hotkeys.modifiersOf(event));
+        return true;
+    }
+
+    @Override
+    boolean keyReleased(KeyEvent event) {
+        if (this.listening == null || event.key() != this.pendingModifierKey) {
+            return false;
+        }
+        bind(InputConstants.getKey(event), this.listeningModifiers & ~Hotkeys.modifierBit(event.key()));
         return true;
     }
 
@@ -435,10 +474,12 @@ final class SettingsView extends TabView {
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             this.listening = null;
+            this.listeningModifiers = 0;
+            this.pendingModifierKey = -1;
             this.screen.refresh();
             return true;
         }
-        bind(InputConstants.Type.MOUSE.getOrCreate(event.button()));
+        bind(InputConstants.Type.MOUSE.getOrCreate(event.button()), Hotkeys.heldModifiers());
         return true;
     }
 

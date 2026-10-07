@@ -87,7 +87,7 @@ public final class ContainerHelper {
                 if (current.getFocused() instanceof EditBox) {
                     return true;
                 }
-                if (Hotkeys.takeMaterials() != null && Hotkeys.takeMaterials().matches(event)) {
+                if (Hotkeys.takeMaterials() != null && Hotkeys.matches("take_materials", event)) {
                     start(container, TransferJob.Kind.TAKE, null, false);
                     return false;
                 }
@@ -202,7 +202,7 @@ public final class ContainerHelper {
         int color = outcome == TransferJob.Outcome.DONE && moved > 0L ? Theme.SUCCESS
                 : outcome == TransferJob.Outcome.DONE ? Theme.TEXT_DIM : Theme.WARNING;
         Component message = Component.translatable(key, moved);
-        if (panel != null && panel.visible()) {
+        if (panel != null && panel.expanded()) {
             panel.status(message, color);
             statusHold = 100;
         } else {

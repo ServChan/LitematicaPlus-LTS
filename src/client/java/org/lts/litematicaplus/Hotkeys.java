@@ -10,7 +10,9 @@ import java.util.function.Predicate;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.gui.HubScreen;
@@ -25,6 +27,10 @@ public final class Hotkeys {
     public record Entry(String name, KeyMapping mapping, Consumer<Minecraft> action) {
     }
 
+    public static final int CONTROL = 1;
+    public static final int SHIFT = 2;
+    public static final int ALT = 4;
+    private static final int ALL_MODIFIERS = CONTROL | SHIFT | ALT;
     private static final List<Entry> ENTRIES = new ArrayList<>();
     private static KeyMapping.Category category;
     private static KeyMapping takeMaterials;
@@ -119,11 +125,126 @@ public final class Hotkeys {
         minecraft.gui.setScreen(new PlacementEditorScreen(null, placement));
     }
 
+    public static int modifiers(String name) {
+        Integer mask = LitematicaPlusConfig.current().hotkeyModifiers.get(name);
+        return mask == null ? 0 : mask & ALL_MODIFIERS;
+    }
+
+    public static void setModifiers(String name, int mask) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+        apply(config, name, mask);
+        LitematicaPlusConfig.save(config);
+    }
+
+    public static void apply(LitematicaPlusConfig config, String name, int mask) {
+        if ((mask & ALL_MODIFIERS) == 0) {
+            config.hotkeyModifiers.remove(name);
+        } else {
+            config.hotkeyModifiers.put(name, mask & ALL_MODIFIERS);
+        }
+    }
+
+    public static int modifiersOf(KeyEvent event) {
+        return (event.hasControlDown() ? CONTROL : 0) | (event.hasShiftDown() ? SHIFT : 0) | (event.hasAltDown() ? ALT : 0);
+    }
+
+    public static int heldModifiers() {
+        return (InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL)
+                ? CONTROL : 0)
+                | (InputConstants.isKeyDown(InputConstants.KEY_LSHIFT) || InputConstants.isKeyDown(InputConstants.KEY_RSHIFT)
+                ? SHIFT : 0)
+                | (InputConstants.isKeyDown(InputConstants.KEY_LALT) || InputConstants.isKeyDown(InputConstants.KEY_RALT)
+                ? ALT : 0);
+    }
+
+    public static int modifierBit(int key) {
+        if (key == InputConstants.KEY_LCONTROL || key == InputConstants.KEY_RCONTROL) {
+            return CONTROL;
+        }
+        if (key == InputConstants.KEY_LSHIFT || key == InputConstants.KEY_RSHIFT) {
+            return SHIFT;
+        }
+        if (key == InputConstants.KEY_LALT || key == InputConstants.KEY_RALT) {
+            return ALT;
+        }
+        return 0;
+    }
+
+    public static Entry entry(KeyMapping mapping) {
+        for (Entry entry : ENTRIES) {
+            if (entry.mapping() == mapping) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    public static Component label(int mask, Component key) {
+        MutableComponent text = Component.empty();
+        if ((mask & CONTROL) != 0) {
+            text.append(Component.translatable("litematicaplus.hotkeys.modifier.control")).append(" + ");
+        }
+        if ((mask & SHIFT) != 0) {
+            text.append(Component.translatable("litematicaplus.hotkeys.modifier.shift")).append(" + ");
+        }
+        if ((mask & ALT) != 0) {
+            text.append(Component.translatable("litematicaplus.hotkeys.modifier.alt")).append(" + ");
+        }
+        return key == null ? text : text.append(key);
+    }
+
+    public static boolean matches(String name, KeyEvent event) {
+        KeyMapping mapping = mapping(name);
+        int mask = modifiers(name);
+        return !mapping.isUnbound() && mapping.matches(event) && (modifiersOf(event) & mask) == mask;
+    }
+
+    public static boolean onKeyPress(Minecraft minecraft, int action, KeyEvent event) {
+        if (action == InputConstants.RELEASE || minecraft.player == null || minecraft.gui.screen() != null) {
+            return false;
+        }
+        int held = modifiersOf(event);
+        if (held == 0) {
+            return false;
+        }
+        Entry best = null;
+        int bestBits = 0;
+        for (Entry entry : ENTRIES) {
+            int mask = modifiers(entry.name());
+            if (mask == 0 || (mask & held) != mask || entry.mapping().isUnbound() || !entry.mapping().matches(event)) {
+                continue;
+            }
+            int bits = Integer.bitCount(mask);
+            if (bits > bestBits) {
+                best = entry;
+                bestBits = bits;
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        if (action == InputConstants.PRESS) {
+            best.action().accept(minecraft);
+        }
+        return true;
+    }
+
+    private static boolean clickAllowed(Entry entry) {
+        int mask = modifiers(entry.name());
+        if (mask == 0) {
+            return true;
+        }
+        if (InputConstants.getKey(entry.mapping().saveString()).getType() == InputConstants.Type.KEYBOARD) {
+            return false;
+        }
+        return (heldModifiers() & mask) == mask;
+    }
+
     static void tick(Minecraft minecraft) {
         boolean blocked = minecraft.player == null || minecraft.gui.screen() != null;
         for (Entry entry : ENTRIES) {
             while (entry.mapping().consumeClick()) {
-                if (!blocked) {
+                if (!blocked && clickAllowed(entry)) {
                     entry.action().accept(minecraft);
                     blocked = minecraft.gui.screen() != null;
                 }

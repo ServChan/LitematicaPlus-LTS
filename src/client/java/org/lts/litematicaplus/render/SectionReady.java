@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.render;
 
+import org.lts.litematicaplus.compat.Addons;
+import org.lts.litematicaplus.compat.Addon;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -22,6 +24,7 @@ public final class SectionReady {
         try {
             return MethodHandles.publicLookup().unreflect(Class.forName(RENDERER).getMethod(name, parameters)).asType(type);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            Addons.report(Addon.SODIUM, "litematicaplus.addon.problem.unreadable", exception);
             return null;
         }
     }

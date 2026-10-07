@@ -8,6 +8,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.selection.SelectionManager;
+import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.tool.ToolMode;
 import org.lts.litematicaplus.world.LayerRange;
@@ -113,6 +114,7 @@ public final class Session {
             restoring = false;
             dirty = false;
         }
+        SyncmaticaClient.get().reconcile();
     }
 
     private static String currentScope(Minecraft minecraft) {

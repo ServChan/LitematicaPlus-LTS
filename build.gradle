@@ -16,6 +16,7 @@ def fabricApiVersion = project.fabric_api_version
 def localModMenu = file(project.modmenu_jar)
 def localJade = file(project.jade_jar)
 def fabricItemApiVersion = project.fabric_item_api_version
+def fabricNetworkingApiVersion = project.fabric_networking_api_version
 
 base {
     archivesName = project.archives_base_name
@@ -67,6 +68,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-resource-loader-v1:${fabricResourceLoaderVersion}"
     implementation "net.fabricmc.fabric-api:fabric-screen-api-v1:${fabricScreenApiVersion}"
     implementation "net.fabricmc.fabric-api:fabric-item-api-v1:${fabricItemApiVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-networking-api-v1:${fabricNetworkingApiVersion}"
     if (localJade.isFile()) {
         compileOnly files(localJade)
     }
@@ -87,6 +89,82 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     testImplementation "com.google.code.gson:gson:2.10.1"
+}
+
+if (providers.gradleProperty("withSyncmatica").isPresent()) {
+    def syncmaticaServer = layout.projectDirectory.dir("run/syncmatica-server").asFile
+    def purpurUrl = "https://api.purpurmc.org/v2/purpur/${project.minecraft_version}/${project.syncmatica_test_purpur_build}/download"
+    def purpurMd5 = project.syncmatica_test_purpur_md5
+    def pluginUrl = project.syncmatica_test_plugin_url
+    def pluginSha512 = project.syncmatica_test_plugin_sha512
+    def digestOf = { File file, String algorithm ->
+        java.security.MessageDigest.getInstance(algorithm).digest(file.bytes).encodeHex().toString()
+    }
+    def download = { String url, File target, String algorithm, String expected ->
+        def part = new File(target.parentFile, target.name + ".part")
+        def connection = (HttpURLConnection) URI.create(url).toURL().openConnection()
+        connection.connectTimeout = 30000
+        connection.readTimeout = 300000
+        connection.instanceFollowRedirects = true
+        connection.setRequestProperty("User-Agent", "litematica-plus-lts gametest")
+        try {
+            if (connection.responseCode != 200) {
+                throw new GradleException("GET ${url} returned HTTP ${connection.responseCode}")
+            }
+            part.bytes = connection.inputStream.bytes
+        } finally {
+            connection.disconnect()
+        }
+        def actual = digestOf(part, algorithm)
+        if (actual != expected) {
+            part.delete()
+            throw new GradleException("${url}: ${algorithm} mismatch, got ${actual}")
+        }
+        target.delete()
+        part.renameTo(target)
+    }
+    def prepareSyncmaticaServer = tasks.register("prepareSyncmaticaServer") {
+        outputs.upToDateWhen { false }
+        doLast {
+            syncmaticaServer.mkdirs()
+            def purpur = new File(syncmaticaServer, "purpur.jar")
+            if (!purpur.isFile() || digestOf(purpur, "MD5") != purpurMd5) {
+                download(purpurUrl, purpur, "MD5", purpurMd5)
+            }
+            def plugins = new File(syncmaticaServer, "plugins")
+            plugins.mkdirs()
+            def plugin = new File(plugins, "SyncmaticaPaper.jar")
+            if (!plugin.isFile() || digestOf(plugin, "SHA-512") != pluginSha512) {
+                download(pluginUrl, plugin, "SHA-512", pluginSha512)
+            }
+            def stats = new File(plugins, "bStats")
+            stats.mkdirs()
+            new File(stats, "config.yml").text = [
+                    "enabled: false",
+                    "serverUuid: 00000000-0000-0000-0000-000000000000",
+                    "logFailedRequests: false"
+            ].join(System.lineSeparator()) + System.lineSeparator()
+            new File(syncmaticaServer, "eula.txt").text = "eula=true" + System.lineSeparator()
+            new File(syncmaticaServer, "server.properties").text = [
+                    "server-ip=127.0.0.1",
+                    "online-mode=false",
+                    "white-list=false",
+                    "level-seed=syncmatica",
+                    "gamemode=creative",
+                    "difficulty=peaceful",
+                    "generate-structures=false",
+                    "spawn-protection=0",
+                    "view-distance=4",
+                    "simulation-distance=4",
+                    "motd=litematica plus syncmatica test"
+            ].join(System.lineSeparator()) + System.lineSeparator()
+        }
+    }
+    tasks.named("runClientGameTest") {
+        dependsOn prepareSyncmaticaServer
+        systemProperty "litematicaplus.syncmaticaServer", syncmaticaServer.absolutePath
+        systemProperty "fabric.client.gametest.disableNetworkSynchronizer", "true"
+    }
 }
 
 tasks.withType(ProcessResources).configureEach {

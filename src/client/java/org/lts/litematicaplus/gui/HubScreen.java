@@ -14,6 +14,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.SessionStore;
+import org.lts.litematicaplus.compat.Addons;
 import org.lts.litematicaplus.preview.PreviewService;
 
 public final class HubScreen extends Screen {
@@ -21,12 +22,14 @@ public final class HubScreen extends Screen {
         OVERVIEW("overview"),
         SCHEMATICS("schematics"),
         PLACEMENTS("placements"),
+        SERVER("server"),
         LAYERS("layers"),
         AREA("area"),
         MATERIALS("materials"),
         REPLACEMENTS("replacements"),
         VERIFIER("verifier"),
-        SETTINGS("settings");
+        SETTINGS("settings"),
+        ADDONS("addons");
 
         private final String key;
 
@@ -174,6 +177,9 @@ public final class HubScreen extends Screen {
             FlatButton button = new FlatButton(0, y, this.sidebarWidth, pitch - 1, entry.title(), FlatButton.Style.TAB,
                     pressed -> switchTab(entry)).withState(() -> this.tab == entry)
                     .withIndex(String.format(java.util.Locale.ROOT, "%02d", entry.ordinal() + 1));
+            if (entry == Tab.ADDONS) {
+                button.withWarning(Addons::needsAttention);
+            }
             addRenderableWidget(button);
             y += pitch;
         }
@@ -192,12 +198,14 @@ public final class HubScreen extends Screen {
             case OVERVIEW -> new OverviewView(this);
             case SCHEMATICS -> new SchematicsView(this);
             case PLACEMENTS -> new PlacementsView(this);
+            case SERVER -> new ServerView(this);
             case LAYERS -> new LayersView(this);
             case AREA -> new AreaView(this);
             case MATERIALS -> new MaterialsView(this);
             case REPLACEMENTS -> new ReplacementsView(this);
             case VERIFIER -> new VerifierView(this);
             case SETTINGS -> new SettingsView(this);
+            case ADDONS -> new AddonsView(this);
         };
     }
 
@@ -301,6 +309,14 @@ public final class HubScreen extends Screen {
             return true;
         }
         return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean keyReleased(KeyEvent event) {
+        if (this.view != null && this.view.keyReleased(event)) {
+            return true;
+        }
+        return super.keyReleased(event);
     }
 
     @Override

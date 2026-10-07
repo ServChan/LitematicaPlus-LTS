@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.render;
 
+import org.lts.litematicaplus.compat.Addons;
+import org.lts.litematicaplus.compat.Addon;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -58,8 +60,7 @@ public final class VoxyLod {
                         getter(lookup.unreflectGetter(viewport.getField("vanillaProjection"))),
                         getter(lookup.unreflectGetter(viewport.getField("modelView"))));
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.warn("Voxy terrain depth is not readable, distant schematic parts may be hidden: {}",
-                        exception.toString());
+                Addons.report(Addon.VOXY, "litematicaplus.addon.problem.lod_unreadable", exception);
                 return null;
             }
         }
@@ -70,6 +71,11 @@ public final class VoxyLod {
     }
 
     private VoxyLod() {
+    }
+
+    public static boolean failed() {
+        FabricLoader loader = FabricLoader.getInstance();
+        return loader.isModLoaded("voxy") && loader.isModLoaded("iris") && (BRIDGE == null || failureLogged);
     }
 
     public static Frame frame() {
@@ -128,7 +134,7 @@ public final class VoxyLod {
             }
             if (!failureLogged) {
                 failureLogged = true;
-                LitematicaPlusClient.LOGGER.warn("Reading Voxy terrain depth failed: {}", exception.toString());
+                Addons.report(Addon.VOXY, "litematicaplus.addon.problem.lod_read_failed", exception);
             }
             return null;
         }

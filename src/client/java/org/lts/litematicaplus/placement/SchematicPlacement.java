@@ -29,6 +29,7 @@ public final class SchematicPlacement {
     private Mirror mirror = Mirror.NONE;
     private boolean enabled = true;
     private boolean locked;
+    private UUID serverId;
     private final Set<String> disabledRegions = new LinkedHashSet<>();
     private final Map<Block, Block> replacements = new LinkedHashMap<>();
     private Schematic schematic;
@@ -113,6 +114,14 @@ public final class SchematicPlacement {
 
     public void setLocked(boolean locked) {
         this.locked = locked;
+    }
+
+    public UUID serverId() {
+        return this.serverId;
+    }
+
+    public void setServerId(UUID serverId) {
+        this.serverId = serverId;
     }
 
     public Set<String> disabledRegions() {

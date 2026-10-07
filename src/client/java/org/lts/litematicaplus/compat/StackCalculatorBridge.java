@@ -29,8 +29,7 @@ public final class StackCalculatorBridge {
                 stackModeType = Class.forName("org.lts.stackcalculator.StackMode");
                 stackMode = memory.getMethod("setStackMode", stackModeType);
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.warn("Stack Calculator is installed but its memory is not reachable: {}",
-                        exception.toString());
+                Addons.report(Addon.STACK_CALCULATOR, "litematicaplus.addon.problem.unreadable", exception);
                 select = null;
                 amount = null;
                 expand = null;
@@ -72,7 +71,7 @@ public final class StackCalculatorBridge {
                 EXPAND.invoke(null, true);
             }
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-            LitematicaPlusClient.LOGGER.warn("Could not hand the item to Stack Calculator: {}", exception.toString());
+            Addons.report(Addon.STACK_CALCULATOR, "litematicaplus.addon.problem.call_failed", exception);
             return false;
         }
         Minecraft minecraft = Minecraft.getInstance();

@@ -13,6 +13,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.FireworkRocketItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -95,7 +96,8 @@ public final class EasyPlace {
         boolean down = minecraft.options.keyUse.isDown();
         boolean wanted = requested || down && sessionConsumed && config.easyPlaceHold;
         requested = false;
-        if (wanted && active(config) && minecraft.gui.screen() == null && !cooling() && !BreakAssist.busy(minecraft)
+        if (wanted && active(config) && !minecraft.player.isFallFlying() && minecraft.gui.screen() == null
+                && !cooling() && !BreakAssist.busy(minecraft)
                 && !ToolController.get().holdingTool(minecraft) && (config.easyPlaceHold || !sessionPlaced)) {
             act(minecraft, config);
         }
@@ -169,6 +171,10 @@ public final class EasyPlace {
         }
         if (player.isSpectator() || !player.mayBuild()) {
             return false;
+        }
+        if (player.isFallFlying()) {
+            sessionConsumed = false;
+            return config.placementRestriction && restricted(minecraft, 0);
         }
         if (!active(config)) {
             return config.placementRestriction && restricted(minecraft, 0);
@@ -530,6 +536,9 @@ public final class EasyPlace {
         }
         ItemStack stack = minecraft.player.getMainHandItem();
         if (!(stack.getItem() instanceof BlockItem)) {
+            if (stack.getItem() instanceof FireworkRocketItem) {
+                return false;
+            }
             stack = minecraft.player.getOffhandItem();
             if (!(stack.getItem() instanceof BlockItem)) {
                 return false;

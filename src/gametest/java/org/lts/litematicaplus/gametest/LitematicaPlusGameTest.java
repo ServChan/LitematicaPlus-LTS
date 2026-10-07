@@ -57,6 +57,10 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             litematicaConflict(context);
             return;
         }
+        if (System.getProperty("litematicaplus.syncmaticaServer") != null) {
+            SyncmaticaSuite.run(context);
+            return;
+        }
         TestWorldSave save;
         int expectedPlacements;
         for (HubScreen.Tab tab : HubScreen.Tab.values()) {
@@ -675,7 +679,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         return "setblock " + (ORIGIN.getX() + x) + " " + (ORIGIN.getY() + y) + " " + (ORIGIN.getZ() + z) + " " + state;
     }
 
-    private static Schematic house() {
+    static Schematic house() {
         RegionBuilder builder = new RegionBuilder("House", 0, 0, 0, 7, 5, 7);
         BlockState planks = Blocks.OAK_PLANKS.defaultBlockState();
         BlockState bricks = Blocks.STONE_BRICKS.defaultBlockState();

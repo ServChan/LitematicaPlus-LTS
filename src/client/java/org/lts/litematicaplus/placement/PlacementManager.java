@@ -30,6 +30,7 @@ import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.LitematicCodec;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 
@@ -117,7 +118,21 @@ public final class PlacementManager {
 
     public SchematicPlacement create(Path file, BlockPos origin) {
         String name = SchematicIo.baseName(file);
-        SchematicPlacement placement = new SchematicPlacement(UUID.randomUUID(), uniqueName(name), relativize(file), origin);
+        return add(new SchematicPlacement(UUID.randomUUID(), uniqueName(name), relativize(file), origin));
+    }
+
+    public SchematicPlacement createShared(Path file, String name, BlockPos origin, Rotation rotation, Mirror mirror,
+            UUID serverId) {
+        SchematicPlacement placement = new SchematicPlacement(UUID.randomUUID(), uniqueName(name.isBlank()
+                ? SchematicIo.baseName(file) : name), relativize(file), origin);
+        placement.setRotation(rotation);
+        placement.setMirror(mirror);
+        placement.setLocked(true);
+        placement.setServerId(serverId);
+        return add(placement);
+    }
+
+    private SchematicPlacement add(SchematicPlacement placement) {
         this.placements.add(placement);
         this.selected = placement.id();
         GhostEngine.get().sync(this.placements);
@@ -126,7 +141,48 @@ public final class PlacementManager {
         return placement;
     }
 
+    public SchematicPlacement byId(UUID id) {
+        if (id == null) {
+            return null;
+        }
+        for (SchematicPlacement placement : this.placements) {
+            if (placement.id().equals(id)) {
+                return placement;
+            }
+        }
+        return null;
+    }
+
+    public void link(SchematicPlacement placement, UUID serverId) {
+        placement.setServerId(serverId);
+        if (serverId != null) {
+            placement.setLocked(true);
+        }
+        this.changeListener.run();
+    }
+
+    public void forceLocked(SchematicPlacement placement, boolean locked) {
+        placement.setLocked(locked);
+        this.changeListener.run();
+    }
+
+    public void applyShared(SchematicPlacement placement, int x, int y, int z, Rotation rotation, Mirror mirror) {
+        boolean geometry = placement.x() != x || placement.y() != y || placement.z() != z
+                || placement.rotation() != rotation || placement.mirror() != mirror;
+        placement.setOrigin(x, y, z);
+        placement.setRotation(rotation);
+        placement.setMirror(mirror);
+        placement.setLocked(true);
+        if (geometry) {
+            GhostEngine.get().rebuild(placement);
+        }
+        this.changeListener.run();
+    }
+
     public void remove(SchematicPlacement placement) {
+        if (this.placements.contains(placement)) {
+            SyncmaticaClient.get().forget(placement);
+        }
         if (this.placements.remove(placement)) {
             if (placement.id().equals(this.selected)) {
                 this.selected = this.placements.isEmpty() ? null : this.placements.get(this.placements.size() - 1).id();
@@ -138,6 +194,9 @@ public final class PlacementManager {
     }
 
     public void removeAll() {
+        for (SchematicPlacement placement : this.placements) {
+            SyncmaticaClient.get().forget(placement);
+        }
         this.placements.clear();
         this.selected = null;
         GhostEngine.get().clear();
@@ -177,6 +236,10 @@ public final class PlacementManager {
     }
 
     public void setLocked(SchematicPlacement placement, boolean locked) {
+        if (placement.locked() != locked && !SyncmaticaClient.get().allowLockChange(placement, locked)) {
+            this.changeListener.run();
+            return;
+        }
         placement.setLocked(locked);
         this.changeListener.run();
     }
@@ -340,6 +403,7 @@ public final class PlacementManager {
             placement.setMirror(parse(Mirror.class, entry.mirror, Mirror.NONE));
             placement.setEnabled(entry.enabled);
             placement.setLocked(entry.locked);
+            placement.setServerId(parseUuid(entry.serverId));
             placement.disabledRegions().addAll(entry.disabledRegions);
             for (Map.Entry<String, String> pair : entry.replacements.entrySet()) {
                 Block from = blockById(pair.getKey());
@@ -373,6 +437,7 @@ public final class PlacementManager {
             entry.mirror = placement.mirror().name();
             entry.enabled = placement.enabled();
             entry.locked = placement.locked();
+            entry.serverId = placement.serverId() == null ? "" : placement.serverId().toString();
             entry.disabledRegions = new ArrayList<>(placement.disabledRegions());
             for (Map.Entry<Block, Block> pair : placement.replacements().entrySet()) {
                 entry.replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
@@ -381,6 +446,14 @@ public final class PlacementManager {
             data.placements.add(entry);
         }
         data.selectedPlacement = this.selected == null ? "" : this.selected.toString();
+    }
+
+    private static UUID parseUuid(String value) {
+        try {
+            return value == null || value.isBlank() ? null : UUID.fromString(value);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private static <E extends Enum<E>> E parse(Class<E> type, String value, E fallback) {

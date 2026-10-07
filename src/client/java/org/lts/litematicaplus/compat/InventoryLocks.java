@@ -18,7 +18,7 @@ public final class InventoryLocks {
                 handler = type.getField("INSTANCE").get(null);
                 locked = type.getMethod("isSlotLocked", int.class);
             } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.warn("Inventory Profiles Next locked slots are not readable: {}", exception.toString());
+                Addons.report(Addon.INVENTORY_PROFILES, "litematicaplus.addon.problem.unreadable", exception);
                 handler = null;
                 locked = null;
             }
@@ -43,7 +43,7 @@ public final class InventoryLocks {
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             if (!failureLogged) {
                 failureLogged = true;
-                LitematicaPlusClient.LOGGER.warn("Reading Inventory Profiles Next locked slots failed: {}", exception.toString());
+                Addons.report(Addon.INVENTORY_PROFILES, "litematicaplus.addon.problem.call_failed", exception);
             }
             return false;
         }

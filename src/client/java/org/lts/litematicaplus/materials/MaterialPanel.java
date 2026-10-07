@@ -11,6 +11,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.compat.StackCalculatorBridge;
 import org.lts.litematicaplus.gui.FlatButton;
 import org.lts.litematicaplus.gui.Blueprint;
@@ -29,6 +30,7 @@ final class MaterialPanel {
     private static final int COLUMNS = 12;
     private static final int FOOTER = 13;
     private static final int NUMBER_COLUMN = 38;
+    private static final int TOGGLE = 16;
 
     record Row(Item item, ItemStack icon, String name, long shortfall, long missing, long available, long here,
             long boxed) {
@@ -56,6 +58,7 @@ final class MaterialPanel {
     private Component empty = Component.empty();
     private Item hovered;
     private boolean visible;
+    private boolean collapsed = LitematicaPlusConfig.current().materialPanelCollapsed;
     private FlatButton takeButton;
     private FlatButton depositButton;
 
@@ -66,6 +69,32 @@ final class MaterialPanel {
 
     boolean visible() {
         return this.visible;
+    }
+
+    boolean expanded() {
+        return this.visible && !this.collapsed;
+    }
+
+    private void setCollapsed(boolean value) {
+        this.collapsed = value;
+        this.scroll = 0;
+        this.hovered = null;
+        if (this.takeButton != null) {
+            this.takeButton.visible = !value;
+            this.depositButton.visible = !value;
+        }
+        LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+        config.materialPanelCollapsed = value;
+        LitematicaPlusConfig.save(config);
+    }
+
+    private int shownHeight() {
+        return this.collapsed ? TITLE : this.height;
+    }
+
+    private boolean overToggle(double mouseX, double mouseY) {
+        return this.visible && mouseX >= this.x + this.width - TOGGLE && mouseX < this.x + this.width
+                && mouseY >= this.y && mouseY < this.y + TITLE;
     }
 
     Item hovered() {
@@ -115,6 +144,8 @@ final class MaterialPanel {
         this.depositButton = FlatButton.secondary(stacked ? this.x + 4 : this.x + 8 + buttonWidth,
                 stacked ? buttonY + Theme.CONTROL_HEIGHT + 2 : buttonY, buttonWidth,
                 Component.translatable("litematicaplus.panel.deposit"), pressed -> this.actions.deposit());
+        this.takeButton.visible = !this.collapsed;
+        this.depositButton.visible = !this.collapsed;
         Screens.getWidgets(screen).add(this.takeButton);
         Screens.getWidgets(screen).add(this.depositButton);
         return true;
@@ -142,7 +173,7 @@ final class MaterialPanel {
     }
 
     boolean overButton(double mouseX, double mouseY) {
-        return this.takeButton != null && (this.takeButton.isMouseOver(mouseX, mouseY)
+        return this.takeButton != null && !this.collapsed && (this.takeButton.isMouseOver(mouseX, mouseY)
                 || this.depositButton.isMouseOver(mouseX, mouseY));
     }
 
@@ -152,7 +183,7 @@ final class MaterialPanel {
 
     boolean contains(double mouseX, double mouseY) {
         return this.visible && mouseX >= this.x && mouseX < this.x + this.width && mouseY >= this.y
-                && mouseY < this.y + this.height;
+                && mouseY < this.y + shownHeight();
     }
 
     private int listTop() {
@@ -168,12 +199,20 @@ final class MaterialPanel {
     }
 
     boolean scroll(double amount) {
+        if (this.collapsed) {
+            return true;
+        }
         int max = Math.max(0, this.rows.size() - visibleRows());
         this.scroll = Math.max(0, Math.min(max, this.scroll - (int) Math.signum(amount)));
         return true;
     }
 
     boolean click(MouseButtonEvent event) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && (overToggle(event.x(), event.y())
+                || this.collapsed && contains(event.x(), event.y()))) {
+            setCollapsed(!this.collapsed);
+            return true;
+        }
         Row row = rowAt(event.x(), event.y());
         if (row == null) {
             return true;
@@ -191,7 +230,7 @@ final class MaterialPanel {
     }
 
     private Row rowAt(double mouseX, double mouseY) {
-        if (!contains(mouseX, mouseY) || mouseY < listTop() || mouseY >= listBottom()) {
+        if (this.collapsed || !contains(mouseX, mouseY) || mouseY < listTop() || mouseY >= listBottom()) {
             return null;
         }
         int index = this.scroll + (int) ((mouseY - listTop()) / ROW);
@@ -203,13 +242,29 @@ final class MaterialPanel {
             return;
         }
         int right = this.x + this.width;
-        graphics.fill(this.x, this.y, right, this.y + this.height, Theme.BACKGROUND);
+        graphics.fill(this.x, this.y, right, this.y + shownHeight(), Theme.BACKGROUND);
         graphics.fill(this.x + 1, this.y + 1, right - 1, this.y + TITLE, Theme.HEADER);
-        graphics.fill(this.x + 1, this.y + TITLE - 1, right - 1, this.y + TITLE, Theme.DIVIDER);
-        graphics.outline(this.x, this.y, this.width, this.height, Theme.BORDER);
+        if (!this.collapsed) {
+            graphics.fill(this.x + 1, this.y + TITLE - 1, right - 1, this.y + TITLE, Theme.DIVIDER);
+        }
+        graphics.outline(this.x, this.y, this.width, shownHeight(), Theme.BORDER);
         Blueprint.marker(graphics, this.x + 5, this.y + 6, Theme.AMBER);
-        graphics.text(this.font, this.font.plainSubstrByWidth(this.title.getString(), this.width - 16), this.x + 11,
-                this.y + 4, Theme.TEXT_BRIGHT, false);
+        graphics.text(this.font, this.font.plainSubstrByWidth(this.title.getString(), this.width - 16 - TOGGLE),
+                this.x + 11, this.y + 4, Theme.TEXT_BRIGHT, false);
+        boolean toggleHovered = overToggle(mouseX, mouseY) || this.collapsed && contains(mouseX, mouseY);
+        drawToggle(graphics, toggleHovered);
+        if (this.collapsed) {
+            this.hovered = null;
+            if (toggleHovered) {
+                graphics.setTooltipForNextFrame(this.font.split(
+                        Component.translatable("litematicaplus.panel.expand.tip"), 200), mouseX, mouseY);
+            }
+            return;
+        }
+        if (overToggle(mouseX, mouseY)) {
+            graphics.setTooltipForNextFrame(this.font.split(
+                    Component.translatable("litematicaplus.panel.collapse.tip"), 200), mouseX, mouseY);
+        }
         int columnsY = this.y + TITLE + buttonsHeight() + 5;
         graphics.text(this.font, Component.translatable("litematicaplus.panel.column.item"), this.x + 5, columnsY,
                 Theme.TEXT_DIM, false);
@@ -280,6 +335,21 @@ final class MaterialPanel {
         } else if (this.depositButton != null && this.depositButton.isMouseOver(mouseX, mouseY)) {
             graphics.setTooltipForNextFrame(this.font.split(Component.translatable("litematicaplus.panel.deposit.tip"), 200),
                     mouseX, mouseY);
+        }
+    }
+
+    private void drawToggle(GuiGraphicsExtractor graphics, boolean hovered) {
+        int left = this.x + this.width - TOGGLE;
+        int top = this.y + 1;
+        if (hovered) {
+            graphics.fill(left, top, left + TOGGLE - 1, top + TITLE - 2, Theme.SURFACE_HOVER);
+        }
+        int color = hovered ? Theme.ACCENT : Theme.TEXT_DIM;
+        int centerX = left + TOGGLE / 2 - 1;
+        int centerY = top + (TITLE - 2) / 2;
+        graphics.fill(centerX - 3, centerY, centerX + 4, centerY + 1, color);
+        if (this.collapsed) {
+            graphics.fill(centerX, centerY - 3, centerX + 1, centerY + 4, color);
         }
     }
 

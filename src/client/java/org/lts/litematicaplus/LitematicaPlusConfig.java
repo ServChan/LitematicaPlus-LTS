@@ -10,7 +10,9 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -125,6 +127,7 @@ public final class LitematicaPlusConfig {
     public boolean ghostsOnlyLoaded = true;
     public boolean materialHelper = true;
     public boolean materialPanel = true;
+    public boolean materialPanelCollapsed = false;
     public boolean materialExactTake = true;
     public boolean materialTooltips = true;
     public boolean materialHelperFollowsRender = true;
@@ -136,10 +139,12 @@ public final class LitematicaPlusConfig {
     public boolean placementRestriction = false;
     public boolean pickBlockEnabled = true;
     public int lockedHotbarSlots = 0;
+    public Map<String, Integer> hotkeyModifiers = new HashMap<>();
     public boolean inventoryHighlight = false;
     public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
+    public boolean syncmaticaEnabled = true;
     public String schematicsDirectory = "schematics";
     public String defaultAuthor = "";
 
@@ -298,6 +303,15 @@ public final class LitematicaPlusConfig {
         config.hudX = (float) clamp(config.hudX, 0.0, 1.0);
         config.hudY = (float) clamp(config.hudY, 0.0, 1.0);
         config.lockedHotbarSlots &= 0x1FF;
+        Map<String, Integer> modifiers = new HashMap<>();
+        if (config.hotkeyModifiers != null) {
+            config.hotkeyModifiers.forEach((name, mask) -> {
+                if (name != null && mask != null && (mask & 7) != 0) {
+                    modifiers.put(name, mask & 7);
+                }
+            });
+        }
+        config.hotkeyModifiers = modifiers;
         config.easyPlaceDelayTicks = clamp(config.easyPlaceDelayTicks, 0, 20);
         config.pasteCommandsPerTick = clamp(config.pasteCommandsPerTick, 1, 16);
         config.easyPlaceRotationLeadTicks = clamp(config.easyPlaceRotationLeadTicks, 0, 3);

@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.render;
 
+import org.lts.litematicaplus.compat.Addons;
+import org.lts.litematicaplus.compat.Addon;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -34,8 +36,14 @@ public final class ExternalMap {
         try {
             return MethodHandles.publicLookup().unreflect(Class.forName(owner).getMethod(name)).asType(type);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            Addons.report(Addon.VOXYMAP, "litematicaplus.addon.problem.unreadable", exception);
             return null;
         }
+    }
+
+    public static boolean available() {
+        return ACTIVE != null && CENTER_X != null && CENTER_Y != null && CENTER_Z != null && SHOWN != null
+                && CAMERA_X != null && CAMERA_Y != null && CAMERA_Z != null;
     }
 
     public static void beginFrame() {

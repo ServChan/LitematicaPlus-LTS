@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.world;
 
+import org.lts.litematicaplus.compat.Addons;
+import org.lts.litematicaplus.compat.Addon;
 import java.lang.reflect.Method;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.level.Level;
@@ -26,6 +28,7 @@ public final class WorldCache {
             return Class.forName("com.voxymap.client.map.VoxyWorldData").getMethod("chunkSectionPadded", Level.class,
                     int.class, int.class, int.class);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            Addons.report(Addon.VOXYMAP, "litematicaplus.addon.problem.world_cache_unreadable", exception);
             return null;
         }
     }
