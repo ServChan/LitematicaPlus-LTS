@@ -386,7 +386,7 @@
   "litematicaplus.option.tool_use_guard.tip": "Правый клик лопатой, мотыгой или топором по блоку внутри размещения отменяется, если превратил бы его в то, чего нет в схеме: дёрн в тропинку, землю в грядку, бревно в обтёсанное.",
   "litematicaplus.message.tool_guarded": "«%s» оставлен как в схеме: инструмент изменил бы его",
   "litematicaplus.option.excavation_guard_outside": "Защита: вне схемы",
-  "litematicaplus.option.excavation_guard_outside.tip": "Нельзя ломать блоки за пределами показанных схем.",
+  "litematicaplus.option.excavation_guard_outside.tip": "Нельзя ломать блоки за пределами показанных схем. Сундуки, шалкеры, верстаки, двери и другие функциональные блоки ломать можно.",
   "litematicaplus.option.excavation_guard_correct": "Защита: верные блоки",
   "litematicaplus.option.excavation_guard_correct.tip": "Нельзя ломать блоки, уже совпадающие со схемой.",
   "litematicaplus.option.excavation_guard_hint": "Защита: пояснять",

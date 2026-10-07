@@ -386,7 +386,7 @@
   "litematicaplus.option.tool_use_guard.tip": "Right-click with a shovel, hoe or axe on a block inside a placement is cancelled when it would turn the block into something the schematic does not ask for: grass into a path, dirt into farmland, a log into a stripped log.",
   "litematicaplus.message.tool_guarded": "Kept %s as in the schematic: the tool would change it",
   "litematicaplus.option.excavation_guard_outside": "Guard: outside the schematic",
-  "litematicaplus.option.excavation_guard_outside.tip": "Blocks outside every shown schematic cannot be broken.",
+  "litematicaplus.option.excavation_guard_outside.tip": "Blocks outside every shown schematic cannot be broken. Chests, shulker boxes, crafting tables, doors and other functional blocks still can.",
   "litematicaplus.option.excavation_guard_correct": "Guard: correct blocks",
   "litematicaplus.option.excavation_guard_correct.tip": "Blocks that already match the schematic cannot be broken.",
   "litematicaplus.option.excavation_guard_hint": "Guard: say why",

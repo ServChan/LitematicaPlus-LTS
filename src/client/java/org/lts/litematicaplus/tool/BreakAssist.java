@@ -238,7 +238,8 @@ public final class BreakAssist {
             }
         }
         if (!inside) {
-            if (config.excavationGuardOutside && anyEnabled) {
+            if (config.excavationGuardOutside && anyEnabled
+                    && !EasyPlace.isInteractable(minecraft.level, pos, minecraft.level.getBlockState(pos))) {
                 hint(config, "litematicaplus.message.guard_outside");
                 return true;
             }

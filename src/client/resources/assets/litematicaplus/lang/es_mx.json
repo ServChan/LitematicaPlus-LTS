@@ -386,7 +386,7 @@
   "litematicaplus.option.tool_use_guard.tip": "Se cancela el clic derecho con pala, azada o hacha sobre un bloque dentro de una colocación si lo convertiría en algo que el esquema no pide: césped en camino, tierra en tierra de cultivo, un tronco en tronco descortezado.",
   "litematicaplus.message.tool_guarded": "%s se mantiene como en el esquema: la herramienta lo cambiaría",
   "litematicaplus.option.excavation_guard_outside": "Protección: fuera del esquema",
-  "litematicaplus.option.excavation_guard_outside.tip": "No se pueden romper bloques fuera de los esquemas visibles.",
+  "litematicaplus.option.excavation_guard_outside.tip": "No se pueden romper bloques fuera de los esquemas visibles. Los cofres, cajas de shulker, mesas de crafteo, puertas y demás bloques funcionales sí se pueden romper.",
   "litematicaplus.option.excavation_guard_correct": "Protección: bloques correctos",
   "litematicaplus.option.excavation_guard_correct.tip": "No se pueden romper bloques que ya coinciden con el esquema.",
   "litematicaplus.option.excavation_guard_hint": "Protección: decir por qué",
