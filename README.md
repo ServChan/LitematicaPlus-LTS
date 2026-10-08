@@ -57,7 +57,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 | Действие | Клавиша по умолчанию |
 |---|---|
-| Открыть меню | `K` |
+| Открыть меню | `H` |
 | Вкладка «Слои» и границы X/Z | `F7` |
 | Включить/выключить границы X/Z | не назначена |
 | Редактор размещения в мире | не назначена |
@@ -95,7 +95,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 ### Настройки
 
-Меню (`K`) или **Mod Menu**: вкладки «Быстрый доступ», «Схемы», «Размещения», «Слои», «Новая схема» (сохранение постройки из мира), «Материалы», «Замены», «Проверка», «Настройки». Настройки лежат в `config/litematicaplus.json`, размещения и выделения — в `config/litematica-plus-session.json`, список замен материалов — в `config/litematica-plus-substitutes.json` (файлы пишутся атомарно, с резервной копией `.bak`). У параметров лёгкой установки есть подсказки при наведении.
+Меню (`H`) или **Mod Menu**: вкладки «Быстрый доступ», «Схемы», «Размещения», «Слои», «Новая схема» (сохранение постройки из мира), «Материалы», «Замены», «Проверка», «Настройки». Настройки лежат в `config/litematicaplus.json`, размещения и выделения — в `config/litematica-plus-session.json`, список замен материалов — в `config/litematica-plus-substitutes.json` (файлы пишутся атомарно, с резервной копией `.bak`). У параметров лёгкой установки есть подсказки при наведении.
 
 ### Установка
 
@@ -167,7 +167,7 @@ Keys are bound in the mod's menu (Settings → Hotkeys) or in Options → Contro
 
 | Action | Default key |
 |---|---|
-| Open the menu | `K` |
+| Open the menu | `H` |
 | Layers tab and X/Z bounds | `F7` |
 | Toggle X/Z bounds | unbound |
 | Placement editor in the world | unbound |
@@ -205,7 +205,7 @@ Without the tool: right-click a ghost or an entity marker for easy place (when e
 
 ### Configuration
 
-The menu (`K`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layers, New schematic (saving a build from the world), Materials, Replacements, Verifier, Settings. Settings live in `config/litematicaplus.json`, placements and selections in `config/litematica-plus-session.json`, the substitute material list in `config/litematica-plus-substitutes.json` (written atomically with a `.bak` backup). Easy place options show a tooltip on hover.
+The menu (`H`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layers, New schematic (saving a build from the world), Materials, Replacements, Verifier, Settings. Settings live in `config/litematicaplus.json`, placements and selections in `config/litematica-plus-session.json`, the substitute material list in `config/litematica-plus-substitutes.json` (written atomically with a `.bak` backup). Easy place options show a tooltip on hover.
 
 ### Installation
 

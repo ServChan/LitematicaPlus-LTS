@@ -57,7 +57,7 @@ public final class Hotkeys {
 
     static void register() {
         category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(LitematicaPlusClient.MOD_ID, "main"));
-        add("open_menu", InputConstants.KEY_K, minecraft -> minecraft.gui.setScreen(new HubScreen(null)));
+        add("open_menu", InputConstants.KEY_H, minecraft -> minecraft.gui.setScreen(new HubScreen(null)));
         add("edit_placement", 0, Hotkeys::editPlacement);
         toggle("toggle_render", "render_enabled", config -> config.renderEnabled, (config, value) -> config.renderEnabled = value);
         toggle("toggle_easy_place", "easy_place", config -> config.easyPlaceEnabled,
