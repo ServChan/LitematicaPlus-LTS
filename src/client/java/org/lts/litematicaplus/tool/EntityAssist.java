@@ -179,8 +179,11 @@ public final class EntityAssist {
     private static List<Ghost> create(ClientLevel level, PlacementVolume volume) {
         List<Ghost> ghosts = new ArrayList<>();
         for (PlacementVolume.EntitySeed seed : volume.entities()) {
+            if (!seed.assisted()) {
+                continue;
+            }
             try {
-                Ghost ghost = build(level, seed, volume.transform());
+                Ghost ghost = build(level, seed, new PlacementTransform(0, 0, 0, seed.rotation(), seed.mirror()));
                 if (ghost != null) {
                     ghosts.add(ghost);
                 }

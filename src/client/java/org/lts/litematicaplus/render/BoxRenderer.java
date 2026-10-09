@@ -19,7 +19,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
-import org.lts.litematicaplus.placement.PlacementTransform;
+import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.selection.AreaBox;
@@ -56,7 +56,7 @@ public final class BoxRenderer {
     private static Map<SchematicPlacement, RegionCache> regionCache = new IdentityHashMap<>();
     private static Map<SchematicPlacement, RegionCache> nextRegionCache = new IdentityHashMap<>();
 
-    private record RegionCache(Schematic schematic, PlacementTransform transform, Set<String> disabled,
+    private record RegionCache(Schematic schematic, PlacementLayout transform, Set<String> disabled,
             List<PlacementVolume.RegionBox> boxes) {
     }
 
@@ -64,7 +64,7 @@ public final class BoxRenderer {
     }
 
     private static List<PlacementVolume.RegionBox> regionBoxes(SchematicPlacement placement, Schematic schematic) {
-        PlacementTransform transform = placement.transform();
+        PlacementLayout transform = placement.layout();
         Set<String> disabled = placement.disabledRegions();
         RegionCache cached = regionCache.get(placement);
         if (cached == null || cached.schematic() != schematic || !cached.transform().equals(transform)

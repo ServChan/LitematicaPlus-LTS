@@ -37,7 +37,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
-import org.lts.litematicaplus.placement.PlacementTransform;
+import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.render.MeshResult;
 import org.lts.litematicaplus.render.SectionJob;
@@ -565,7 +565,7 @@ public final class GhostEngine {
             return;
         }
         runtime.building = true;
-        PlacementTransform transform = placement.transform();
+        PlacementLayout transform = placement.layout();
         Set<String> disabled = new HashSet<>(placement.disabledRegions());
         Map<Block, Block> replacements = LitematicaPlusConfig.current().materialSwap
                 ? new HashMap<>(placement.replacements()) : Map.of();

@@ -35,16 +35,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
-import org.lts.litematicaplus.placement.PlacementTransform;
-import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.BlockStateNbt;
-import org.lts.litematicaplus.schematic.Schematic;
-import org.lts.litematicaplus.schematic.SchematicRegion;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.GhostSection;
@@ -53,7 +48,6 @@ import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class PasteController {
     public static final long MAX_DELETE_VOLUME = 64L * 1024L * 1024L;
-    private static final int MAX_PASTED_ENTITIES = 4096;
     private static final int DIRECT_BLOCKS_PER_TICK = 4096;
     private static final int DIRECT_DELETE_BLOCKS_PER_TICK = 16384;
     private static final int MAX_COMMAND_LENGTH = 255;
@@ -141,7 +135,7 @@ public final class PasteController {
         created.volume = volume;
         created.layer = GhostEngine.get().layer();
         if (useDirect && LitematicaPlusConfig.current().pasteEntities) {
-            created.entities = entitiesOf(runtime.placement(), volume, created.layer);
+            created.entities = entitiesOf(volume, created.layer);
         }
         long[] keys = volume.sections().keySet().toLongArray();
         Long[] boxed = new Long[keys.length];
@@ -166,7 +160,7 @@ public final class PasteController {
 
     public static boolean upToDate(PlacementRuntime runtime) {
         PlacementVolume volume = runtime == null ? null : runtime.volume();
-        return volume != null && volume.transform().equals(runtime.placement().transform());
+        return volume != null && volume.layout().equals(runtime.placement().layout());
     }
 
     public static void startDelete(Minecraft minecraft, List<AreaBox> boxes) {
@@ -494,33 +488,11 @@ public final class PasteController {
         return current.deleteBoxes.isEmpty();
     }
 
-    static List<EntityPaste> entitiesOf(SchematicPlacement placement, PlacementVolume volume, LayerRange layer) {
-        Schematic schematic = placement.schematic();
-        if (schematic == null) {
-            return List.of();
-        }
-        PlacementTransform transform = volume.transform();
-        int dataVersion = schematic.metadata().dataVersion;
+    static List<EntityPaste> entitiesOf(PlacementVolume volume, LayerRange layer) {
         List<EntityPaste> result = new ArrayList<>();
-        for (SchematicRegion region : schematic.regions().values()) {
-            if (placement.disabledRegions().contains(region.name())) {
-                continue;
-            }
-            for (CompoundTag tag : region.entities()) {
-                if (result.size() >= MAX_PASTED_ENTITIES) {
-                    return result;
-                }
-                ListTag position = tag.getListOrEmpty("Pos");
-                if (position.size() < 3 || tag.getStringOr("id", "").isEmpty()) {
-                    continue;
-                }
-                Vec3 world = transform.worldPoint(region.posX() + position.getDoubleOr(0, 0.0),
-                        region.posY() + position.getDoubleOr(1, 0.0), region.posZ() + position.getDoubleOr(2, 0.0));
-                if (!layer.contains(Mth.floor(world.x), Mth.floor(world.y), Mth.floor(world.z))) {
-                    continue;
-                }
-                result.add(new EntityPaste(BlockStateNbt.fixEntity(tag.copy(), dataVersion), world.x, world.y, world.z,
-                        transform.rotation(), transform.mirror()));
+        for (PlacementVolume.EntitySeed seed : volume.entities()) {
+            if (layer.contains(Mth.floor(seed.x()), Mth.floor(seed.y()), Mth.floor(seed.z()))) {
+                result.add(new EntityPaste(seed.tag(), seed.x(), seed.y(), seed.z(), seed.rotation(), seed.mirror()));
             }
         }
         return result;

@@ -293,7 +293,8 @@ final class SyncSessionTest {
         next(SyncPacket.MODIFY_REQUEST);
         server(SyncPacket.MODIFY_REQUEST_ACCEPT, id(placement.id()));
         assertTrue(this.session.isModifying(placement.id()));
-        assertTrue(this.session.finishModify(placement.id(), 10, 70, -20, 3, 0));
+        assertTrue(this.session.finishModify(placement.id(), 10, 70, -20, 3, 0,
+                List.of(new SharedPlacement.RegionShift("Tower", 4, 1, 2, 1, 0))));
         FriendlyByteBuf finish = next(SyncPacket.MODIFY_FINISH).body();
         assertEquals(placement.id(), finish.readUUID());
         SharedPlacement moved = new SharedPlacement(placement.id(), placement.hash(), "", "");
@@ -303,6 +304,7 @@ final class SyncSessionTest {
         assertEquals(-20, moved.z());
         assertEquals(3, moved.rotation());
         assertEquals("minecraft:overworld", moved.dimension());
+        assertEquals(List.of(new SharedPlacement.RegionShift("Tower", 4, 1, 2, 1, 0)), moved.regions());
         FriendlyByteBuf broadcast = id(placement.id());
         SyncCodec.writePosition(broadcast, moved, EnumSet.allOf(SyncFeature.class));
         SyncCodec.writePlayer(broadcast, new SharedPlacement.Player(UUID.randomUUID(), "Editor"));

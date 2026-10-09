@@ -39,6 +39,28 @@ public final class SessionStore {
         public String serverId = "";
         public List<String> disabledRegions = new ArrayList<>();
         public Map<String, String> replacements = new LinkedHashMap<>();
+        public Map<String, RegionData> regions = new LinkedHashMap<>();
+        public GridData grid = new GridData();
+    }
+
+    public static final class RegionData {
+        public int x;
+        public int y;
+        public int z;
+        public String rotation = "NONE";
+        public String mirror = "NONE";
+    }
+
+    public static final class GridData {
+        public int negativeX;
+        public int positiveX;
+        public int negativeY;
+        public int positiveY;
+        public int negativeZ;
+        public int positiveZ;
+        public int stepX;
+        public int stepY;
+        public int stepZ;
     }
 
     public static final class LayerData {

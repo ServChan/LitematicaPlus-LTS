@@ -12,7 +12,7 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.gui.PlacementEditorScreen;
 import org.lts.litematicaplus.placement.PlacementManager;
-import org.lts.litematicaplus.placement.PlacementTransform;
+import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.world.PlacementVolume;
@@ -34,9 +34,9 @@ public final class MapApi {
 
     private static final Map<UUID, Bounds> BOUNDS = new HashMap<>();
 
-    private record Bounds(Schematic schematic, PlacementTransform transform, Set<String> disabled,
+    private record Bounds(Schematic schematic, PlacementLayout transform, Set<String> disabled,
             int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
-        boolean matches(Schematic schematic, PlacementTransform transform, Set<String> disabled) {
+        boolean matches(Schematic schematic, PlacementLayout transform, Set<String> disabled) {
             return this.schematic == schematic && this.transform.equals(transform) && this.disabled.equals(disabled);
         }
 
@@ -94,7 +94,7 @@ public final class MapApi {
     }
 
     private static Bounds bounds(SchematicPlacement placement, Schematic schematic) {
-        PlacementTransform transform = placement.transform();
+        PlacementLayout transform = placement.layout();
         Set<String> disabled = placement.disabledRegions();
         synchronized (BOUNDS) {
             Bounds cached = BOUNDS.get(placement.id());

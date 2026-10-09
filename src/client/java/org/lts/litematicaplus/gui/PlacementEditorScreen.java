@@ -251,7 +251,7 @@ public final class PlacementEditorScreen extends Screen {
         int maxY = this.placement.y();
         Schematic schematic = this.placement.schematic();
         if (schematic != null) {
-            List<PlacementVolume.RegionBox> boxes = PlacementVolume.regionBoxes(schematic, this.placement.transform(), null);
+            List<PlacementVolume.RegionBox> boxes = PlacementVolume.regionBoxes(schematic, this.placement.layout(), null);
             for (PlacementVolume.RegionBox box : boxes) {
                 minX = Math.min(minX, box.minX());
                 maxX = Math.max(maxX, box.maxX());

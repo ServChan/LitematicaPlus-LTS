@@ -156,7 +156,7 @@ public final class ToolController {
             return;
         }
         LayerRange layer = GhostEngine.get().layer();
-        if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.transform() + placement.disabledRegions() + layer)) {
+        if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.layout() + placement.disabledRegions() + layer)) {
             if (layer.unrestricted()) {
                 Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
             } else {

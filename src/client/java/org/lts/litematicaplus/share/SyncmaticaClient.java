@@ -281,6 +281,7 @@ public final class SyncmaticaClient implements SyncSession.Listener {
             shared.setVersions(litematicVersion, dataVersion);
             shared.place(current.x(), current.y(), current.z(), dimension, current.rotation().ordinal(),
                     current.mirror().ordinal());
+            shared.setRegions(PlacementManager.sharedShifts(current));
             if (this.session.share(shared, data)) {
                 this.uploads.put(shared.id(), localId);
                 this.uploadData.put(shared.id(), data);
@@ -348,11 +349,7 @@ public final class SyncmaticaClient implements SyncSession.Listener {
     private void place(SharedPlacement shared) {
         PlacementManager.get().createShared(cacheFile(shared.hash()), shared.title(),
                 new BlockPos(shared.x(), shared.y(), shared.z()), Rotation.values()[shared.rotation()],
-                Mirror.values()[shared.mirror()], shared.id());
-        if (!shared.regions().isEmpty()) {
-            Notify.chat(Component.translatable("litematicaplus.share.regions_moved", shared.title())
-                    .withStyle(ChatFormatting.YELLOW));
-        }
+                Mirror.values()[shared.mirror()], shared.id(), shared.regions());
         this.revision++;
     }
 
@@ -375,7 +372,7 @@ public final class SyncmaticaClient implements SyncSession.Listener {
             return false;
         }
         if (this.session.finishModify(id, placement.x(), placement.y(), placement.z(), placement.rotation().ordinal(),
-                placement.mirror().ordinal())) {
+                placement.mirror().ordinal(), PlacementManager.sharedShifts(placement))) {
             Notify.actionBar("litematicaplus.share.modify_sent", placement.name());
             this.revision++;
         }
@@ -413,7 +410,7 @@ public final class SyncmaticaClient implements SyncSession.Listener {
 
     private static void apply(SchematicPlacement local, SharedPlacement shared) {
         PlacementManager.get().applyShared(local, shared.x(), shared.y(), shared.z(),
-                Rotation.values()[shared.rotation()], Mirror.values()[shared.mirror()]);
+                Rotation.values()[shared.rotation()], Mirror.values()[shared.mirror()], shared.regions());
     }
 
     private void scanCache() {

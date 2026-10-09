@@ -30,6 +30,8 @@ import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.LitematicCodec;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.schematic.SchematicRegion;
+import org.lts.litematicaplus.share.SharedPlacement;
 import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
@@ -122,13 +124,14 @@ public final class PlacementManager {
     }
 
     public SchematicPlacement createShared(Path file, String name, BlockPos origin, Rotation rotation, Mirror mirror,
-            UUID serverId) {
+            UUID serverId, List<SharedPlacement.RegionShift> shifts) {
         SchematicPlacement placement = new SchematicPlacement(UUID.randomUUID(), uniqueName(name.isBlank()
                 ? SchematicIo.baseName(file) : name), relativize(file), origin);
         placement.setRotation(rotation);
         placement.setMirror(mirror);
         placement.setLocked(true);
         placement.setServerId(serverId);
+        placement.setPendingShifts(List.copyOf(shifts));
         return add(placement);
     }
 
@@ -166,13 +169,16 @@ public final class PlacementManager {
         this.changeListener.run();
     }
 
-    public void applyShared(SchematicPlacement placement, int x, int y, int z, Rotation rotation, Mirror mirror) {
+    public void applyShared(SchematicPlacement placement, int x, int y, int z, Rotation rotation, Mirror mirror,
+            List<SharedPlacement.RegionShift> shifts) {
         boolean geometry = placement.x() != x || placement.y() != y || placement.z() != z
                 || placement.rotation() != rotation || placement.mirror() != mirror;
         placement.setOrigin(x, y, z);
         placement.setRotation(rotation);
         placement.setMirror(mirror);
         placement.setLocked(true);
+        placement.setPendingShifts(List.copyOf(shifts));
+        geometry |= resolveShifts(placement);
         if (geometry) {
             GhostEngine.get().rebuild(placement);
         }
@@ -270,6 +276,80 @@ public final class PlacementManager {
         }
     }
 
+    public void setRegionPlacement(SchematicPlacement placement, String region, RegionPlacement value) {
+        if (placement.locked()) {
+            return;
+        }
+        RegionPlacement current = placement.regionPlacement(region);
+        if (current.equals(value)) {
+            return;
+        }
+        if (value == null || value.isIdentity()) {
+            placement.regionPlacements().remove(region);
+        } else {
+            placement.regionPlacements().put(region, value);
+        }
+        geometryChanged(placement);
+    }
+
+    public void resetRegionPlacements(SchematicPlacement placement) {
+        if (!placement.locked() && !placement.regionPlacements().isEmpty()) {
+            placement.regionPlacements().clear();
+            geometryChanged(placement);
+        }
+    }
+
+    public void setGrid(SchematicPlacement placement, PlacementGrid grid) {
+        if (placement.locked() || placement.grid().equals(grid)) {
+            return;
+        }
+        placement.setGrid(grid);
+        geometryChanged(placement);
+    }
+
+    public static List<SharedPlacement.RegionShift> sharedShifts(SchematicPlacement placement) {
+        Schematic schematic = placement.schematic();
+        if (schematic == null) {
+            List<SharedPlacement.RegionShift> pending = placement.pendingShifts();
+            return pending == null ? List.of() : pending;
+        }
+        List<SharedPlacement.RegionShift> shifts = new ArrayList<>();
+        for (Map.Entry<String, RegionPlacement> entry : placement.regionPlacements().entrySet()) {
+            SchematicRegion region = schematic.regions().get(entry.getKey());
+            RegionPlacement value = entry.getValue();
+            if (region != null && !value.isIdentity()) {
+                shifts.add(new SharedPlacement.RegionShift(region.name(), region.posX() + value.offsetX(),
+                        region.posY() + value.offsetY(), region.posZ() + value.offsetZ(), value.rotation().ordinal(),
+                        value.mirror().ordinal()));
+            }
+        }
+        return shifts;
+    }
+
+    private static boolean resolveShifts(SchematicPlacement placement) {
+        Schematic schematic = placement.schematic();
+        List<SharedPlacement.RegionShift> shifts = placement.pendingShifts();
+        if (schematic == null || shifts == null) {
+            return false;
+        }
+        placement.setPendingShifts(null);
+        Map<String, RegionPlacement> before = Map.copyOf(placement.regionPlacements());
+        placement.regionPlacements().clear();
+        for (SharedPlacement.RegionShift shift : shifts) {
+            SchematicRegion region = schematic.regions().get(shift.name());
+            if (region == null) {
+                continue;
+            }
+            RegionPlacement value = new RegionPlacement(shift.x() - region.posX(), shift.y() - region.posY(),
+                    shift.z() - region.posZ(), Rotation.values()[Math.floorMod(shift.rotation(), 4)],
+                    Mirror.values()[Math.floorMod(shift.mirror(), 3)]);
+            if (!value.isIdentity()) {
+                placement.regionPlacements().put(region.name(), value);
+            }
+        }
+        return !before.equals(placement.regionPlacements());
+    }
+
     public void clearReplacements(SchematicPlacement placement) {
         if (!placement.replacements().isEmpty()) {
             placement.replacements().clear();
@@ -316,6 +396,7 @@ public final class PlacementManager {
                 placement.markFailed(Notify.describe(failure));
             } else {
                 placement.markReady(schematic);
+                resolveShifts(placement);
                 warnAboutContent(placement, schematic);
             }
             GhostEngine.get().rebuild(placement);
@@ -405,6 +486,25 @@ public final class PlacementManager {
             placement.setLocked(entry.locked);
             placement.setServerId(parseUuid(entry.serverId));
             placement.disabledRegions().addAll(entry.disabledRegions);
+            if (entry.regions != null) {
+                for (Map.Entry<String, SessionStore.RegionData> pair : entry.regions.entrySet()) {
+                    SessionStore.RegionData region = pair.getValue();
+                    if (region == null) {
+                        continue;
+                    }
+                    RegionPlacement value = new RegionPlacement(region.x, region.y, region.z,
+                            parse(Rotation.class, region.rotation, Rotation.NONE),
+                            parse(Mirror.class, region.mirror, Mirror.NONE));
+                    if (!value.isIdentity()) {
+                        placement.regionPlacements().put(pair.getKey(), value);
+                    }
+                }
+            }
+            if (entry.grid != null) {
+                SessionStore.GridData grid = entry.grid;
+                placement.setGrid(new PlacementGrid(grid.negativeX, grid.positiveX, grid.negativeY, grid.positiveY,
+                        grid.negativeZ, grid.positiveZ, grid.stepX, grid.stepY, grid.stepZ));
+            }
             for (Map.Entry<String, String> pair : entry.replacements.entrySet()) {
                 Block from = blockById(pair.getKey());
                 Block to = blockById(pair.getValue());
@@ -439,6 +539,25 @@ public final class PlacementManager {
             entry.locked = placement.locked();
             entry.serverId = placement.serverId() == null ? "" : placement.serverId().toString();
             entry.disabledRegions = new ArrayList<>(placement.disabledRegions());
+            for (Map.Entry<String, RegionPlacement> pair : placement.regionPlacements().entrySet()) {
+                SessionStore.RegionData region = new SessionStore.RegionData();
+                region.x = pair.getValue().offsetX();
+                region.y = pair.getValue().offsetY();
+                region.z = pair.getValue().offsetZ();
+                region.rotation = pair.getValue().rotation().name();
+                region.mirror = pair.getValue().mirror().name();
+                entry.regions.put(pair.getKey(), region);
+            }
+            PlacementGrid grid = placement.grid();
+            entry.grid.negativeX = grid.negativeX();
+            entry.grid.positiveX = grid.positiveX();
+            entry.grid.negativeY = grid.negativeY();
+            entry.grid.positiveY = grid.positiveY();
+            entry.grid.negativeZ = grid.negativeZ();
+            entry.grid.positiveZ = grid.positiveZ();
+            entry.grid.stepX = grid.stepX();
+            entry.grid.stepY = grid.stepY();
+            entry.grid.stepZ = grid.stepZ();
             for (Map.Entry<Block, Block> pair : placement.replacements().entrySet()) {
                 entry.replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
                         BuiltInRegistries.BLOCK.getKey(pair.getValue()).toString());

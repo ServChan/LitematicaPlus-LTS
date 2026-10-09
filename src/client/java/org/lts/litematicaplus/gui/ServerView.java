@@ -235,10 +235,6 @@ final class ServerView extends TabView {
         int lines = Ui.wrapped(graphics, this.font, tr(hintKey), x, y, this.detailWidth, Math.max(0, (bottom - y) / 10),
                 hintColor, mouseX, mouseY);
         y += lines * 10 + 4;
-        if (!selected.regions().isEmpty() && bottom - y >= 10) {
-            Ui.wrapped(graphics, this.font, tr("litematicaplus.server.regions_moved"), x, y, this.detailWidth,
-                    Math.max(0, (bottom - y) / 10), Theme.WARNING, mouseX, mouseY);
-        }
     }
 
     private int line(GuiGraphicsExtractor graphics, int x, int y, String key, String value) {

@@ -14,7 +14,9 @@ import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.placement.PlacementGrid;
 import org.lts.litematicaplus.placement.PlacementManager;
+import org.lts.litematicaplus.placement.RegionPlacement;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.preview.PreviewService;
 import org.lts.litematicaplus.schematic.Schematic;
@@ -28,6 +30,8 @@ final class PlacementsView extends TabView {
     private ListPanel<SchematicPlacement> list;
     private int removeArmed;
     private boolean regionsPage;
+    private boolean gridPage;
+    private String regionPage;
     private int detailX;
     private int detailWidth;
     private int regionsTop;
@@ -71,6 +75,8 @@ final class PlacementsView extends TabView {
                     manager.select(placement);
                     this.removeArmed = 0;
                     this.regionsPage = false;
+                    this.gridPage = false;
+                    this.regionPage = null;
                     this.screen.refresh();
                 }));
         Schematic previewed = manager.selected() == null ? null : manager.selected().schematic();
@@ -95,6 +101,16 @@ final class PlacementsView extends TabView {
         boolean hasRegions = schematic != null && schematic.regions().size() > 1;
         int x = this.detailX;
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
+        if (this.regionPage != null && schematic != null && schematic.regions().containsKey(this.regionPage)) {
+            addRegionEditor(manager, selected, this.regionPage, x);
+            return;
+        }
+        this.regionPage = null;
+        if (this.gridPage && schematic != null) {
+            addGridEditor(manager, selected, x);
+            return;
+        }
+        this.gridPage = false;
         if (this.regionsPage && hasRegions) {
             add(FlatButton.secondary(x, this.top, Math.min(90, this.detailWidth), tr("litematicaplus.placements.back"),
                     button -> {
@@ -163,6 +179,14 @@ final class PlacementsView extends TabView {
                     this.screen.refresh();
                 }));
         y += Theme.CONTROL_HEIGHT + 4;
+        if (schematic != null && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
+            add(FlatButton.secondary(x, bottomY - Theme.CONTROL_HEIGHT - 4, this.detailWidth, gridLabel(selected),
+                    button -> {
+                        this.gridPage = true;
+                        this.screen.refresh();
+                    }));
+            bottomY -= Theme.CONTROL_HEIGHT + 4;
+        }
         if (hasRegions) {
             if (bottomY - y - 16 >= INLINE_REGIONS_MIN_HEIGHT) {
                 this.regionsTop = y + 12;
@@ -182,6 +206,7 @@ final class PlacementsView extends TabView {
                         }));
             }
         }
+        bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
         add(FlatButton.primary(x, bottomY, third, tr("litematicaplus.placements.edit"),
                 button -> this.minecraft.gui.setScreen(new PlacementEditorScreen(this.screen, selected))));
         add(FlatButton.secondary(x + third + Theme.GAP, bottomY, third, tr("litematicaplus.placements.reload"),
@@ -206,16 +231,130 @@ final class PlacementsView extends TabView {
                 (graphics, rowFont, region, rowX, rowY, rowWidth, rowHeight, isSelected, hovered) -> {
                     boolean on = !selected.disabledRegions().contains(region);
                     int textY = rowY + (rowHeight - 8) / 2;
-                    Ui.clipped(graphics, rowFont, region, rowX + 6, textY, rowWidth - 44, on ? Theme.TEXT : Theme.TEXT_DIM);
+                    boolean moved = !selected.regionPlacement(region).isIdentity();
+                    String title = moved ? region + " *" : region;
+                    Ui.clipped(graphics, rowFont, title, rowX + 6, textY, rowWidth - 44, on ? Theme.TEXT : Theme.TEXT_DIM);
                     TextMemo memo = on ? this.regionOn : this.regionOff;
                     String state = memo.stale(null) ? memo.set(tr(on ? "litematicaplus.state.on"
                             : "litematicaplus.state.off").getString()) : memo.text();
                     Ui.right(graphics, rowFont, state, rowX + rowWidth - 6, textY, on ? Theme.SUCCESS : Theme.DANGER);
                 })
                 .describe(region -> region)
-                .onPress(region -> manager.toggleRegion(selected, region)));
+                .onPress(region -> {
+                    this.regionPage = region;
+                    this.screen.refresh();
+                }));
         regions.setItems(new ArrayList<>(schematic.regions().keySet()));
-        regions.active = !selected.locked();
+    }
+
+    private Component gridLabel(SchematicPlacement placement) {
+        PlacementGrid grid = placement.grid();
+        if (!grid.active()) {
+            return tr("litematicaplus.grid.button_off");
+        }
+        return tr("litematicaplus.grid.button_on", grid.negativeX() + grid.positiveX() + 1,
+                grid.negativeY() + grid.positiveY() + 1, grid.negativeZ() + grid.positiveZ() + 1);
+    }
+
+    private int backRow(int x) {
+        add(FlatButton.secondary(x, this.top, Math.min(90, this.detailWidth), tr("litematicaplus.placements.back"),
+                button -> {
+                    this.regionPage = null;
+                    this.gridPage = false;
+                    this.screen.refresh();
+                }));
+        return this.top + Theme.CONTROL_HEIGHT + 16;
+    }
+
+    private void addRegionEditor(PlacementManager manager, SchematicPlacement selected, String region, int x) {
+        int y = backRow(x);
+        boolean editable = !selected.locked();
+        int half = (this.detailWidth - Theme.GAP) / 2;
+        FlatButton enabled = add(FlatButton.toggle(x, y, this.detailWidth, tr("litematicaplus.region.enabled"),
+                () -> !selected.disabledRegions().contains(region), button -> manager.toggleRegion(selected, region)));
+        enabled.active = editable;
+        y += Theme.CONTROL_HEIGHT + 16;
+        boolean wide = this.detailWidth >= 264;
+        int columns = wide ? 3 : 2;
+        int stepperWidth = (this.detailWidth - Theme.GAP * (columns - 1)) / columns;
+        for (int axis = 0; axis < 3; axis++) {
+            int index = axis;
+            Stepper stepper = new Stepper(x + axis % columns * (stepperWidth + Theme.GAP),
+                    y + axis / columns * (Theme.CONTROL_HEIGHT + 2), stepperWidth,
+                    Component.literal(axis == 0 ? "X" : axis == 1 ? "Y" : "Z"), () -> {
+                        RegionPlacement value = selected.regionPlacement(region);
+                        return index == 0 ? value.offsetX() : index == 1 ? value.offsetY() : value.offsetZ();
+                    }, value -> {
+                        RegionPlacement current = selected.regionPlacement(region);
+                        manager.setRegionPlacement(selected, region, current.withOffset(
+                                index == 0 ? value : current.offsetX(), index == 1 ? value : current.offsetY(),
+                                index == 2 ? value : current.offsetZ()));
+                    }, -30000, 30000, 1);
+            stepper.active = editable;
+            add(stepper);
+        }
+        y += (Theme.CONTROL_HEIGHT + 2) * (wide ? 1 : 2) + 4;
+        RegionPlacement current = selected.regionPlacement(region);
+        FlatButton rotate = add(FlatButton.secondary(x, y, half,
+                tr("litematicaplus.rotation." + current.rotation().name().toLowerCase(Locale.ROOT)), button -> {
+                    RegionPlacement value = selected.regionPlacement(region);
+                    manager.setRegionPlacement(selected, region,
+                            value.withRotation(value.rotation().getRotated(Rotation.CLOCKWISE_90)));
+                    this.screen.refresh();
+                }));
+        rotate.active = editable;
+        FlatButton mirror = add(FlatButton.secondary(x + half + Theme.GAP, y, this.detailWidth - half - Theme.GAP,
+                tr("litematicaplus.mirror." + current.mirror().name().toLowerCase(Locale.ROOT)), button -> {
+                    RegionPlacement value = selected.regionPlacement(region);
+                    Mirror[] values = Mirror.values();
+                    manager.setRegionPlacement(selected, region,
+                            value.withMirror(values[(value.mirror().ordinal() + 1) % values.length]));
+                    this.screen.refresh();
+                }));
+        mirror.active = editable;
+        y += Theme.CONTROL_HEIGHT + 4;
+        FlatButton reset = add(FlatButton.secondary(x, y, this.detailWidth, tr("litematicaplus.region.reset"),
+                button -> {
+                    manager.setRegionPlacement(selected, region, RegionPlacement.IDENTITY);
+                    this.screen.refresh();
+                }));
+        reset.active = editable && !current.isIdentity();
+    }
+
+    private void addGridEditor(PlacementManager manager, SchematicPlacement selected, int x) {
+        int y = backRow(x);
+        boolean editable = !selected.locked();
+        int third = (this.detailWidth - Theme.GAP * 2) / 3;
+        String[] axes = {"X", "Y", "Z"};
+        for (int axis = 0; axis < 3; axis++) {
+            int index = axis;
+            Stepper negative = new Stepper(x, y, third, Component.literal("-" + axes[axis]),
+                    () -> selected.grid().repeat(index, false),
+                    value -> manager.setGrid(selected, selected.grid().withRepeat(index, false, value)),
+                    0, PlacementGrid.MAX_REPEAT, 1);
+            Stepper positive = new Stepper(x + third + Theme.GAP, y, third, Component.literal("+" + axes[axis]),
+                    () -> selected.grid().repeat(index, true),
+                    value -> manager.setGrid(selected, selected.grid().withRepeat(index, true, value)),
+                    0, PlacementGrid.MAX_REPEAT, 1);
+            Stepper step = new Stepper(x + (third + Theme.GAP) * 2, y, this.detailWidth - (third + Theme.GAP) * 2,
+                    tr("litematicaplus.grid.step", axes[axis]), () -> selected.grid().step(index),
+                    value -> manager.setGrid(selected, selected.grid().withStep(index, value)),
+                    0, PlacementGrid.MAX_STEP, 1).format(value -> value == 0
+                            ? tr("litematicaplus.grid.auto").getString() : Integer.toString(value));
+            negative.active = editable;
+            positive.active = editable;
+            step.active = editable;
+            add(negative);
+            add(positive);
+            add(step);
+            y += Theme.CONTROL_HEIGHT + 4;
+        }
+        FlatButton reset = add(FlatButton.secondary(x, y, this.detailWidth, tr("litematicaplus.grid.reset"),
+                button -> {
+                    manager.setGrid(selected, PlacementGrid.NONE);
+                    this.screen.refresh();
+                }));
+        reset.active = editable && !selected.grid().equals(PlacementGrid.NONE);
     }
 
     @Override
@@ -284,6 +423,24 @@ final class PlacementsView extends TabView {
         if (selected == null) {
             Ui.emptyState(graphics, this.font, this.detailX, this.top, this.detailWidth, this.height,
                     tr("litematicaplus.placements.none_selected"), tr("litematicaplus.placements.none_selected_hint"));
+            return;
+        }
+        if (this.regionPage != null) {
+            Ui.label(graphics, this.font, tr("litematicaplus.region.title", this.regionPage), this.detailX,
+                    this.top + Theme.CONTROL_HEIGHT + 5);
+            Ui.label(graphics, this.font, tr("litematicaplus.region.offset"), this.detailX,
+                    this.top + Theme.CONTROL_HEIGHT * 2 + 21);
+            return;
+        }
+        if (this.gridPage) {
+            long copies = selected.grid().copies();
+            Ui.label(graphics, this.font, tr("litematicaplus.grid.title", copies), this.detailX,
+                    this.top + Theme.CONTROL_HEIGHT + 5);
+            int y = this.top + Theme.CONTROL_HEIGHT + 16 + (Theme.CONTROL_HEIGHT + 4) * 4 + 4;
+            Ui.wrapped(graphics, this.font, tr(copies > PlacementGrid.MAX_COPIES ? "litematicaplus.grid.too_many"
+                    : "litematicaplus.grid.hint", PlacementGrid.MAX_COPIES), this.detailX, y, this.detailWidth,
+                    Math.max(0, (this.top + this.height - y) / 10), copies > PlacementGrid.MAX_COPIES ? Theme.DANGER
+                    : Theme.TEXT_DIM, mouseX, mouseY);
             return;
         }
         if (this.regionsTop > 0) {

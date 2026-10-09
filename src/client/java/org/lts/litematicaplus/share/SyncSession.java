@@ -436,12 +436,14 @@ public final class SyncSession {
         return true;
     }
 
-    public boolean finishModify(UUID id, int x, int y, int z, int rotation, int mirror) {
+    public boolean finishModify(UUID id, int x, int y, int z, int rotation, int mirror,
+            List<SharedPlacement.RegionShift> regions) {
         SharedPlacement placement = this.placements.get(id);
         if (placement == null || !this.modifying.remove(id)) {
             return false;
         }
         placement.place(x, y, z, placement.dimension(), rotation, mirror);
+        placement.setRegions(regions);
         sendFinish(placement);
         return true;
     }

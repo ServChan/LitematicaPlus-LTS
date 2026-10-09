@@ -2,6 +2,7 @@ package org.lts.litematicaplus.placement;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.schematic.Schematic;
+import org.lts.litematicaplus.share.SharedPlacement;
 
 public final class SchematicPlacement {
     public enum LoadState {
@@ -32,6 +34,9 @@ public final class SchematicPlacement {
     private UUID serverId;
     private final Set<String> disabledRegions = new LinkedHashSet<>();
     private final Map<Block, Block> replacements = new LinkedHashMap<>();
+    private final Map<String, RegionPlacement> regionPlacements = new LinkedHashMap<>();
+    private PlacementGrid grid = PlacementGrid.NONE;
+    private List<SharedPlacement.RegionShift> pendingShifts;
     private Schematic schematic;
     private LoadState loadState = LoadState.LOADING;
     private Component error = Component.empty();
@@ -130,6 +135,34 @@ public final class SchematicPlacement {
 
     public Map<Block, Block> replacements() {
         return this.replacements;
+    }
+
+    public Map<String, RegionPlacement> regionPlacements() {
+        return this.regionPlacements;
+    }
+
+    public RegionPlacement regionPlacement(String region) {
+        return this.regionPlacements.getOrDefault(region, RegionPlacement.IDENTITY);
+    }
+
+    public PlacementGrid grid() {
+        return this.grid;
+    }
+
+    public void setGrid(PlacementGrid grid) {
+        this.grid = grid == null ? PlacementGrid.NONE : grid;
+    }
+
+    public List<SharedPlacement.RegionShift> pendingShifts() {
+        return this.pendingShifts;
+    }
+
+    public void setPendingShifts(List<SharedPlacement.RegionShift> shifts) {
+        this.pendingShifts = shifts;
+    }
+
+    public PlacementLayout layout() {
+        return new PlacementLayout(transform(), this.regionPlacements, this.grid);
     }
 
     public Schematic schematic() {

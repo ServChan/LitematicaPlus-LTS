@@ -51,6 +51,64 @@ final class FeaturesSuite {
         pasteRespectsLayer(context, world);
         fillAndReplace(context, world);
         pasteEntitiesOnce(context, world);
+        gridAndMovedRegion(context, world);
+    }
+
+    private static void gridAndMovedRegion(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos origin = BASE.south(36);
+        RegionBuilder base = new RegionBuilder("Base", 0, 0, 0, 1, 1, 1);
+        base.set(0, 0, 0, Blocks.STONE.defaultBlockState());
+        RegionBuilder roof = new RegionBuilder("Roof", 0, 1, 0, 1, 1, 1);
+        roof.set(0, 0, 0, Blocks.GLASS.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "GridRegions";
+        Schematic schematic = new Schematic(metadata, new java.util.LinkedHashMap<>(Map.of("Base", base.build(),
+                "Roof", roof.build())));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/gridregions.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        BlockPos far = origin.offset(6, 2, 0);
+        world.getServer().runCommand("fill " + at(origin) + " " + at(far) + " minecraft:air");
+        world.getServer().runCommand("gamemode creative @p");
+        world.getServer().runCommand("tp @p " + (origin.getX() + 2.5) + " " + (origin.getY() + 1) + " "
+                + (origin.getZ() - 4.5) + " 0 20");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, origin));
+        context.waitFor(client -> placement.schematic() != null, 400);
+        context.runOnClient(client -> {
+            PlacementManager.get().setRegionPlacement(placement, "Roof",
+                    new org.lts.litematicaplus.placement.RegionPlacement(2, -1, 0,
+                            net.minecraft.world.level.block.Rotation.NONE, net.minecraft.world.level.block.Mirror.NONE));
+            PlacementManager.get().setGrid(placement,
+                    new org.lts.litematicaplus.placement.PlacementGrid(0, 1, 0, 0, 0, 0, 0, 0, 0));
+        });
+        context.waitFor(client -> {
+            PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+            return runtime != null && PasteController.upToDate(runtime);
+        }, 400);
+        long blocks = context.computeOnClient(client -> GhostEngine.get().runtime(placement.id()).volume().totalBlocks());
+        context.runOnClient(client -> PasteController.startPaste(client, GhostEngine.get().runtime(placement.id()), true));
+        context.waitFor(client -> !PasteController.active(), 400);
+        world.getConnection().waitForClientboundPackets();
+        boolean[] found = world.getServer().computeOnServer(server -> new boolean[]{
+                server.overworld().getBlockState(origin).is(Blocks.STONE),
+                server.overworld().getBlockState(origin.offset(2, 0, 0)).is(Blocks.GLASS),
+                server.overworld().getBlockState(origin.offset(3, 0, 0)).is(Blocks.STONE),
+                server.overworld().getBlockState(origin.offset(5, 0, 0)).is(Blocks.GLASS),
+                server.overworld().getBlockState(origin.above()).isAir()});
+        context.takeScreenshot("12j_grid_and_region");
+        context.runOnClient(client -> PlacementManager.get().remove(placement));
+        world.getServer().runCommand("fill " + at(origin) + " " + at(far) + " minecraft:air");
+        LitematicaPlusGameTest.require(blocks == 4L, "grid of two copies with two blocks each should hold 4, got " + blocks);
+        for (int i = 0; i < found.length; i++) {
+            LitematicaPlusGameTest.require(found[i], "grid/region paste check " + i + " failed");
+        }
     }
 
     private static int countBlocks(TestSingleplayerContext world, BlockPos from, BlockPos to,
@@ -198,9 +256,13 @@ final class FeaturesSuite {
                 + " 180 10");
         world.getConnection().waitForClientboundPackets();
         context.waitTicks(10);
-        SchematicCapture.Result result = context.computeOnClient(client -> SchematicCapture.capture(client,
+        java.util.concurrent.atomic.AtomicReference<SchematicCapture.Result> capture =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        context.runOnClient(client -> SchematicCapture.capture(client,
                 List.of(new SchematicCapture.Box("Banner", banner.getX(), banner.getY(), banner.getZ(), banner.getX(),
-                        banner.getY(), banner.getZ())), "Banner", "", "").join());
+                        banner.getY(), banner.getZ())), "Banner", "", "").thenAccept(capture::set));
+        context.waitFor(client -> capture.get() != null, 200);
+        SchematicCapture.Result result = capture.get();
         CompoundTag captured = result.schematic().regions().get("Banner").blockEntities().values().stream().findFirst()
                 .orElse(null);
         LitematicaPlusGameTest.require(captured != null && captured.getListOrEmpty("patterns").size() == 2,
