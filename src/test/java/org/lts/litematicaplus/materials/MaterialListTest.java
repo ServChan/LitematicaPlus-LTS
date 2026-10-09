@@ -26,6 +26,17 @@ class MaterialListTest {
     }
 
     @Test
+    void packedStockIsShownAfterThePlus() {
+        MaterialList.Entry loose = new MaterialList.Entry(Items.STONE, 64L, 20L, 30L);
+        assertEquals(0L, loose.packed());
+        assertEquals("30", loose.haveText());
+        MaterialList.Entry boxed = new MaterialList.Entry(Items.STONE, 64L, 20L, 76L, 12L);
+        assertEquals(64L, boxed.packed());
+        assertEquals("12+64", boxed.haveText());
+        assertEquals(0L, boxed.shortfall());
+    }
+
+    @Test
     void ordinaryBlocksMapToTheirItems() {
         assertSame(Items.STONE, MaterialList.itemOf(Blocks.STONE.defaultBlockState()));
         assertSame(Items.TORCH, MaterialList.itemOf(Blocks.WALL_TORCH.defaultBlockState()));

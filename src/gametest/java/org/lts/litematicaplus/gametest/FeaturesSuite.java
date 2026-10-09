@@ -4,22 +4,35 @@ import com.mojang.blaze3d.platform.InputConstants;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BannerPatternLayers;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.render.SpecialArguments;
+import org.lts.litematicaplus.render.SpecialBlocks;
 import org.lts.litematicaplus.schematic.RegionBuilder;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
+import org.lts.litematicaplus.selection.SchematicCapture;
 import org.lts.litematicaplus.tool.InventoryHighlight;
+import org.lts.litematicaplus.tool.PasteController;
+import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.world.LayerRange;
+import org.lts.litematicaplus.world.PlacementVolume;
 
 final class FeaturesSuite {
     private static final BlockPos BASE = new BlockPos(60, -60, 84);
@@ -33,6 +46,102 @@ final class FeaturesSuite {
         igniteCampfire(context, world);
         dirtForGrassAndShovelGuard(context, world);
         hiddenSchematicIsQuiet(context, world);
+        bannerPatternSurvivesCapture(context, world);
+        pasteRespectsLayer(context, world);
+    }
+
+    private static void pasteRespectsLayer(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos origin = BASE.south(18);
+        RegionBuilder builder = new RegionBuilder("LayerPaste", 0, 0, 0, 3, 3, 3);
+        builder.fill(Blocks.STONE.defaultBlockState());
+        Path file = write(context, "LayerPaste", builder);
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(2, 2, 2)) + " minecraft:air");
+        world.getServer().runCommand("gamemode creative @p");
+        world.getServer().runCommand("tp @p " + (origin.getX() + 1.5) + " " + (origin.getY() + 1) + " "
+                + (origin.getZ() - 3.5) + " 0 20");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, origin));
+        context.waitFor(client -> {
+            PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+            return runtime != null && runtime.volume() != null;
+        }, 400);
+        context.runOnClient(client -> {
+            ToolController.get().applyLayer(new LayerRange(LayerRange.Mode.SINGLE, Direction.Axis.Y,
+                    origin.getY() + 1, 0, 0));
+            GhostEngine.get().setClip(new LayerRange.Clip(true, true, origin.getX(), origin.getX() + 1, false, 0, 0));
+            PasteController.startPaste(client, GhostEngine.get().runtime(placement.id()), true);
+        });
+        context.waitFor(client -> !PasteController.active(), 400);
+        world.getConnection().waitForClientboundPackets();
+        int[] counts = world.getServer().computeOnServer(server -> {
+            int inside = 0;
+            int outside = 0;
+            for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(2, 2, 2))) {
+                if (!server.overworld().getBlockState(pos).is(Blocks.STONE)) {
+                    continue;
+                }
+                if (pos.getY() == origin.getY() + 1 && pos.getX() <= origin.getX() + 1) {
+                    inside++;
+                } else {
+                    outside++;
+                }
+            }
+            return new int[]{inside, outside};
+        });
+        context.takeScreenshot("12g_paste_layer");
+        context.runOnClient(client -> {
+            ToolController.get().applyLayer(LayerRange.ALL);
+            GhostEngine.get().setClip(LayerRange.Clip.NONE);
+            PlacementManager.get().remove(placement);
+        });
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(2, 2, 2)) + " minecraft:air");
+        LitematicaPlusGameTest.require(counts[0] == 6 && counts[1] == 0,
+                "paste should fill only the 2x3 cells inside the layer and X bounds, got inside " + counts[0]
+                        + " outside " + counts[1]);
+    }
+
+    private static void bannerPatternSurvivesCapture(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos banner = BASE.south(12);
+        BlockPos copy = banner.east(3);
+        world.getServer().runCommand("setblock " + at(banner) + " minecraft:white_banner[rotation=8]"
+                + "{patterns:[{pattern:\"minecraft:stripe_top\",color:\"red\"},{pattern:\"minecraft:cross\",color:\"blue\"}]}");
+        world.getServer().runCommand("tp @p " + (banner.getX() + 1.5) + " " + banner.getY() + " " + (banner.getZ() + 4.5)
+                + " 180 10");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(10);
+        SchematicCapture.Result result = context.computeOnClient(client -> SchematicCapture.capture(client,
+                List.of(new SchematicCapture.Box("Banner", banner.getX(), banner.getY(), banner.getZ(), banner.getX(),
+                        banner.getY(), banner.getZ())), "Banner", "", "").join());
+        CompoundTag captured = result.schematic().regions().get("Banner").blockEntities().values().stream().findFirst()
+                .orElse(null);
+        LitematicaPlusGameTest.require(captured != null && captured.getListOrEmpty("patterns").size() == 2,
+                "captured banner lost its patterns: " + captured);
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/banner.litematic");
+            try {
+                SchematicIo.write(target, result.schematic());
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, copy));
+        context.waitFor(client -> {
+            PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+            return runtime != null && runtime.volume() != null;
+        }, 400);
+        int layers = context.computeOnClient(client -> {
+            PlacementVolume volume = GhostEngine.get().runtime(placement.id()).volume();
+            BlockState state = GhostEngine.get().schematicStateAt(copy.getX(), copy.getY(), copy.getZ());
+            SpecialBlocks.Entry entry = state == null ? null : SpecialBlocks.get(state);
+            Object argument = entry == null ? null
+                    : SpecialArguments.get(volume, copy.getX(), copy.getY(), copy.getZ(), state, entry.renderer());
+            return argument instanceof BannerPatternLayers patterns ? patterns.layers().size() : -1;
+        });
+        LitematicaPlusGameTest.require(layers == 2, "banner ghost should carry 2 pattern layers, got " + layers);
+        context.waitTicks(10);
+        context.takeScreenshot("12f_banner_pattern_ghost");
+        context.runOnClient(client -> PlacementManager.get().remove(placement));
     }
 
     private static Path write(ClientGameTestContext context, String name, RegionBuilder builder) {

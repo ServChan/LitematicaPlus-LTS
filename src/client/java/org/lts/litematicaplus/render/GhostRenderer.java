@@ -1,5 +1,6 @@
 package org.lts.litematicaplus.render;
 
+import net.minecraft.client.renderer.special.SpecialModelRenderer;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -76,7 +77,7 @@ public final class GhostRenderer {
     private static Object submitFailedLevel;
     private static Object submitFailedModels;
 
-    private record SpecialSlot(SectionSlot slot, BlockState[] palette) {
+    private record SpecialSlot(SectionSlot slot, BlockState[] palette, PlacementVolume volume) {
     }
 
     private GhostRenderer() {
@@ -369,6 +370,12 @@ public final class GhostRenderer {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> void submit(SpecialModelRenderer<T> renderer, Object argument, PoseStack poseStack,
+            SubmitNodeCollector collector) {
+        renderer.submit((T) argument, poseStack, collector, FULL_BRIGHT, OverlayTexture.NO_OVERLAY, false, 0);
+    }
+
     private static void submitSpecials(LevelRenderContext context, GhostEngine engine, LitematicaPlusConfig config,
             Minecraft minecraft) {
         PoseStack poseStack = context.poseStack();
@@ -377,6 +384,7 @@ public final class GhostRenderer {
                 || ExternalMap.hidden()) {
             return;
         }
+        SpecialArguments.beginFrame();
         engine.refreshModels(minecraft);
         CameraRenderState camera = context.levelState().cameraRenderState;
         Vec3 cameraPos = camera.pos;
@@ -401,7 +409,7 @@ public final class GhostRenderer {
                 }
                 boolean ghost = viewAnywhere || slot.chunkLoaded();
                 if ((classify(slot, config, ghost, false) & SHOW_GHOST) != 0) {
-                    SPECIALS.add(new SpecialSlot(slot, palette));
+                    SPECIALS.add(new SpecialSlot(slot, palette, volume));
                 }
             }
         }
@@ -417,18 +425,21 @@ public final class GhostRenderer {
                 if (paletteIndex >= palette.length) {
                     continue;
                 }
-                SpecialBlocks.Entry entry = SpecialBlocks.get(palette[paletteIndex]);
+                BlockState state = palette[paletteIndex];
+                SpecialBlocks.Entry entry = SpecialBlocks.get(state);
                 if (entry == null) {
                     continue;
                 }
+                int x = slot.originX + (index & 15);
+                int y = slot.originY + (index >> 8);
+                int z = slot.originZ + (index >> 4 & 15);
+                Object argument = SpecialArguments.get(special.volume(), x, y, z, state, entry.renderer());
                 poseStack.pushPose();
-                poseStack.translate(slot.originX + (index & 15) - cameraPos.x,
-                        slot.originY + (index >> 8) - cameraPos.y,
-                        slot.originZ + (index >> 4 & 15) - cameraPos.z);
+                poseStack.translate(x - cameraPos.x, y - cameraPos.y, z - cameraPos.z);
                 if (entry.transform() != null) {
                     poseStack.mulPose(entry.transform());
                 }
-                entry.renderer().submit(null, poseStack, collector, FULL_BRIGHT, OverlayTexture.NO_OVERLAY, false, 0);
+                submit(entry.renderer(), argument, poseStack, collector);
                 poseStack.popPose();
                 if (--budget <= 0) {
                     return;

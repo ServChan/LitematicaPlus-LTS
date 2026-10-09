@@ -37,6 +37,7 @@ final class MaterialsView extends TabView {
     private ListPanel<MaterialList.Entry> list;
     private List<MaterialList.Entry> entries = List.of();
     private long totalMissing;
+    private boolean anyPacked;
     private int ticks;
     private int scroll;
     private int columnWidth;
@@ -57,6 +58,9 @@ final class MaterialsView extends TabView {
             return this.status;
         }
         Component summary = tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        if (this.anyPacked) {
+            summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.packed_hint"));
+        }
         if (!EnderChestMemory.counted()) {
             return summary;
         }
@@ -128,13 +132,16 @@ final class MaterialsView extends TabView {
                 this.minecraft.player == null ? null : this.minecraft.player.getInventory(), sort);
         List<MaterialList.Entry> shown = new ArrayList<>();
         long missing = 0L;
+        boolean packed = false;
         for (MaterialList.Entry entry : all) {
             missing += entry.missing();
+            packed |= entry.packed() > 0L;
             if (!hideCompleted || entry.missing() > 0L) {
                 shown.add(entry);
             }
         }
         this.totalMissing = missing;
+        this.anyPacked = packed;
         this.entries = shown;
         this.rowText.clear();
         this.list.setItems(shown);
@@ -249,7 +256,7 @@ final class MaterialsView extends TabView {
     }
 
     private RowText rowText(MaterialList.Entry entry, ItemStack stack, boolean done) {
-        return new RowText(Long.toString(entry.available()), done ? tr("litematicaplus.materials.done").getString()
+        return new RowText(entry.haveText(), done ? tr("litematicaplus.materials.done").getString()
                 : compact(entry.missing(), stack.getMaxStackSize()), Long.toString(entry.total()),
                 stack.getHoverName().getString());
     }

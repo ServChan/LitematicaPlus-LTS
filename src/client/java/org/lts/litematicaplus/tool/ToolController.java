@@ -132,8 +132,13 @@ public final class ToolController {
             Notify.actionBar("litematicaplus.message.paste_rebuilding");
             return;
         }
-        if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.transform() + placement.disabledRegions())) {
-            Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
+        LayerRange layer = GhostEngine.get().layer();
+        if (!confirmed(ToolMode.PASTE, placement.id() + "@" + placement.transform() + placement.disabledRegions() + layer)) {
+            if (layer.unrestricted()) {
+                Notify.actionBar("litematicaplus.message.confirm_paste", placement.name(), runtime.volume().totalBlocks());
+            } else {
+                Notify.actionBar("litematicaplus.message.confirm_paste_layer", placement.name());
+            }
             return;
         }
         PasteController.startPaste(minecraft, runtime);

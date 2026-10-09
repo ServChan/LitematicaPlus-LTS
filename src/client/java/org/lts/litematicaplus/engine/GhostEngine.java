@@ -42,6 +42,7 @@ import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.render.MeshResult;
 import org.lts.litematicaplus.render.SectionJob;
 import org.lts.litematicaplus.render.SectionMesher;
+import org.lts.litematicaplus.render.SpecialArguments;
 import org.lts.litematicaplus.render.SpecialBlocks;
 import org.lts.litematicaplus.render.ExternalMap;
 import org.lts.litematicaplus.render.LodDepth;
@@ -808,6 +809,7 @@ public final class GhostEngine {
             this.modelIdentity = models;
             if (reload) {
                 SpecialBlocks.clear();
+                SpecialArguments.clear();
                 for (PlacementRuntime runtime : this.runtimes.values()) {
                     computeSpecials(runtime);
                 }

@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.compat.InventoryLocks;
 import org.lts.litematicaplus.mixin.MultiPlayerGameModeInvoker;
 
 public final class InventoryHelper {
@@ -35,7 +36,7 @@ public final class InventoryHelper {
 
     public static boolean has(Inventory inventory, Item item, LitematicaPlusConfig config) {
         for (int slot = 0; slot < MAIN_SIZE; slot++) {
-            if (usable(inventory.getItem(slot), item, config.easyPlaceIgnoreItemData)) {
+            if (reachable(slot) && usable(inventory.getItem(slot), item, config.easyPlaceIgnoreItemData)) {
                 return true;
             }
         }
@@ -92,10 +93,14 @@ public final class InventoryHelper {
                 && find(player.getInventory(), stack -> ItemStack.isSameItemSameComponents(stack, wanted)) >= 0;
     }
 
+    private static boolean reachable(int slot) {
+        return slot < HOTBAR_SIZE || !InventoryLocks.locked(slot);
+    }
+
     private static int find(Inventory inventory, Predicate<ItemStack> matches) {
         for (int slot = 0; slot < MAIN_SIZE; slot++) {
             ItemStack stack = inventory.getItem(slot);
-            if (!stack.isEmpty() && matches.test(stack)) {
+            if (!stack.isEmpty() && reachable(slot) && matches.test(stack)) {
                 return slot;
             }
         }
@@ -124,14 +129,15 @@ public final class InventoryHelper {
             return false;
         }
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        int slot = config.lockedHotbarSlots == 0 ? inventory.getSuitableHotbarSlot() : freeHotbarSlot(inventory, config);
+        int slot = config.lockedHotbarSlots == 0 && !InventoryLocks.available() ? inventory.getSuitableHotbarSlot()
+                : freeHotbarSlot(inventory, config);
         if (slot < 0) {
             return false;
         }
         ItemStack displaced = inventory.getItem(slot);
         if (!displaced.isEmpty()) {
-            int free = inventory.getFreeSlot();
-            if (free >= 0 && free < MAIN_SIZE) {
+                int free = inventory.getFreeSlot();
+            if (free >= 0 && free < MAIN_SIZE && !InventoryLocks.locked(free)) {
                 ItemStack moved = displaced.copy();
                 inventory.setItem(free, moved);
                 minecraft.gameMode.handleCreativeModeItemAdd(moved, menuSlot(free));
@@ -147,9 +153,9 @@ public final class InventoryHelper {
     static boolean swapIntoHotbar(Minecraft minecraft, LocalPlayer player, int inventorySlot) {
         Inventory inventory = player.getInventory();
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        int target = config.hotbarSlotLocked(inventory.getSelectedSlot()) ? freeHotbarSlot(inventory, config)
+        int target = hotbarProtected(config, inventory.getSelectedSlot()) ? freeHotbarSlot(inventory, config)
                 : inventory.getSelectedSlot();
-        if (target < 0) {
+        if (target < 0 || !reachable(inventorySlot)) {
             return false;
         }
         select(minecraft, inventory, target);
@@ -168,7 +174,7 @@ public final class InventoryHelper {
         int fallback = -1;
         for (int offset = 0; offset < HOTBAR_SIZE; offset++) {
             int slot = (start + offset) % HOTBAR_SIZE;
-            if (config.hotbarSlotLocked(slot)) {
+            if (hotbarProtected(config, slot)) {
                 continue;
             }
             if (inventory.getItem(slot).isEmpty()) {
@@ -179,6 +185,10 @@ public final class InventoryHelper {
             }
         }
         return fallback;
+    }
+
+    private static boolean hotbarProtected(LitematicaPlusConfig config, int slot) {
+        return config.hotbarSlotLocked(slot) || InventoryLocks.locked(slot);
     }
 
     private static int menuSlot(int inventorySlot) {

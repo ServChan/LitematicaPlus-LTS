@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.server.IntegratedServer;
@@ -24,11 +25,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.GhostSection;
+import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class PasteController {
@@ -57,6 +60,9 @@ public final class PasteController {
         ResourceKey<Level> dimension;
         ClientLevel level;
         final AtomicInteger inFlight = new AtomicInteger();
+        final AtomicLong failed = new AtomicLong();
+        LayerRange layer = LayerRange.ALL;
+        boolean finishing;
         LitematicaPlusConfig.PasteReplace replace;
         boolean withData;
         long changed;
@@ -109,6 +115,7 @@ public final class PasteController {
         PlacementVolume volume = runtime.volume();
         Job created = baseJob(minecraft, useDirect);
         created.volume = volume;
+        created.layer = GhostEngine.get().layer();
         long[] keys = volume.sections().keySet().toLongArray();
         Long[] boxed = new Long[keys.length];
         for (int i = 0; i < keys.length; i++) {
@@ -235,11 +242,16 @@ public final class PasteController {
         if (current.direct && current.inFlight.get() > 0) {
             return;
         }
+        if (current.finishing) {
+            job = null;
+            long failed = current.failed.get();
+            Notify.actionBar(current.direct ? "litematicaplus.message.paste_finished" : "litematicaplus.message.paste_sent",
+                    current.changed - failed, current.skipped + failed);
+            return;
+        }
         try {
-            boolean finished = current.volume != null ? tickPaste(minecraft, current) : tickDelete(minecraft, current);
-            if (finished) {
-                job = null;
-                Notify.actionBar("litematicaplus.message.paste_finished", current.changed, current.skipped);
+            if (current.volume != null ? tickPaste(minecraft, current) : tickDelete(minecraft, current)) {
+                current.finishing = true;
             }
         } catch (RuntimeException exception) {
             job = null;
@@ -276,8 +288,10 @@ public final class PasteController {
             int originX = SectionPos.x(key) << 4;
             int originY = SectionPos.y(key) << 4;
             int originZ = SectionPos.z(key) << 4;
-            if (section == null || !level.hasChunk(originX >> 4, originZ >> 4)) {
-                if (section != null) {
+            boolean inScope = current.layer.unrestricted() || current.layer.intersects(originX, originY, originZ,
+                    originX + 15, originY + 15, originZ + 15);
+            if (section == null || !inScope || !level.hasChunk(originX >> 4, originZ >> 4)) {
+                if (section != null && inScope) {
                     current.skipped += section.solidCount();
                 }
                 current.visited += GhostSection.VOLUME - current.cell;
@@ -289,16 +303,16 @@ public final class PasteController {
             while (current.cell < GhostSection.VOLUME && budget > 0 && scanned < 65536) {
                 int index = current.cell;
                 short value = raw[index];
-                if (value == GhostSection.OUTSIDE) {
+                int x = originX + (index & 15);
+                int y = originY + (index >> 8);
+                int z = originZ + (index >> 4 & 15);
+                if (value == GhostSection.OUTSIDE || !current.layer.contains(x, y, z)) {
                     current.cell++;
                     current.visited++;
                     scanned++;
                     continue;
                 }
                 BlockState state = palette[value & 0xFFFF];
-                int x = originX + (index & 15);
-                int y = originY + (index >> 8);
-                int z = originZ + (index >> 4 & 15);
                 cursor.set(x, y, z);
                 BlockState world = level.getBlockState(cursor);
                 if (current.direct) {
@@ -328,7 +342,7 @@ public final class PasteController {
                 int run = 1;
                 while ((index + run & 15) != 0 && run < 16 - (index & 15)) {
                     short next = raw[index + run];
-                    if (next != value) {
+                    if (next != value || !current.layer.contains(x + run, y, z)) {
                         break;
                     }
                     cursor.set(x + run, y, z);
@@ -435,11 +449,13 @@ public final class PasteController {
         }
         ResourceKey<Level> dimension = owner.dimension;
         AtomicInteger inFlight = owner.inFlight;
+        AtomicLong failed = owner.failed;
         inFlight.incrementAndGet();
         server.execute(() -> {
             try {
                 ServerLevel level = server.getLevel(dimension);
                 if (level == null) {
+                    failed.addAndGet(operations.size());
                     return;
                 }
                 for (Operation operation : operations) {
@@ -456,6 +472,7 @@ public final class PasteController {
                             }
                         }
                     } catch (RuntimeException exception) {
+                        failed.incrementAndGet();
                         LitematicaPlusClient.LOGGER.warn("Could not paste block at {}", operation.pos(), exception);
                     }
                 }

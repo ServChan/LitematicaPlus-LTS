@@ -12,7 +12,8 @@ import org.joml.Matrix4fc;
 import org.lts.litematicaplus.LitematicaPlusClient;
 
 public final class VoxyLod {
-    private static final Bridge BRIDGE = Bridge.resolve();
+    private static Bridge bridge;
+    private static boolean bridgeResolved;
     private static final Matrix4f PROJECTION_VIEW = new Matrix4f();
     private static final Matrix4f TARGET = new Matrix4f();
     private static int lastFrameId = Integer.MIN_VALUE;
@@ -34,13 +35,14 @@ public final class VoxyLod {
             }
             try {
                 MethodHandles.Lookup lookup = MethodHandles.lookup();
-                Class<?> holder = Class.forName("me.cortex.voxy.client.core.IVoxyRenderSystemHolder");
-                Class<?> renderSystem = Class.forName("me.cortex.voxy.client.core.VoxyRenderSystem");
-                Class<?> irisPipeline = Class.forName("me.cortex.voxy.client.core.IrisVoxyRenderPipeline");
-                Class<?> pipelineData = Class.forName("me.cortex.voxy.client.iris.IrisVoxyRenderPipelineData");
-                Class<?> framebuffer = Class.forName("me.cortex.voxy.client.core.rendering.util.DepthFramebuffer");
-                Class<?> texture = Class.forName("me.cortex.voxy.client.core.gl.GlTexture");
-                Class<?> viewport = Class.forName("me.cortex.voxy.client.core.rendering.Viewport");
+                ClassLoader classLoader = VoxyLod.class.getClassLoader();
+                Class<?> holder = Class.forName("me.cortex.voxy.client.core.IVoxyRenderSystemHolder", false, classLoader);
+                Class<?> renderSystem = Class.forName("me.cortex.voxy.client.core.VoxyRenderSystem", false, classLoader);
+                Class<?> irisPipeline = Class.forName("me.cortex.voxy.client.core.IrisVoxyRenderPipeline", false, classLoader);
+                Class<?> pipelineData = Class.forName("me.cortex.voxy.client.iris.IrisVoxyRenderPipelineData", false, classLoader);
+                Class<?> framebuffer = Class.forName("me.cortex.voxy.client.core.rendering.util.DepthFramebuffer", false, classLoader);
+                Class<?> texture = Class.forName("me.cortex.voxy.client.core.gl.GlTexture", false, classLoader);
+                Class<?> viewport = Class.forName("me.cortex.voxy.client.core.rendering.Viewport", false, classLoader);
                 Field pipeline = renderSystem.getDeclaredField("pipeline");
                 pipeline.setAccessible(true);
                 return new Bridge(
@@ -73,51 +75,64 @@ public final class VoxyLod {
     private VoxyLod() {
     }
 
+    private static Bridge bridge() {
+        if (!bridgeResolved) {
+            bridgeResolved = true;
+            bridge = Bridge.resolve();
+        }
+        return bridge;
+    }
+
     public static boolean failed() {
         FabricLoader loader = FabricLoader.getInstance();
-        return loader.isModLoaded("voxy") && loader.isModLoaded("iris") && (BRIDGE == null || failureLogged);
+        return loader.isModLoaded("voxy") && loader.isModLoaded("iris") && GraphicsBackend.openGl()
+                && (bridge() == null || failureLogged);
     }
 
     public static Frame frame() {
-        if (BRIDGE == null) {
+        if (!GraphicsBackend.openGl()) {
+            return null;
+        }
+        Bridge active = bridge();
+        if (active == null) {
             return null;
         }
         try {
-            Object system = (Object) BRIDGE.system().invokeExact();
+            Object system = (Object) active.system().invokeExact();
             if (system == null) {
                 return null;
             }
-            Object pipeline = (Object) BRIDGE.pipeline().invokeExact(system);
-            if (!BRIDGE.irisPipeline().isInstance(pipeline)) {
+            Object pipeline = (Object) active.pipeline().invokeExact(system);
+            if (!active.irisPipeline().isInstance(pipeline)) {
                 return null;
             }
-            Object data = (Object) BRIDGE.data().invokeExact(pipeline);
-            if (data == null || (boolean) BRIDGE.toVanillaDepth().invokeExact(data)) {
+            Object data = (Object) active.data().invokeExact(pipeline);
+            if (data == null || (boolean) active.toVanillaDepth().invokeExact(data)) {
                 return null;
             }
-            Object viewport = (Object) BRIDGE.viewport().invokeExact(system);
+            Object viewport = (Object) active.viewport().invokeExact(system);
             if (viewport == null) {
                 return null;
             }
-            Object framebuffer = (Object) BRIDGE.translucent().invokeExact(pipeline);
-            Object texture = framebuffer == null ? null : (Object) BRIDGE.depthTexture().invokeExact(framebuffer);
+            Object framebuffer = (Object) active.translucent().invokeExact(pipeline);
+            Object texture = framebuffer == null ? null : (Object) active.depthTexture().invokeExact(framebuffer);
             if (texture == null) {
                 return null;
             }
-            int id = (int) BRIDGE.textureId().invokeExact(texture);
+            int id = (int) active.textureId().invokeExact(texture);
             if (id == 0) {
                 return null;
             }
-            int frameId = (int) BRIDGE.frameId().invokeExact(viewport);
+            int frameId = (int) active.frameId().invokeExact(viewport);
             if (frameId == lastFrameId && viewport == lastViewport && lastFrame != null) {
                 if (lastFrame.depthTexture() != id) {
                     lastFrame = new Frame(id, PROJECTION_VIEW, TARGET);
                 }
                 return lastFrame;
             }
-            if (!((Object) BRIDGE.projectionView().invokeExact(viewport) instanceof Matrix4fc matrix)
-                    || !((Object) BRIDGE.vanillaProjection().invokeExact(viewport) instanceof Matrix4fc projection)
-                    || !((Object) BRIDGE.modelView().invokeExact(viewport) instanceof Matrix4fc modelView)) {
+            if (!((Object) active.projectionView().invokeExact(viewport) instanceof Matrix4fc matrix)
+                    || !((Object) active.vanillaProjection().invokeExact(viewport) instanceof Matrix4fc projection)
+                    || !((Object) active.modelView().invokeExact(viewport) instanceof Matrix4fc modelView)) {
                 return null;
             }
             lastFrameId = frameId;

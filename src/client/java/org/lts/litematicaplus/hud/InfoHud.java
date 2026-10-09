@@ -136,7 +136,7 @@ public final class InfoHud {
                 break;
             }
             ItemStack stack = stackOf(entry.item());
-            String count = entry.missing() + " / " + entry.available();
+            String count = entry.missing() + " / " + entry.haveText();
             int nameWidth = WIDTH - PADDING * 2 - 14 - font.width(count) - 6;
             top.add(new MaterialRow(stack, font.plainSubstrByWidth(stack.getHoverName().getString(), nameWidth), count,
                     entry.available() >= entry.missing()));

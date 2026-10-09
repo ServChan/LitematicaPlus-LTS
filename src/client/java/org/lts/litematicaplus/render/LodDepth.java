@@ -125,7 +125,7 @@ public final class LodDepth {
     public static GpuTextureView merge(RenderTarget target, VoxyLod.Frame frame) {
         GpuTextureView fallback = target.getDepthTextureView();
         GpuTexture depth = target.getDepthTexture();
-        if (frame == null || failed || depth == null || !(depth instanceof GlTexture)) {
+        if (frame == null || failed || depth == null || !GraphicsBackend.openGl() || !(depth instanceof GlTexture)) {
             return fallback;
         }
         try {
