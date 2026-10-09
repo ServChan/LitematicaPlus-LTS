@@ -22,6 +22,7 @@ import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.preview.PreviewService;
+import org.lts.litematicaplus.schematic.SchematicExport;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
 import org.lts.litematicaplus.util.Notify;
@@ -39,6 +40,11 @@ final class SchematicsView extends TabView {
 
     private ListPanel<Entry> list;
     private FlatButton placeButton;
+    private FlatButton exportSponge;
+    private FlatButton exportStructure;
+    private Component status;
+    private int statusTicks;
+    private boolean exporting;
     private List<Entry> entries = List.of();
     private boolean loading;
     private int request;
@@ -57,6 +63,9 @@ final class SchematicsView extends TabView {
 
     @Override
     Component summary() {
+        if (this.status != null) {
+            return this.status;
+        }
         Path root = PlacementManager.schematicsDirectory();
         Path directory = directory();
         String relative = directory.startsWith(root) ? root.relativize(directory).toString().replace('\\', '/') : "";
@@ -91,7 +100,13 @@ final class SchematicsView extends TabView {
                 .empty(tr("litematicaplus.schematics.empty_title"), tr("litematicaplus.schematics.empty_hint")));
         int buttonY = this.top + this.height - Theme.CONTROL_HEIGHT;
         int half = (this.detailWidth - Theme.GAP) / 2;
-        this.placeButton = add(FlatButton.primary(this.detailX, buttonY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
+        int exportY = buttonY - Theme.CONTROL_HEIGHT - 4;
+        this.exportSponge = add(FlatButton.secondary(this.detailX, exportY, half,
+                tr("litematicaplus.schematics.export_sponge"), button -> export(SchematicExport.Format.SPONGE)));
+        this.exportStructure = add(FlatButton.secondary(this.detailX + half + Theme.GAP, exportY,
+                this.detailWidth - half - Theme.GAP, tr("litematicaplus.schematics.export_structure"),
+                button -> export(SchematicExport.Format.STRUCTURE)));
+        this.placeButton = add(FlatButton.primary(this.detailX, exportY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
                 tr("litematicaplus.schematics.place"), button -> place()));
         add(FlatButton.secondary(this.detailX, buttonY, half, tr("litematicaplus.schematics.open_folder"),
                 button -> openFolder()));
@@ -100,7 +115,7 @@ final class SchematicsView extends TabView {
                     PreviewService.retryFailed();
                     reload();
                 }));
-        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 2;
+        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 3;
         this.previewSide = previews ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
         this.preview = null;
         if (this.previewSide >= 64) {
@@ -120,6 +135,11 @@ final class SchematicsView extends TabView {
     private void updateButtons() {
         if (this.placeButton != null) {
             this.placeButton.active = this.selected != null && !this.selected.directory() && this.minecraft.player != null;
+        }
+        boolean file = this.selected != null && !this.selected.directory() && !this.exporting;
+        if (this.exportSponge != null) {
+            this.exportSponge.active = file;
+            this.exportStructure.active = file;
         }
     }
 
@@ -272,6 +292,51 @@ final class SchematicsView extends TabView {
         this.minecraft.gui.setScreen(new PlacementEditorScreen(null, placement));
     }
 
+    @Override
+    void tick() {
+        if (this.statusTicks > 0 && --this.statusTicks == 0) {
+            this.status = null;
+        }
+    }
+
+    private void status(Component message) {
+        this.status = message;
+        this.statusTicks = 160;
+    }
+
+    private void export(SchematicExport.Format format) {
+        Entry entry = this.selected;
+        if (entry == null || entry.directory() || this.exporting) {
+            return;
+        }
+        this.exporting = true;
+        updateButtons();
+        status(tr("litematicaplus.schematics.exporting", entry.name()));
+        try {
+            Workers.io().execute(() -> {
+                Component message;
+                try {
+                    Path target = SchematicIo.export(entry.path(), format);
+                    message = tr("litematicaplus.schematics.exported", target.getFileName().toString());
+                } catch (IOException | RuntimeException exception) {
+                    LitematicaPlusClient.LOGGER.warn("Could not export {}", entry.path(), exception);
+                    message = tr("litematicaplus.schematics.export_failed", Notify.describe(exception));
+                }
+                Component result = message;
+                this.minecraft.execute(() -> {
+                    this.exporting = false;
+                    status(result);
+                    updateButtons();
+                    reload();
+                });
+            });
+        } catch (RejectedExecutionException exception) {
+            this.exporting = false;
+            status(tr("litematicaplus.schematics.export_failed", Notify.describe(exception)));
+            updateButtons();
+        }
+    }
+
     private void openFolder() {
         try {
             Blaze3D.openPath(directory());
@@ -316,7 +381,7 @@ final class SchematicsView extends TabView {
 
     @Override
     void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 2;
+        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 3;
         Ui.panel(graphics, this.detailX, this.top, this.detailWidth, panelHeight);
         int x = this.detailX + 8;
         int inner = this.detailWidth - 16;

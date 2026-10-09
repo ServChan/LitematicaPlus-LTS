@@ -27,6 +27,7 @@ import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
 import org.lts.litematicaplus.selection.SchematicCapture;
+import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.tool.PasteController;
 import org.lts.litematicaplus.tool.ToolController;
@@ -48,6 +49,94 @@ final class FeaturesSuite {
         hiddenSchematicIsQuiet(context, world);
         bannerPatternSurvivesCapture(context, world);
         pasteRespectsLayer(context, world);
+        fillAndReplace(context, world);
+        pasteEntitiesOnce(context, world);
+    }
+
+    private static int countBlocks(TestSingleplayerContext world, BlockPos from, BlockPos to,
+            net.minecraft.world.level.block.Block block) {
+        return world.getServer().computeOnServer(server -> {
+            int count = 0;
+            for (BlockPos pos : BlockPos.betweenClosed(from, to)) {
+                if (server.overworld().getBlockState(pos).is(block)) {
+                    count++;
+                }
+            }
+            return count;
+        });
+    }
+
+    private static void fillAndReplace(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos from = BASE.south(24);
+        BlockPos to = from.offset(2, 1, 2);
+        world.getServer().runCommand("fill " + at(from) + " " + at(to) + " minecraft:air");
+        world.getServer().runCommand("gamemode creative @p");
+        world.getServer().runCommand("tp @p " + (from.getX() + 1.5) + " " + (from.getY() + 1) + " "
+                + (from.getZ() - 3.5) + " 0 20");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(5);
+        context.runOnClient(client -> {
+            SelectionManager.get().clear();
+            SelectionManager.get().setCorner(true, from);
+            SelectionManager.get().setCorner(false, to);
+            PasteController.startFill(client, SelectionManager.get().completeBoxes(),
+                    Blocks.COBBLESTONE.defaultBlockState(), null);
+        });
+        context.waitFor(client -> !PasteController.active(), 400);
+        world.getConnection().waitForClientboundPackets();
+        int filled = countBlocks(world, from, to, Blocks.COBBLESTONE);
+        world.getServer().runCommand("setblock " + at(from) + " minecraft:dirt");
+        context.runOnClient(client -> PasteController.startFill(client, SelectionManager.get().completeBoxes(),
+                Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE));
+        context.waitFor(client -> !PasteController.active(), 400);
+        world.getConnection().waitForClientboundPackets();
+        int replaced = countBlocks(world, from, to, Blocks.STONE_BRICKS);
+        int keptDirt = countBlocks(world, from, from, Blocks.DIRT);
+        context.takeScreenshot("12h_fill_replace");
+        context.runOnClient(client -> SelectionManager.get().clear());
+        world.getServer().runCommand("fill " + at(from) + " " + at(to) + " minecraft:air");
+        LitematicaPlusGameTest.require(filled == 18, "fill should place 18 cobblestone, got " + filled);
+        LitematicaPlusGameTest.require(replaced == 17 && keptDirt == 1,
+                "replace should turn 17 cobblestone into bricks and keep the dirt, got " + replaced + " / " + keptDirt);
+    }
+
+    private static void pasteEntitiesOnce(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos origin = BASE.south(30);
+        RegionBuilder builder = new RegionBuilder("Stand", 0, 0, 0, 2, 1, 2);
+        builder.set(0, 0, 0, Blocks.STONE.defaultBlockState());
+        CompoundTag stand = new CompoundTag();
+        stand.putString("id", "minecraft:armor_stand");
+        net.minecraft.nbt.ListTag pos = new net.minecraft.nbt.ListTag();
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(1.5));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(0.0));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(1.5));
+        stand.put("Pos", pos);
+        builder.entity(stand);
+        Path file = write(context, "Stand", builder);
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(1, 1, 1)) + " minecraft:air");
+        world.getServer().runCommand("kill @e[type=minecraft:armor_stand]");
+        world.getServer().runCommand("tp @p " + (origin.getX() + 1.0) + " " + (origin.getY() + 1) + " "
+                + (origin.getZ() - 3.5) + " 0 20");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, origin));
+        context.waitFor(client -> {
+            PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+            return runtime != null && runtime.volume() != null;
+        }, 400);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            context.runOnClient(client -> PasteController.startPaste(client, GhostEngine.get().runtime(placement.id()), true));
+            context.waitFor(client -> !PasteController.active(), 400);
+            world.getConnection().waitForClientboundPackets();
+        }
+        int stands = world.getServer().computeOnServer(server -> server.overworld().getEntities(
+                (net.minecraft.world.entity.Entity) null, new net.minecraft.world.phys.AABB(origin).inflate(3.0),
+                entity -> "minecraft:armor_stand".equals(net.minecraft.world.entity.EntityType.getKey(entity.getType())
+                        .toString())).size());
+        context.takeScreenshot("12i_paste_entities");
+        context.runOnClient(client -> PlacementManager.get().remove(placement));
+        world.getServer().runCommand("kill @e[type=minecraft:armor_stand]");
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(1, 1, 1)) + " minecraft:air");
+        LitematicaPlusGameTest.require(stands == 1, "two pastes should leave exactly one armor stand, got " + stands);
     }
 
     private static void pasteRespectsLayer(ClientGameTestContext context, TestSingleplayerContext world) {

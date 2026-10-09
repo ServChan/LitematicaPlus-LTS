@@ -23,7 +23,8 @@ public final class SchematicIo {
 
     public static boolean isSupported(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.endsWith(LITEMATIC_EXTENSION) || name.endsWith(".nbt") || name.endsWith(".schem");
+        return name.endsWith(LITEMATIC_EXTENSION) || name.endsWith(".nbt") || name.endsWith(".schem")
+                || name.endsWith(".schematic");
     }
 
     public static String baseName(Path path) {
@@ -44,6 +45,8 @@ public final class SchematicIo {
         try {
             if (root.contains("Regions") && root.contains("Version")) {
                 schematic = LitematicCodec.read(root);
+            } else if (McEditCodec.matches(root)) {
+                schematic = McEditCodec.read(root, fallback);
             } else if (SpongeCodec.matches(root)) {
                 schematic = SpongeCodec.read(root, fallback);
             } else if (VanillaStructureCodec.matches(root)) {
@@ -65,7 +68,7 @@ public final class SchematicIo {
         if (!name.endsWith(LITEMATIC_EXTENSION)) {
             SchematicMetadata metadata = new SchematicMetadata();
             metadata.name = baseName(path);
-            metadata.format = name.endsWith(".schem") ? "sponge" : "structure";
+            metadata.format = name.endsWith(".schem") ? "sponge" : name.endsWith(".schematic") ? "mcedit" : "structure";
             return metadata;
         }
         CollectFields visitor = new CollectFields(
@@ -89,13 +92,29 @@ public final class SchematicIo {
     }
 
     public static void write(Path path, Schematic schematic) throws IOException {
+        SchematicExport.Format format = SchematicExport.Format.of(path.getFileName().toString());
+        writeRoot(path, format == null ? LitematicCodec.write(schematic) : SchematicExport.encode(schematic, format));
+    }
+
+    public static Path export(Path source, SchematicExport.Format format) throws IOException {
+        Schematic schematic = read(source);
+        String base = baseName(source);
+        Path target = source.resolveSibling(base + format.extension());
+        for (int suffix = 2; Files.exists(target); suffix++) {
+            target = source.resolveSibling(base + "_" + suffix + format.extension());
+        }
+        write(target, schematic);
+        return target;
+    }
+
+    private static void writeRoot(Path path, CompoundTag root) throws IOException {
         Path parent = path.toAbsolutePath().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
         }
         Path temp = path.resolveSibling(path.getFileName() + ".tmp");
         try {
-            NbtIo.writeCompressed(LitematicCodec.write(schematic), temp);
+            NbtIo.writeCompressed(root, temp);
             AtomicFilePersistence.replace(temp, path);
         } finally {
             Files.deleteIfExists(temp);

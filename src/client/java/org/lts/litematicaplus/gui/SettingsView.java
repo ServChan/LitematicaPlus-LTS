@@ -246,6 +246,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
                 rows.add(this::pasteReplaceRow);
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
+                rows.add(toggle("paste_entities", c -> c.pasteEntities, (c, v) -> c.pasteEntities = v));
                 rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
                         v -> this.working.pasteCommandsPerTick = v, 1, 16, 1));

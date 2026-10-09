@@ -144,6 +144,7 @@ public final class LitematicaPlusConfig {
     public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
+    public boolean pasteEntities = true;
     public boolean syncmaticaEnabled = true;
     public String schematicsDirectory = "schematics";
     public String defaultAuthor = "";

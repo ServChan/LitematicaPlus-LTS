@@ -12,7 +12,10 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lts.litematicaplus.LitematicaPlusConfig;
@@ -38,6 +41,8 @@ public final class ToolController {
     private ToolMode armedMode;
     private String armedFingerprint = "";
     private int armedTicks;
+    private BlockState fillState;
+    private Block replaceFrom;
     private String toolItemId = "";
     private Item toolItem = Items.AIR;
 
@@ -54,6 +59,24 @@ public final class ToolController {
 
     public void setMode(ToolMode next) {
         this.mode = next == null ? ToolMode.AREA_SELECTION : next;
+        disarm();
+    }
+
+    public BlockState fillState() {
+        return this.fillState;
+    }
+
+    public Block replaceFrom() {
+        return this.replaceFrom;
+    }
+
+    public void setFillState(BlockState state) {
+        this.fillState = state;
+        disarm();
+    }
+
+    public void setReplaceFrom(Block block) {
+        this.replaceFrom = block;
         disarm();
     }
 
@@ -115,7 +138,7 @@ public final class ToolController {
             case AREA_SELECTION -> setCorner(minecraft, true);
             case PLACEMENT -> movePlacement(minecraft);
             case PASTE -> pasteClick(minecraft);
-            case DELETE -> deleteClick(minecraft);
+            case FILL, REPLACE, DELETE -> areaClick(minecraft);
         }
         return true;
     }
@@ -144,7 +167,7 @@ public final class ToolController {
         PasteController.startPaste(minecraft, runtime);
     }
 
-    private void deleteClick(Minecraft minecraft) {
+    private void areaClick(Minecraft minecraft) {
         List<AreaBox> boxes = new ArrayList<>();
         long volume = 0L;
         for (AreaBox box : SelectionManager.get().boxes()) {
@@ -161,16 +184,32 @@ public final class ToolController {
             Notify.actionBar("litematicaplus.message.delete_too_large", volume, PasteController.MAX_DELETE_VOLUME);
             return;
         }
-        StringBuilder fingerprint = new StringBuilder();
+        BlockState fill = this.mode == ToolMode.DELETE ? Blocks.AIR.defaultBlockState() : this.fillState;
+        Block from = this.mode == ToolMode.REPLACE ? this.replaceFrom : null;
+        if (fill == null) {
+            Notify.actionBar("litematicaplus.message.fill_no_block");
+            return;
+        }
+        if (this.mode == ToolMode.REPLACE && from == null) {
+            Notify.actionBar("litematicaplus.message.replace_no_source");
+            return;
+        }
+        StringBuilder fingerprint = new StringBuilder().append(fill).append('|').append(from).append('|');
         for (AreaBox box : boxes) {
             fingerprint.append(box.minX()).append(',').append(box.minY()).append(',').append(box.minZ()).append(':')
                     .append(box.maxX()).append(',').append(box.maxY()).append(',').append(box.maxZ()).append(';');
         }
-        if (!confirmed(ToolMode.DELETE, fingerprint.toString())) {
-            Notify.actionBar("litematicaplus.message.confirm_delete", boxes.size(), volume);
+        if (!confirmed(this.mode, fingerprint.toString())) {
+            switch (this.mode) {
+                case FILL -> Notify.actionBar("litematicaplus.message.confirm_fill", boxes.size(), volume,
+                        fill.getBlock().getName());
+                case REPLACE -> Notify.actionBar("litematicaplus.message.confirm_replace", boxes.size(), volume,
+                        from.getName(), fill.getBlock().getName());
+                default -> Notify.actionBar("litematicaplus.message.confirm_delete", boxes.size(), volume);
+            }
             return;
         }
-        PasteController.startDelete(minecraft, boxes);
+        PasteController.startFill(minecraft, boxes, fill, from);
     }
 
     private boolean confirmed(ToolMode wanted, String fingerprint) {
@@ -209,7 +248,7 @@ public final class ToolController {
         switch (this.mode) {
             case AREA_SELECTION -> setCorner(minecraft, false);
             case PLACEMENT -> rotatePlacement();
-            case PASTE, DELETE -> {
+            case PASTE, FILL, REPLACE, DELETE -> {
                 disarm();
                 PasteController.cancel();
             }
@@ -219,10 +258,30 @@ public final class ToolController {
 
     public boolean onPick(Minecraft minecraft) {
         if (holdingTool(minecraft)) {
-            cycleMode(!minecraft.hasShiftDown());
+            if (minecraft.hasAltDown() && (this.mode == ToolMode.FILL || this.mode == ToolMode.REPLACE)) {
+                pickFillBlock(minecraft, this.mode == ToolMode.REPLACE && minecraft.hasShiftDown());
+            } else {
+                cycleMode(!minecraft.hasShiftDown());
+            }
             return true;
         }
         return EasyPlace.onPick(minecraft);
+    }
+
+    private void pickFillBlock(Minecraft minecraft, boolean source) {
+        HitResult hit = minecraft.player.pick(TARGET_RANGE, 1.0F, false);
+        if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) {
+            Notify.actionBar("litematicaplus.message.fill_look_at_block");
+            return;
+        }
+        BlockState state = minecraft.level.getBlockState(blockHit.getBlockPos());
+        if (source) {
+            setReplaceFrom(state.getBlock());
+            Notify.actionBar("litematicaplus.message.replace_from_set", state.getBlock().getName());
+        } else {
+            setFillState(state);
+            Notify.actionBar("litematicaplus.message.fill_block_set", state.getBlock().getName());
+        }
     }
 
     public boolean onScroll(Minecraft minecraft, double amount) {
@@ -251,7 +310,7 @@ public final class ToolController {
         }
         Direction direction = Direction.getApproximateNearest(minecraft.player.getViewVector(1.0F));
         int step = Math.max(-8, Math.min(8, steps));
-        if (this.mode == ToolMode.AREA_SELECTION || this.mode == ToolMode.DELETE) {
+        if (this.mode == ToolMode.AREA_SELECTION || this.mode.editsArea()) {
             boolean sneaking = minecraft.player.isShiftKeyDown();
             SelectionManager.get().nudge(true, !sneaking, direction, step);
         } else {

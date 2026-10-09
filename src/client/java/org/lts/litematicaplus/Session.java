@@ -108,8 +108,7 @@ public final class Session {
             GhostEngine.get().setClip(new LayerRange.Clip(data.layer.clipEnabled, data.layer.clipX, data.layer.clipMinX,
                     data.layer.clipMaxX, data.layer.clipZ, data.layer.clipMinZ, data.layer.clipMaxZ));
             ToolMode restored = parse(ToolMode.class, data.toolMode, ToolMode.AREA_SELECTION);
-            ToolController.get().setMode(restored == ToolMode.PASTE || restored == ToolMode.DELETE
-                    ? ToolMode.AREA_SELECTION : restored);
+            ToolController.get().setMode(restored.changesWorld() ? ToolMode.AREA_SELECTION : restored);
         } finally {
             restoring = false;
             dirty = false;

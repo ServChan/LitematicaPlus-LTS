@@ -13,6 +13,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
@@ -48,6 +50,7 @@ public final class InfoHud {
     private static final TextMemo LAYER = new TextMemo();
     private static final TextMemo SELECTION = new TextMemo();
     private static final TextMemo PASTE = new TextMemo();
+    private static final TextMemo FILL = new TextMemo();
     private static final TextMemo TUNING = new TextMemo();
     private static final TextMemo RENDER_FAILED = new TextMemo();
     private static final TextMemo DIAG_SECTIONS = new TextMemo();
@@ -151,6 +154,17 @@ public final class InfoHud {
         return memo.stale(ref, a, b, c) ? memo.set(font.plainSubstrByWidth(make.get().getString(), TEXT_WIDTH)) : memo.text();
     }
 
+    private static Component fillText(ToolMode mode) {
+        BlockState fill = ToolController.get().fillState();
+        Component fillName = fill == null ? Component.translatable("litematicaplus.hud.fill_unset") : fill.getBlock().getName();
+        if (mode != ToolMode.REPLACE) {
+            return Component.translatable("litematicaplus.hud.fill", fillName);
+        }
+        Block from = ToolController.get().replaceFrom();
+        return Component.translatable("litematicaplus.hud.replace",
+                from == null ? Component.translatable("litematicaplus.hud.replace_unset") : from.getName(), fillName);
+    }
+
     private static String text(TextMemo memo, Font font, String key) {
         return text(memo, font, key, 0L, 0L, 0L, () -> Component.translatable(key));
     }
@@ -192,6 +206,11 @@ public final class InfoHud {
             lines++;
         }
         if (box != null && !box.isEmpty()) {
+            lines++;
+        }
+        ToolMode toolMode = ToolController.get().mode();
+        boolean fillLine = tool && (toolMode == ToolMode.FILL || toolMode == ToolMode.REPLACE);
+        if (fillLine) {
             lines++;
         }
         if (PasteController.active()) {
@@ -245,6 +264,12 @@ public final class InfoHud {
             graphics.text(font, text(SELECTION, font, box, size, box.name().hashCode(), 0L,
                     () -> Component.translatable("litematicaplus.hud.selection", box.name(), box.sizeX(), box.sizeY(),
                             box.sizeZ())), textX, cursor, Theme.TEXT_DIM, false);
+            cursor += LINE;
+        }
+        if (fillLine) {
+            graphics.text(font, text(FILL, font, toolMode, System.identityHashCode(ToolController.get().fillState()),
+                    System.identityHashCode(ToolController.get().replaceFrom()), 0L, () -> fillText(toolMode)),
+                    textX, cursor, Theme.TEXT_DIM, false);
             cursor += LINE;
         }
         if (PasteController.active()) {

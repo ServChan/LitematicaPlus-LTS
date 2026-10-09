@@ -11,23 +11,40 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntitySpawnRequest;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.placement.PlacementTransform;
+import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.BlockStateNbt;
+import org.lts.litematicaplus.schematic.Schematic;
+import org.lts.litematicaplus.schematic.SchematicRegion;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.GhostSection;
@@ -36,6 +53,7 @@ import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class PasteController {
     public static final long MAX_DELETE_VOLUME = 64L * 1024L * 1024L;
+    private static final int MAX_PASTED_ENTITIES = 4096;
     private static final int DIRECT_BLOCKS_PER_TICK = 4096;
     private static final int DIRECT_DELETE_BLOCKS_PER_TICK = 16384;
     private static final int MAX_COMMAND_LENGTH = 255;
@@ -48,12 +66,17 @@ public final class PasteController {
     private record Operation(BlockPos pos, BlockState state, CompoundTag data) {
     }
 
+    private record EntityPaste(CompoundTag tag, double x, double y, double z, Rotation rotation, Mirror mirror) {
+    }
+
     private static final class Job {
         PlacementVolume volume;
         long[] keys = new long[0];
         int keyIndex;
         int cell;
         ArrayDeque<int[]> deleteBoxes = new ArrayDeque<>();
+        BlockState fillState = Blocks.AIR.defaultBlockState();
+        Block replaceFrom;
         boolean direct;
         boolean privileged;
         int commandCooldown;
@@ -62,6 +85,7 @@ public final class PasteController {
         final AtomicInteger inFlight = new AtomicInteger();
         final AtomicLong failed = new AtomicLong();
         LayerRange layer = LayerRange.ALL;
+        List<EntityPaste> entities = List.of();
         boolean finishing;
         LitematicaPlusConfig.PasteReplace replace;
         boolean withData;
@@ -116,6 +140,9 @@ public final class PasteController {
         Job created = baseJob(minecraft, useDirect);
         created.volume = volume;
         created.layer = GhostEngine.get().layer();
+        if (useDirect && LitematicaPlusConfig.current().pasteEntities) {
+            created.entities = entitiesOf(runtime.placement(), volume, created.layer);
+        }
         long[] keys = volume.sections().keySet().toLongArray();
         Long[] boxed = new Long[keys.length];
         for (int i = 0; i < keys.length; i++) {
@@ -143,6 +170,10 @@ public final class PasteController {
     }
 
     public static void startDelete(Minecraft minecraft, List<AreaBox> boxes) {
+        startFill(minecraft, boxes, Blocks.AIR.defaultBlockState(), null);
+    }
+
+    public static void startFill(Minecraft minecraft, List<AreaBox> boxes, BlockState state, Block replaceFrom) {
         boolean direct = minecraft.hasSingleplayerServer();
         if (!allowed(minecraft, direct, "fill")) {
             return;
@@ -164,6 +195,8 @@ public final class PasteController {
             return;
         }
         Job created = baseJob(minecraft, direct);
+        created.fillState = state;
+        created.replaceFrom = replaceFrom;
         long total = 0L;
         for (AreaBox box : complete) {
             for (int[] part : split(box)) {
@@ -173,7 +206,13 @@ public final class PasteController {
         }
         created.total = total;
         job = created;
-        Notify.actionBar("litematicaplus.message.delete_started");
+        if (replaceFrom != null) {
+            Notify.actionBar("litematicaplus.message.replace_started", replaceFrom.getName(), state.getBlock().getName());
+        } else if (state.isAir()) {
+            Notify.actionBar("litematicaplus.message.delete_started");
+        } else {
+            Notify.actionBar("litematicaplus.message.fill_started", state.getBlock().getName());
+        }
         if (!direct && !created.privileged) {
             Notify.chat(Component.translatable("litematicaplus.message.paste_slow"));
         }
@@ -251,6 +290,10 @@ public final class PasteController {
         }
         try {
             if (current.volume != null ? tickPaste(minecraft, current) : tickDelete(minecraft, current)) {
+                if (!current.entities.isEmpty()) {
+                    dispatchEntities(minecraft, current, current.entities);
+                    current.entities = List.of();
+                }
                 current.finishing = true;
             }
         } catch (RuntimeException exception) {
@@ -404,7 +447,10 @@ public final class PasteController {
         int commands = current.direct ? 0 : Math.min(1, commandBudget(current, 1, FILL_COMMAND_INTERVAL));
         int blockBudget = DIRECT_DELETE_BLOCKS_PER_TICK;
         List<Operation> operations = current.direct ? new ArrayList<>() : null;
-        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockState fill = current.fillState;
+        Block from = current.replaceFrom;
+        String text = BlockStateNbt.format(fill);
+        String mode = from == null ? " strict" : " replace " + BuiltInRegistries.BLOCK.getKey(from);
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int scannedBoxes = 0;
         while (!current.deleteBoxes.isEmpty() && (current.direct ? blockBudget > 0 && scannedBoxes < 4 : commands > 0)) {
@@ -416,8 +462,13 @@ public final class PasteController {
                 continue;
             }
             if (!current.direct) {
-                minecraft.player.connection.sendCommand("fill " + box[0] + " " + box[1] + " " + box[2] + " "
-                        + box[3] + " " + box[4] + " " + box[5] + " minecraft:air strict");
+                String command = "fill " + box[0] + " " + box[1] + " " + box[2] + " " + box[3] + " " + box[4] + " "
+                        + box[5] + " " + text + mode;
+                if (command.length() > MAX_COMMAND_LENGTH) {
+                    current.skipped += volume;
+                    continue;
+                }
+                minecraft.player.connection.sendCommand(command);
                 current.changed += volume;
                 commands--;
                 continue;
@@ -427,8 +478,9 @@ public final class PasteController {
                 for (int z = box[2]; z <= box[5]; z++) {
                     for (int x = box[0]; x <= box[3]; x++) {
                         cursor.set(x, y, z);
-                        if (!level.getBlockState(cursor).isAir()) {
-                            operations.add(new Operation(cursor.immutable(), air, null));
+                        BlockState world = level.getBlockState(cursor);
+                        if (world != fill && (from == null ? !(fill.isAir() && world.isAir()) : world.is(from))) {
+                            operations.add(new Operation(cursor.immutable(), fill, null));
                             blockBudget--;
                         }
                     }
@@ -440,6 +492,97 @@ public final class PasteController {
             dispatch(minecraft, current, operations);
         }
         return current.deleteBoxes.isEmpty();
+    }
+
+    static List<EntityPaste> entitiesOf(SchematicPlacement placement, PlacementVolume volume, LayerRange layer) {
+        Schematic schematic = placement.schematic();
+        if (schematic == null) {
+            return List.of();
+        }
+        PlacementTransform transform = volume.transform();
+        int dataVersion = schematic.metadata().dataVersion;
+        List<EntityPaste> result = new ArrayList<>();
+        for (SchematicRegion region : schematic.regions().values()) {
+            if (placement.disabledRegions().contains(region.name())) {
+                continue;
+            }
+            for (CompoundTag tag : region.entities()) {
+                if (result.size() >= MAX_PASTED_ENTITIES) {
+                    return result;
+                }
+                ListTag position = tag.getListOrEmpty("Pos");
+                if (position.size() < 3 || tag.getStringOr("id", "").isEmpty()) {
+                    continue;
+                }
+                Vec3 world = transform.worldPoint(region.posX() + position.getDoubleOr(0, 0.0),
+                        region.posY() + position.getDoubleOr(1, 0.0), region.posZ() + position.getDoubleOr(2, 0.0));
+                if (!layer.contains(Mth.floor(world.x), Mth.floor(world.y), Mth.floor(world.z))) {
+                    continue;
+                }
+                result.add(new EntityPaste(BlockStateNbt.fixEntity(tag.copy(), dataVersion), world.x, world.y, world.z,
+                        transform.rotation(), transform.mirror()));
+            }
+        }
+        return result;
+    }
+
+    private static void dispatchEntities(Minecraft minecraft, Job owner, List<EntityPaste> entities) {
+        IntegratedServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            return;
+        }
+        ResourceKey<Level> dimension = owner.dimension;
+        AtomicInteger inFlight = owner.inFlight;
+        AtomicLong failed = owner.failed;
+        owner.changed += entities.size();
+        inFlight.incrementAndGet();
+        server.execute(() -> {
+            try {
+                ServerLevel level = server.getLevel(dimension);
+                if (level == null) {
+                    failed.addAndGet(entities.size());
+                    return;
+                }
+                for (EntityPaste paste : entities) {
+                    if (!spawn(level, paste)) {
+                        failed.incrementAndGet();
+                    }
+                }
+            } finally {
+                inFlight.decrementAndGet();
+            }
+        });
+    }
+
+    private static boolean spawn(ServerLevel level, EntityPaste paste) {
+        try {
+            String id = paste.tag().getStringOr("id", "");
+            AABB around = new AABB(paste.x() - 0.5, paste.y() - 0.5, paste.z() - 0.5, paste.x() + 0.5, paste.y() + 0.5,
+                    paste.z() + 0.5);
+            boolean present = !level.getEntities((Entity) null, around, existing -> !(existing instanceof Player)
+                    && id.equals(EntityType.getKey(existing.getType()).toString())).isEmpty();
+            if (present) {
+                return true;
+            }
+            CompoundTag tag = paste.tag().copy();
+            ListTag position = new ListTag();
+            position.add(DoubleTag.valueOf(paste.x()));
+            position.add(DoubleTag.valueOf(paste.y()));
+            position.add(DoubleTag.valueOf(paste.z()));
+            tag.put("Pos", position);
+            tag.remove("UUID");
+            Entity entity = EntityType.loadEntityRecursive(tag, level,
+                    new EntitySpawnRequest(EntitySpawnReason.STRUCTURE, false), created -> {
+                        float yaw = created.rotate(paste.rotation());
+                        yaw += created.mirror(paste.mirror()) - created.getYRot();
+                        created.snapTo(paste.x(), paste.y(), paste.z(), yaw, created.getXRot());
+                        return created;
+                    });
+            return entity != null && level.tryAddFreshEntityWithPassengers(entity);
+        } catch (RuntimeException exception) {
+            LitematicaPlusClient.LOGGER.warn("Could not paste entity {}", paste.tag().getStringOr("id", "?"), exception);
+            return false;
+        }
     }
 
     private static void dispatch(Minecraft minecraft, Job owner, List<Operation> operations) {
