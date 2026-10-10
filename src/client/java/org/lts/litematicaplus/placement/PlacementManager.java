@@ -35,6 +35,7 @@ import org.lts.litematicaplus.share.SharedPlacement;
 import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
+import org.lts.litematicaplus.zones.ZonePlan;
 
 public final class PlacementManager {
     private static final PlacementManager INSTANCE = new PlacementManager();
@@ -350,6 +351,23 @@ public final class PlacementManager {
         return !before.equals(placement.regionPlacements());
     }
 
+    public void setZonePlan(SchematicPlacement placement, ZonePlan plan) {
+        if (placement.zonePlan().equals(plan)) {
+            return;
+        }
+        placement.setZonePlan(plan);
+        placement.zoneClaims().clear();
+        this.changeListener.run();
+    }
+
+    public void setZoneClaim(SchematicPlacement placement, int zone, String player) {
+        boolean changed = player == null ? placement.zoneClaims().remove(zone) != null
+                : !player.equals(placement.zoneClaims().put(zone, player));
+        if (changed) {
+            this.changeListener.run();
+        }
+    }
+
     public void clearReplacements(SchematicPlacement placement) {
         if (!placement.replacements().isEmpty()) {
             placement.replacements().clear();
@@ -391,8 +409,11 @@ public final class PlacementManager {
                 return;
             }
             if (failure != null || schematic == null) {
-                LitematicaPlusClient.LOGGER.warn("Could not load schematic {}: {}", path,
-                        failure == null ? "no data" : String.valueOf(failure.getMessage()));
+                if (failure == null) {
+                    LitematicaPlusClient.LOGGER.warn("Could not load schematic {}; it has no data", path);
+                } else {
+                    LitematicaPlusClient.LOGGER.warn("Could not load schematic {}", path, failure);
+                }
                 placement.markFailed(Notify.describe(failure));
             } else {
                 placement.markReady(schematic);
@@ -426,7 +447,7 @@ public final class PlacementManager {
     private static void warnAboutContent(SchematicPlacement placement, Schematic schematic) {
         int unknown = schematic.metadata().unknownStates;
         if (unknown > 0) {
-            LitematicaPlusClient.LOGGER.warn("Schematic {} has {} block states this game version does not know",
+            LitematicaPlusClient.LOGGER.warn("Schematic {} has {} block states this game version does not know; they are skipped",
                     placement.file(), unknown);
             Notify.chat(Component.translatable("litematicaplus.message.unknown_blocks", placement.name(), unknown));
         } else if (schematic.metadata().dataVersion > BlockStateNbt.currentDataVersion()
@@ -500,6 +521,20 @@ public final class PlacementManager {
                     }
                 }
             }
+            placement.setZonePlan(new ZonePlan(entry.zoneColumns, entry.zoneRows, entry.zoneFloors));
+            if (entry.zoneClaims != null) {
+                for (Map.Entry<String, String> claim : entry.zoneClaims.entrySet()) {
+                    try {
+                        int zone = Integer.parseInt(claim.getKey());
+                        if (zone >= 1 && zone <= placement.zonePlan().count() && claim.getValue() != null
+                                && !claim.getValue().isBlank()) {
+                            placement.zoneClaims().put(zone, claim.getValue());
+                        }
+                    } catch (NumberFormatException exception) {
+                        continue;
+                    }
+                }
+            }
             if (entry.grid != null) {
                 SessionStore.GridData grid = entry.grid;
                 placement.setGrid(new PlacementGrid(grid.negativeX, grid.positiveX, grid.negativeY, grid.positiveY,
@@ -547,6 +582,12 @@ public final class PlacementManager {
                 region.rotation = pair.getValue().rotation().name();
                 region.mirror = pair.getValue().mirror().name();
                 entry.regions.put(pair.getKey(), region);
+            }
+            entry.zoneColumns = placement.zonePlan().columns();
+            entry.zoneRows = placement.zonePlan().rows();
+            entry.zoneFloors = placement.zonePlan().floors();
+            for (Map.Entry<Integer, String> claim : placement.zoneClaims().entrySet()) {
+                entry.zoneClaims.put(Integer.toString(claim.getKey()), claim.getValue());
             }
             PlacementGrid grid = placement.grid();
             entry.grid.negativeX = grid.negativeX();

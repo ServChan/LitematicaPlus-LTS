@@ -188,7 +188,7 @@ public final class EntityAssist {
                     ghosts.add(ghost);
                 }
             } catch (RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.debug("Skipping a schematic entity that could not be read", exception);
+                LitematicaPlusClient.LOGGER.debug("Could not read a schematic entity; skipping it", exception);
             }
         }
         return ghosts;

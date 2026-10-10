@@ -41,6 +41,10 @@ public final class SessionStore {
         public Map<String, String> replacements = new LinkedHashMap<>();
         public Map<String, RegionData> regions = new LinkedHashMap<>();
         public GridData grid = new GridData();
+        public int zoneColumns = 1;
+        public int zoneRows = 1;
+        public int zoneFloors = 1;
+        public Map<String, String> zoneClaims = new LinkedHashMap<>();
     }
 
     public static final class RegionData {

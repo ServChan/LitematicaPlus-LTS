@@ -143,7 +143,7 @@ public final class SectionMesher {
             lineVertices = 0;
             this.specials.clear();
             if (MESH_FAILURES.getAndIncrement() < 5) {
-                LitematicaPlusClient.LOGGER.error("Schematic section meshing failed, the section keeps its verdict without a mesh",
+                LitematicaPlusClient.LOGGER.error("Could not mesh a schematic section; it keeps its verdict without a mesh",
                         exception);
             }
         } catch (Throwable throwable) {

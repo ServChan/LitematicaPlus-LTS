@@ -24,7 +24,8 @@
     "fabric-resource-loader-v1": "*",
     "fabric-screen-api-v1": "*",
     "fabric-item-api-v1": "*",
-    "fabric-networking-api-v1": "*"
+    "fabric-networking-api-v1": "*",
+    "fabric-message-api-v1": "*"
   },
   "suggests": {
     "modmenu": "*",

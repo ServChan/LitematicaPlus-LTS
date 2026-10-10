@@ -121,7 +121,7 @@ public final class GhostRenderer {
                 try {
                     GhostEngine.get().frame(minecraft, ExternalMap.focus(camera.pos));
                 } catch (RuntimeException | LinkageError exception) {
-                    LitematicaPlusClient.LOGGER.debug("Schematic engine update failed after a render failure", exception);
+                    LitematicaPlusClient.LOGGER.debug("Could not update the schematic engine while rendering is off", exception);
                 }
                 return;
             }
@@ -131,7 +131,7 @@ public final class GhostRenderer {
                 drawFailed = true;
                 drawFailedLevel = minecraft.level;
                 drawFailedModels = minecraft.getModelManager().getBlockStateModelSet();
-                LitematicaPlusClient.LOGGER.error("Schematic rendering failed and was switched off until the world or resources change",
+                LitematicaPlusClient.LOGGER.error("Could not render schematics; rendering is off until the world or resources change",
                         exception);
             }
         } finally {
@@ -361,7 +361,7 @@ public final class GhostRenderer {
             submitFailed = true;
             submitFailedLevel = minecraft.level;
             submitFailedModels = minecraft.getModelManager().getBlockStateModelSet();
-            LitematicaPlusClient.LOGGER.error("Schematic block entity rendering failed and was switched off until the world or resources change",
+            LitematicaPlusClient.LOGGER.error("Could not render schematic block entities; they are off until the world or resources change",
                     exception);
         } finally {
             SPECIALS.clear();

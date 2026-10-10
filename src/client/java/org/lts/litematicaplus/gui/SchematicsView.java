@@ -185,7 +185,7 @@ final class SchematicsView extends TabView {
                                     Files.getLastModifiedTime(path).toMillis(), formatSize(size)));
                         }
                     } catch (IOException exception) {
-                        LitematicaPlusClient.LOGGER.debug("Skipping unreadable entry {}", path);
+                        LitematicaPlusClient.LOGGER.debug("Could not read {}; skipping it", path, exception);
                     }
                 });
             }
@@ -319,7 +319,7 @@ final class SchematicsView extends TabView {
                     Path target = SchematicIo.export(entry.path(), format);
                     message = tr("litematicaplus.schematics.exported", target.getFileName().toString());
                 } catch (IOException | RuntimeException exception) {
-                    LitematicaPlusClient.LOGGER.warn("Could not export {}", entry.path(), exception);
+                    LitematicaPlusClient.LOGGER.warn("Could not export schematic {}", entry.path(), exception);
                     message = tr("litematicaplus.schematics.export_failed", Notify.describe(exception));
                 }
                 Component result = message;
@@ -341,7 +341,7 @@ final class SchematicsView extends TabView {
         try {
             Blaze3D.openPath(directory());
         } catch (RuntimeException exception) {
-            LitematicaPlusClient.LOGGER.warn("Could not open schematics folder", exception);
+            LitematicaPlusClient.LOGGER.warn("Could not open the schematics folder {}", directory(), exception);
         }
     }
 

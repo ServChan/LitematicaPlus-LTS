@@ -49,6 +49,7 @@ import org.lts.litematicaplus.world.PlacementVolume;
 public final class PasteController {
     public static final long MAX_DELETE_VOLUME = 64L * 1024L * 1024L;
     private static final int DIRECT_BLOCKS_PER_TICK = 4096;
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final int DIRECT_DELETE_BLOCKS_PER_TICK = 16384;
     private static final int MAX_COMMAND_LENGTH = 255;
     private static final int MAX_FILL_VOLUME = 32768;
@@ -57,7 +58,7 @@ public final class PasteController {
     private static final int PLACE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE
             | Block.UPDATE_SUPPRESS_DROPS | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS | Block.UPDATE_SKIP_ON_PLACE;
 
-    private record Operation(BlockPos pos, BlockState state, CompoundTag data) {
+    private record Operation(BlockPos pos, BlockState state, CompoundTag data, Block only) {
     }
 
     private record EntityPaste(CompoundTag tag, double x, double y, double z, Rotation rotation, Mirror mirror) {
@@ -292,7 +293,7 @@ public final class PasteController {
             }
         } catch (RuntimeException exception) {
             job = null;
-            LitematicaPlusClient.LOGGER.error("Paste job failed", exception);
+            LitematicaPlusClient.LOGGER.error("Could not continue the paste; it was stopped", exception);
             Notify.actionBar("litematicaplus.message.paste_failed");
         }
     }
@@ -361,7 +362,7 @@ public final class PasteController {
                     boolean refreshData = data != null && world == state
                             && current.replace != LitematicaPlusConfig.PasteReplace.INTO_AIR_ONLY;
                     if (refreshData || wanted(world, state, current.replace)) {
-                        operations.add(new Operation(cursor.immutable(), state, data));
+                        operations.add(new Operation(cursor.immutable(), state, data, null));
                         current.changed++;
                         budget--;
                     }
@@ -474,7 +475,7 @@ public final class PasteController {
                         cursor.set(x, y, z);
                         BlockState world = level.getBlockState(cursor);
                         if (world != fill && (from == null ? !(fill.isAir() && world.isAir()) : world.is(from))) {
-                            operations.add(new Operation(cursor.immutable(), fill, null));
+                            operations.add(new Operation(cursor.immutable(), fill, null, from));
                             blockBudget--;
                         }
                     }
@@ -552,7 +553,10 @@ public final class PasteController {
                     });
             return entity != null && level.tryAddFreshEntityWithPassengers(entity);
         } catch (RuntimeException exception) {
-            LitematicaPlusClient.LOGGER.warn("Could not paste entity {}", paste.tag().getStringOr("id", "?"), exception);
+            String entityId = paste.tag().getStringOr("id", "?");
+            if (REPORTED.add("entity:" + entityId + ":" + exception.getClass().getName())) {
+                LitematicaPlusClient.LOGGER.warn("Could not paste entity {}", entityId, exception);
+            }
             return false;
         }
     }
@@ -575,7 +579,12 @@ public final class PasteController {
                 }
                 for (Operation operation : operations) {
                     try {
-                        if (level.getBlockState(operation.pos()) != operation.state()) {
+                        BlockState current = level.getBlockState(operation.pos());
+                        if (operation.only() != null && !current.is(operation.only())) {
+                            failed.incrementAndGet();
+                            continue;
+                        }
+                        if (current != operation.state()) {
                             level.setBlock(operation.pos(), operation.state(), PLACE_FLAGS);
                         }
                         if (operation.data() != null) {
@@ -588,7 +597,9 @@ public final class PasteController {
                         }
                     } catch (RuntimeException exception) {
                         failed.incrementAndGet();
-                        LitematicaPlusClient.LOGGER.warn("Could not paste block at {}", operation.pos(), exception);
+                        if (REPORTED.add("block:" + operation.state().getBlock() + ":" + exception.getClass().getName())) {
+                            LitematicaPlusClient.LOGGER.warn("Could not paste {} at {}", operation.state(), operation.pos(), exception);
+                        }
                     }
                 }
             } finally {

@@ -34,8 +34,8 @@ public final class LitematicaConflict {
             return;
         }
         version = found.get();
-        LitematicaPlusClient.LOGGER.warn("Litematica {} is loaded together with Litematica Plus; Litematica Plus replaces it, "
-                + "keep only one of them in the mods folder", version);
+        LitematicaPlusClient.LOGGER.warn("Litematica {} is loaded alongside this mod, which replaces it; keep only one of them in the mods folder",
+                version);
         ClientTickEvents.END_CLIENT_TICK.register(LitematicaConflict::tick);
     }
 

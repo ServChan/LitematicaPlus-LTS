@@ -22,6 +22,7 @@ public final class HubScreen extends Screen {
         OVERVIEW("overview"),
         SCHEMATICS("schematics"),
         PLACEMENTS("placements"),
+        ZONES("zones"),
         SERVER("server"),
         LAYERS("layers"),
         AREA("area"),
@@ -198,6 +199,7 @@ public final class HubScreen extends Screen {
             case OVERVIEW -> new OverviewView(this);
             case SCHEMATICS -> new SchematicsView(this);
             case PLACEMENTS -> new PlacementsView(this);
+            case ZONES -> new ZonesView(this);
             case SERVER -> new ServerView(this);
             case LAYERS -> new LayersView(this);
             case AREA -> new AreaView(this);

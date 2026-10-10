@@ -93,10 +93,6 @@ public final class BoxRenderer {
             box(XRAY_LINES, XRAY_FILLS, camera, focus.getX() - pad, focus.getY() - pad, focus.getZ() - pad,
                     focus.getX() + 1 + pad, focus.getY() + 1 + pad, focus.getZ() + 1 + pad, focusColor, 4.0F,
                     focusColor & 0x50FFFFFF);
-            Vec3 look = minecraft.player.getViewVector(1.0F);
-            line(XRAY_LINES, (float) (look.x * 0.6), (float) (look.y * 0.6 - 0.12), (float) (look.z * 0.6),
-                    (float) (focus.getX() + 0.5 - camera.x), (float) (focus.getY() + 0.5 - camera.y),
-                    (float) (focus.getZ() + 0.5 - camera.z), abgr(focusColor), 2.0F);
         }
         if (visible && config.renderPlacementBoxes) {
             SchematicPlacement selected = PlacementManager.get().selected();

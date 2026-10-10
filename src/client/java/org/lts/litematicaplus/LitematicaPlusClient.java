@@ -20,12 +20,12 @@ import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.tool.Substitutes;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.util.Workers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.lts.litematicaplus.zones.ZoneChat;
+import org.lts.litematicaplus.zones.ZoneManager;
 
 public final class LitematicaPlusClient implements ClientModInitializer {
     public static final String MOD_ID = "litematicaplus";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final ModLog LOGGER = ModLog.root();
 
     @Override
     public void onInitializeClient() {
@@ -39,6 +39,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         MaterialTooltips.register();
         LitematicaConflict.register();
         SyncmaticaClient.register();
+        ZoneChat.register();
         ClientTickEvents.END_CLIENT_TICK.register(LitematicaPlusClient::tick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
             Session.shutdown();
@@ -48,7 +49,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         });
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath(MOD_ID, "overlay"),
                 (graphics, tickCounter) -> InfoHud.render(Minecraft.getInstance(), graphics));
-        LOGGER.info("Litematica Plus LTS initialized");
+        LOGGER.ready();
     }
 
     private static void tick(Minecraft minecraft) {
@@ -60,5 +61,6 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         TopView.tick(minecraft);
         Hotkeys.tick(minecraft);
         SyncmaticaClient.get().tick();
+        ZoneManager.get().tick(minecraft);
     }
 }

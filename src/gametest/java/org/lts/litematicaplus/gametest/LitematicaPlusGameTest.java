@@ -395,7 +395,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
         context.takeScreenshot("wide_schematic_preview");
         context.getInput().resizeWindow(854, 480);
         context.waitTicks(10);
-        click(context, scale, 348, 194);
+        clickButton(context, scale, "litematicaplus.schematics.place");
         context.waitTicks(10);
         int after = context.computeOnClient(client -> PlacementManager.get().placements().size());
         check(after == before + 1, "the Place button should create a placement, had " + before + " now " + after);
@@ -549,6 +549,24 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                     + fpsNoGhosts + " mapNoBigPlacement=" + fpsNoPlacement);
         }
         checkHealthy();
+    }
+
+    private static void clickButton(ClientGameTestContext context, int scale, String key) {
+        String label = net.minecraft.network.chat.Component.translatable(key).getString();
+        int[] center = context.computeOnClient(client -> {
+            net.minecraft.client.gui.screens.Screen screen = client.gui.screen();
+            if (screen != null) {
+                for (net.minecraft.client.gui.components.events.GuiEventListener child : screen.children()) {
+                    if (child instanceof net.minecraft.client.gui.components.AbstractWidget widget && widget.visible
+                            && widget.getMessage().getString().equals(label)) {
+                        return new int[]{widget.getX() + widget.getWidth() / 2, widget.getY() + widget.getHeight() / 2};
+                    }
+                }
+            }
+            return null;
+        });
+        require(center != null, "no button labelled '" + label + "' on screen");
+        click(context, scale, center[0], center[1]);
     }
 
     private static void click(ClientGameTestContext context, int scale, int guiX, int guiY) {

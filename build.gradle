@@ -17,6 +17,7 @@ def localModMenu = file(project.modmenu_jar)
 def localJade = file(project.jade_jar)
 def fabricItemApiVersion = project.fabric_item_api_version
 def fabricNetworkingApiVersion = project.fabric_networking_api_version
+def fabricMessageApiVersion = project.fabric_message_api_version
 
 base {
     archivesName = project.archives_base_name
@@ -69,6 +70,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-screen-api-v1:${fabricScreenApiVersion}"
     implementation "net.fabricmc.fabric-api:fabric-item-api-v1:${fabricItemApiVersion}"
     implementation "net.fabricmc.fabric-api:fabric-networking-api-v1:${fabricNetworkingApiVersion}"
+    implementation "net.fabricmc.fabric-api:fabric-message-api-v1:${fabricMessageApiVersion}"
     if (localJade.isFile()) {
         compileOnly files(localJade)
     }

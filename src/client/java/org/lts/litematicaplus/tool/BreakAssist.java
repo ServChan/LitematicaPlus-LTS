@@ -156,7 +156,7 @@ public final class BreakAssist {
     private static void abort(Minecraft minecraft, BlockPos pos, RuntimeException exception) {
         CLEARING.remove(pos);
         bypassGuard = false;
-        LitematicaPlusClient.LOGGER.error("Clearing a wrong block failed", exception);
+        LitematicaPlusClient.LOGGER.error("Could not clear the wrong block at {}", pos, exception);
         if (minecraft.gameMode != null) {
             try {
                 minecraft.gameMode.stopDestroyBlock();

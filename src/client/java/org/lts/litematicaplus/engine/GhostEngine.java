@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -469,7 +470,7 @@ public final class GhostEngine {
                 }
                 minecraft.execute(() -> installTallies(runtime, generation, inputs, tallies));
             } catch (Throwable exception) {
-                LitematicaPlusClient.LOGGER.error("Could not count the visible part of placement '{}'",
+                LitematicaPlusClient.LOGGER.error("Could not count the visible part of placement {}",
                         runtime.placement().name(), exception);
                 minecraft.execute(() -> abandonScope(runtime, generation));
             }
@@ -478,6 +479,43 @@ public final class GhostEngine {
             Workers.io().execute(work);
         } catch (RejectedExecutionException exception) {
             abandonScope(runtime, generation);
+        }
+    }
+
+    public CompletableFuture<long[]> zoneTallies(UUID id, List<LayerRange> ranges) {
+        PlacementRuntime runtime = this.runtimes.get(id);
+        PlacementVolume volume = runtime == null ? null : runtime.volume;
+        if (volume == null || ranges.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        List<TallyInput> inputs = new ArrayList<>(runtime.slots.size());
+        for (SectionSlot slot : runtime.slots.values()) {
+            inputs.add(new TallyInput(slot, volume.section(slot.key), slot.verdict));
+        }
+        boolean[] solid = volume.solid();
+        List<LayerRange> targets = List.copyOf(ranges);
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                long[] result = new long[targets.size() * 2];
+                ScopeTally.Scratch scratch = new ScopeTally.Scratch();
+                for (TallyInput input : inputs) {
+                    SectionSlot slot = input.slot();
+                    for (int i = 0; i < targets.size(); i++) {
+                        LayerRange range = targets.get(i);
+                        if (!range.intersects(slot.originX, slot.originY, slot.originZ, slot.originX + 15,
+                                slot.originY + 15, slot.originZ + 15)) {
+                            continue;
+                        }
+                        ScopeTally tally = ScopeTally.compute(input.section(), solid, input.verdict(), range,
+                                slot.originX, slot.originY, slot.originZ, scratch);
+                        result[i * 2] += tally.count(MismatchType.CORRECT);
+                        result[i * 2 + 1] += tally.blocks();
+                    }
+                }
+                return result;
+            }, Workers.io());
+        } catch (RejectedExecutionException exception) {
+            return CompletableFuture.completedFuture(null);
         }
     }
 
@@ -580,7 +618,7 @@ public final class GhostEngine {
                     PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled, replacements);
                     minecraft.execute(() -> install(target, token, volume));
                 } catch (Throwable exception) {
-                    LitematicaPlusClient.LOGGER.error("Could not build placement '{}'", placement.name(), exception);
+                    LitematicaPlusClient.LOGGER.error("Could not build placement {}", placement.name(), exception);
                     Component reason = Notify.describe(exception);
                     minecraft.execute(() -> {
                         if (target.buildToken == token) {
@@ -1399,7 +1437,7 @@ public final class GhostEngine {
             if (result.failure != null) {
                 if (this.failureLogs < MAX_FAILURE_LOGS) {
                     this.failureLogs++;
-                    LitematicaPlusClient.LOGGER.error("Schematic section meshing failed", result.failure);
+                    LitematicaPlusClient.LOGGER.error("Could not mesh a schematic section", result.failure);
                 }
                 result.free();
                 if (++slot.failures <= MAX_SLOT_FAILURES) {

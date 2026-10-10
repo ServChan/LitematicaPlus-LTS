@@ -148,6 +148,10 @@ public final class LitematicaPlusConfig {
     public boolean syncmaticaEnabled = true;
     public String schematicsDirectory = "schematics";
     public String defaultAuthor = "";
+    public String zoneTeam = "";
+    public String zoneTransport = "MESSAGE";
+    public String zoneCommand = "";
+    public boolean zoneHideMessages = true;
 
     public static void load() {
         Path configPath = configPath();
@@ -163,7 +167,7 @@ public final class LitematicaPlusConfig {
                 try {
                     writeAtomically(configPath, current, true);
                 } catch (IOException exception) {
-                    LitematicaPlusClient.LOGGER.error("Could not persist migrated config {}", configPath, exception);
+                    LitematicaPlusClient.LOGGER.error("Could not save migrated config {}", configPath, exception);
                 }
             }
             return;
@@ -174,7 +178,7 @@ public final class LitematicaPlusConfig {
             AtomicFilePersistence.quarantine(configPath);
             writeAtomically(configPath, current, false);
         } catch (IOException exception) {
-            LitematicaPlusClient.LOGGER.error("Could not initialize config {}", configPath, exception);
+            LitematicaPlusClient.LOGGER.error("Could not create config {}", configPath, exception);
         }
     }
 
@@ -304,6 +308,9 @@ public final class LitematicaPlusConfig {
         config.hudX = (float) clamp(config.hudX, 0.0, 1.0);
         config.hudY = (float) clamp(config.hudY, 0.0, 1.0);
         config.lockedHotbarSlots &= 0x1FF;
+        config.zoneTeam = config.zoneTeam == null ? "" : config.zoneTeam.length() > 512 ? config.zoneTeam.substring(0, 512) : config.zoneTeam;
+        config.zoneCommand = config.zoneCommand == null ? "" : config.zoneCommand.length() > 128 ? config.zoneCommand.substring(0, 128) : config.zoneCommand;
+        config.zoneTransport = config.zoneTransport == null ? "MESSAGE" : config.zoneTransport;
         Map<String, Integer> modifiers = new HashMap<>();
         if (config.hotkeyModifiers != null) {
             config.hotkeyModifiers.forEach((name, mask) -> {

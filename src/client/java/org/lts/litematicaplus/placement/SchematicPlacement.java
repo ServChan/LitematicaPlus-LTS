@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -13,6 +14,7 @@ import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.share.SharedPlacement;
+import org.lts.litematicaplus.zones.ZonePlan;
 
 public final class SchematicPlacement {
     public enum LoadState {
@@ -37,6 +39,8 @@ public final class SchematicPlacement {
     private final Map<String, RegionPlacement> regionPlacements = new LinkedHashMap<>();
     private PlacementGrid grid = PlacementGrid.NONE;
     private List<SharedPlacement.RegionShift> pendingShifts;
+    private ZonePlan zonePlan = ZonePlan.NONE;
+    private final Map<Integer, String> zoneClaims = new TreeMap<>();
     private Schematic schematic;
     private LoadState loadState = LoadState.LOADING;
     private Component error = Component.empty();
@@ -159,6 +163,18 @@ public final class SchematicPlacement {
 
     public void setPendingShifts(List<SharedPlacement.RegionShift> shifts) {
         this.pendingShifts = shifts;
+    }
+
+    public ZonePlan zonePlan() {
+        return this.zonePlan;
+    }
+
+    public void setZonePlan(ZonePlan plan) {
+        this.zonePlan = plan == null ? ZonePlan.NONE : plan;
+    }
+
+    public Map<Integer, String> zoneClaims() {
+        return this.zoneClaims;
     }
 
     public PlacementLayout layout() {

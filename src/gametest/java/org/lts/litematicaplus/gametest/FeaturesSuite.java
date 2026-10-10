@@ -52,6 +52,53 @@ final class FeaturesSuite {
         fillAndReplace(context, world);
         pasteEntitiesOnce(context, world);
         gridAndMovedRegion(context, world);
+        zonesEndToEnd(context, world);
+    }
+
+    private static void zonesEndToEnd(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos origin = BASE.south(42);
+        RegionBuilder builder = new RegionBuilder("Row", 0, 0, 0, 4, 1, 1);
+        builder.fill(Blocks.STONE.defaultBlockState());
+        Path file = write(context, "ZoneRow", builder);
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(3, 0, 0)) + " minecraft:air");
+        world.getServer().runCommand("setblock " + at(origin) + " minecraft:stone");
+        world.getServer().runCommand("tp @p " + (origin.getX() + 2.0) + " " + (origin.getY() + 1) + " "
+                + (origin.getZ() - 4.5) + " 0 20");
+        world.getConnection().waitForClientboundPackets();
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, origin));
+        context.waitFor(client -> placement.schematic() != null && GhostEngine.get().runtime(placement.id()) != null
+                && GhostEngine.get().runtime(placement.id()).volume() != null, 400);
+        context.runOnClient(client -> PlacementManager.get().setZonePlan(placement,
+                new org.lts.litematicaplus.zones.ZonePlan(2, 1, 1)));
+        int zones = context.computeOnClient(client ->
+                org.lts.litematicaplus.zones.ZoneManager.get().zones(placement).size());
+        context.runOnClient(client -> org.lts.litematicaplus.zones.ZoneManager.get().claim(client, placement, 1));
+        boolean focused = context.computeOnClient(client -> org.lts.litematicaplus.zones.ZoneManager.get()
+                .focused(org.lts.litematicaplus.zones.ZoneManager.get().zone(placement, 1)));
+        String plan = context.computeOnClient(client -> org.lts.litematicaplus.zones.ZoneManager.planId(placement,
+                placement.zonePlan()));
+        java.util.concurrent.atomic.AtomicInteger shown = new java.util.concurrent.atomic.AtomicInteger();
+        net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            if (message.getString().contains("[LP-zones ")) {
+                shown.incrementAndGet();
+            }
+        });
+        world.getServer().runCommand("tellraw @p \"[LP-zones " + plan + " Other] claim 2\"");
+        world.getConnection().waitForClientboundPackets();
+        context.waitFor(client -> "Other".equals(placement.zoneClaims().get(2)), 100);
+        context.waitFor(client -> org.lts.litematicaplus.zones.ZoneManager.get().progress(placement, 1) >= 0.0, 200);
+        double first = context.computeOnClient(client ->
+                org.lts.litematicaplus.zones.ZoneManager.get().progress(placement, 1));
+        context.takeScreenshot("12k_zones");
+        context.runOnClient(client -> {
+            org.lts.litematicaplus.zones.ZoneManager.get().unfocus();
+            PlacementManager.get().remove(placement);
+        });
+        world.getServer().runCommand("fill " + at(origin) + " " + at(origin.offset(3, 0, 0)) + " minecraft:air");
+        LitematicaPlusGameTest.require(zones == 2, "a 2x1x1 split should give 2 zones, got " + zones);
+        LitematicaPlusGameTest.require(focused, "taking a zone should show only that zone");
+        LitematicaPlusGameTest.require(shown.get() == 0, "the zone service message should stay out of the chat");
+        LitematicaPlusGameTest.require(first > 0.4 && first < 0.6, "zone 1 should be half done, got " + first);
     }
 
     private static void gridAndMovedRegion(ClientGameTestContext context, TestSingleplayerContext world) {
@@ -144,6 +191,7 @@ final class FeaturesSuite {
         world.getConnection().waitForClientboundPackets();
         int filled = countBlocks(world, from, to, Blocks.COBBLESTONE);
         world.getServer().runCommand("setblock " + at(from) + " minecraft:dirt");
+        world.getConnection().waitForClientboundPackets();
         context.runOnClient(client -> PasteController.startFill(client, SelectionManager.get().completeBoxes(),
                 Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE));
         context.waitFor(client -> !PasteController.active(), 400);

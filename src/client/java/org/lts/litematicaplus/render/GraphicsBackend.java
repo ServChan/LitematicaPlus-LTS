@@ -58,7 +58,7 @@ public final class GraphicsBackend {
         Kind kind = classify(name, GraphicsBackend::glContextCurrent);
         detected = kind;
         if (kind != Kind.OPENGL) {
-            LitematicaPlusClient.LOGGER.info("Graphics backend is {}, not OpenGL: the Voxy terrain depth merge is off",
+            LitematicaPlusClient.LOGGER.info("Graphics backend is {}, not OpenGL; the Voxy terrain depth merge is off",
                     name == null ? kind : name);
         }
         return kind;

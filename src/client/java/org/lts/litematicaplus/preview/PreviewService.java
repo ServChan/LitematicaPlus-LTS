@@ -42,6 +42,7 @@ public final class PreviewService {
     public static final int FULL_SIZE = 512;
     public static final int DRAG_SIZE = 224;
     private static final int MAX_ENTRIES = 12;
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final int MAX_MODELS = 3;
     private static final int MAX_CACHE_FILES = 400;
     private static final int TRIM_EVERY_WRITES = 16;
@@ -360,7 +361,9 @@ public final class PreviewService {
         } catch (CancellationException exception) {
             return;
         } catch (IOException | RuntimeException | OutOfMemoryError exception) {
-            LitematicaPlusClient.LOGGER.warn("Could not build the schematic preview for {}", key, exception);
+            if (REPORTED.add("build:" + key)) {
+                LitematicaPlusClient.LOGGER.warn("Could not build the schematic preview for {}", key, exception);
+            }
             work.model = null;
             work.failedAt = System.currentTimeMillis();
             work.failed = true;
@@ -459,7 +462,9 @@ public final class PreviewService {
                 entry.simplified = simplified;
                 entry.status = Status.READY;
             } catch (RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.warn("Could not upload the schematic preview", exception);
+                if (REPORTED.add("upload:" + work.key)) {
+                    LitematicaPlusClient.LOGGER.warn("Could not upload the schematic preview for {}", work.key, exception);
+                }
                 release(minecraft, entry);
                 entry.status = Status.FAILED;
                 work.rendered = null;

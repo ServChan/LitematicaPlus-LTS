@@ -5,11 +5,13 @@ import java.util.Iterator;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import org.lts.litematicaplus.LitematicaPlusClient;
+import org.lts.litematicaplus.ModLog;
 
 public final class TickQueue {
     private static final int MAX_PENDING = 512;
     private static final List<Entry> PENDING = new ArrayList<>();
     private static long currentTick;
+    private static final java.util.Set<String> REPORTED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private record Entry(long dueTick, Runnable task) {
     }
@@ -64,7 +66,9 @@ public final class TickQueue {
             try {
                 task.run();
             } catch (RuntimeException exception) {
-                LitematicaPlusClient.LOGGER.error("A delayed easy place step failed", exception);
+                if (REPORTED.add(ModLog.describe(exception))) {
+                    LitematicaPlusClient.LOGGER.error("Could not run a delayed easy place step", exception);
+                }
             }
         }
     }

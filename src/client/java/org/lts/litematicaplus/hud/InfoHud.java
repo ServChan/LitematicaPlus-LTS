@@ -37,6 +37,7 @@ import org.lts.litematicaplus.tool.ToolMode;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
+import org.lts.litematicaplus.zones.ZoneManager;
 
 public final class InfoHud {
     public static final int WIDTH = 176;
@@ -51,6 +52,7 @@ public final class InfoHud {
     private static final TextMemo SELECTION = new TextMemo();
     private static final TextMemo PASTE = new TextMemo();
     private static final TextMemo FILL = new TextMemo();
+    private static final TextMemo ZONE = new TextMemo();
     private static final TextMemo TUNING = new TextMemo();
     private static final TextMemo RENDER_FAILED = new TextMemo();
     private static final TextMemo DIAG_SECTIONS = new TextMemo();
@@ -208,6 +210,10 @@ public final class InfoHud {
         if (box != null && !box.isEmpty()) {
             lines++;
         }
+        int myZone = placement == null ? 0 : ZoneManager.get().myZone(minecraft, placement);
+        if (myZone != 0) {
+            lines++;
+        }
         ToolMode toolMode = ToolController.get().mode();
         boolean fillLine = tool && (toolMode == ToolMode.FILL || toolMode == ToolMode.REPLACE);
         if (fillLine) {
@@ -264,6 +270,14 @@ public final class InfoHud {
             graphics.text(font, text(SELECTION, font, box, size, box.name().hashCode(), 0L,
                     () -> Component.translatable("litematicaplus.hud.selection", box.name(), box.sizeX(), box.sizeY(),
                             box.sizeZ())), textX, cursor, Theme.TEXT_DIM, false);
+            cursor += LINE;
+        }
+        if (myZone != 0) {
+            double zoneProgress = ZoneManager.get().progress(placement, myZone);
+            graphics.text(font, text(ZONE, font, placement, myZone, Double.doubleToLongBits(zoneProgress), 0L,
+                    () -> Component.translatable("litematicaplus.hud.zone", myZone, zoneProgress < 0.0 ? "…"
+                            : String.format(Locale.ROOT, "%.0f%%", zoneProgress * 100.0))), textX, cursor,
+                    Theme.ACCENT, false);
             cursor += LINE;
         }
         if (fillLine) {
