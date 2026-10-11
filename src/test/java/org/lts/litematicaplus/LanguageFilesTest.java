@@ -109,6 +109,30 @@ class LanguageFilesTest {
         assertTrue(missing.isEmpty(), "Untranslated keys: " + missing);
     }
 
+    @Test
+    void printerLocalesHaveTheSameKeys() throws IOException {
+        Path printer = Path.of("src/printer/resources/assets/litematicaplus_printer/lang");
+        Set<String> expected = read(printer, "en_us.json").keySet();
+        Set<String> main = read("en_us.json").keySet();
+        for (String locale : LOCALES) {
+            Map<String, String> other = read(printer, locale);
+            assertEquals(expected, other.keySet(), "printer " + locale);
+            for (String key : other.keySet()) {
+                assertFalse(main.contains(key), "printer key duplicates the main file: " + key);
+                assertFalse(other.get(key).isBlank(), "printer " + locale + " " + key);
+            }
+        }
+        Matcher keys = KEY.matcher(Files.readString(
+                Path.of("src/printer/java/org/lts/litematicaplus/printer/PrinterClient.java")));
+        Set<String> missing = new TreeSet<>();
+        while (keys.find()) {
+            if (!expected.contains(keys.group(1)) && !main.contains(keys.group(1))) {
+                missing.add(keys.group(1));
+            }
+        }
+        assertTrue(missing.isEmpty(), "Untranslated printer keys: " + missing);
+    }
+
     private static int count(String value) {
         Matcher matcher = PLACEHOLDER.matcher(value);
         int total = 0;
@@ -119,7 +143,11 @@ class LanguageFilesTest {
     }
 
     private static Map<String, String> read(String name) throws IOException {
-        try (Reader reader = Files.newBufferedReader(LANG.resolve(name))) {
+        return read(LANG, name);
+    }
+
+    private static Map<String, String> read(Path directory, String name) throws IOException {
+        try (Reader reader = Files.newBufferedReader(directory.resolve(name))) {
             return new Gson().fromJson(reader, MAP_TYPE);
         }
     }

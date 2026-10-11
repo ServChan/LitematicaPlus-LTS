@@ -115,6 +115,8 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 Готовый JAR: `build/libs/litematica-plus-lts-1.0.0.jar`.
 
+Рядом собирается отдельная версия с принтером — `build/libs/litematica-plus-lts-1.0.0-printer.jar` (задача `printerJar`). Это тот же мод с тем же id, поэтому в `mods/` кладётся только один из двух файлов. Принтер сам ставит недостающие блоки схемы в радиусе 1–6 блоков вокруг игрока, без кликов, и берёт настройки лёгкой установки: темп, поворот для сервера, доведение состояний, выкапывание неверных блоков, замены, слои и границы. Включается в Настройки → «Принтер» или клавишей «Вкл/выкл принтер» (по умолчанию не назначена), настройки — `config/litematicaplus-printer.json`. Многие серверы запрещают принтеры: обычная версия кода принтера не содержит. Игровой тест принтера: `.\gradlew.bat runClientGameTest -PprinterOnly`.
+
 Проверка на своих схемах (только чтение): `.\gradlew.bat test --tests "*SampleLibraryTest*" "-PsampleDir=<папка schematics>"`. Автоматический тест в игре (создаёт мир, размещает схему, проверяет подсветку, вставку, сохранение, лёгкую установку 33 видов блоков, сущности, помощник материалов, экспорт, редактор размещения, назначение клавиш и делает скриншоты): `.\gradlew.bat runClientGameTest`.
 
 ---
@@ -225,6 +227,8 @@ The menu (`H`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layer
 ```
 
 Output JAR: `build/libs/litematica-plus-lts-1.0.0.jar`.
+
+A separate printer edition is built next to it: `build/libs/litematica-plus-lts-1.0.0-printer.jar` (task `printerJar`). It is the same mod with the same id, so put only one of the two files into `mods/`. The printer places missing schematic blocks within 1–6 blocks of the player by itself, without clicking, using the easy place settings: pace, server rotation, finishing states, breaking wrong blocks, substitutes, layers and bounds. Turn it on in Settings → Printer or with the "Toggle printer" key (unbound by default); its settings live in `config/litematicaplus-printer.json`. Many servers forbid printers, so the standard edition contains no printer code. Printer game test: `.\gradlew.bat runClientGameTest -PprinterOnly`.
 
 Check your own schematics (read-only): `.\gradlew.bat test --tests "*SampleLibraryTest*" "-PsampleDir=<schematics folder>"`. Automated in-game test (creates a world, places a schematic, checks highlights, paste, saving, easy place for 33 kinds of blocks, entities, the material helper, export, the placement editor and key binding, and takes screenshots): `.\gradlew.bat runClientGameTest`.
 

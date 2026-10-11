@@ -1,0 +1,8 @@
+{
+  "key.litematicaplus.toggle_printer": "Activar impresora",
+  "litematicaplus.settings.category.printer": "Impresora",
+  "litematicaplus.option.printer_enabled": "Impresora",
+  "litematicaplus.option.printer_enabled.tip": "Coloca sola los bloques que faltan del esquema a tu alrededor, sin hacer clic. Usa los ajustes de colocación fácil: ritmo, giro sin mover la cámara, ajuste de estados, romper bloques incorrectos y sustitutos. Se guarda al instante.",
+  "litematicaplus.option.printer_range": "Alcance de la impresora",
+  "litematicaplus.option.printer_range.tip": "A cuántos bloques de tus ojos coloca la impresora. Nunca supera el alcance del juego. Se guarda al instante."
+}

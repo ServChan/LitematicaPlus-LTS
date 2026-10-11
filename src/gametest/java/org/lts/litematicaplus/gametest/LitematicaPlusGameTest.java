@@ -86,6 +86,11 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 checkHealthy();
                 return;
             }
+            if (System.getProperty("litematicaplus.printerOnly") != null) {
+                PrinterSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
             if (System.getProperty("litematicaplus.featuresOnly") != null) {
                 FeaturesSuite.run(context, world);
                 checkHealthy();
@@ -278,6 +283,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             EntitySuite.run(context, world);
             MaterialsSuite.run(context, world);
             FeaturesSuite.run(context, world);
+            PrinterSuite.run(context, world);
 
             context.runOnClient(client -> {
                 LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();

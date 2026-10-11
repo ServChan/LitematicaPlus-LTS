@@ -42,6 +42,10 @@ final class SchematicsView extends TabView {
     private FlatButton placeButton;
     private FlatButton exportSponge;
     private FlatButton exportStructure;
+    private FlatButton deleteButton;
+    private Entry deleteArmed;
+    private int deleteTicks;
+    private boolean deleting;
     private Component status;
     private int statusTicks;
     private boolean exporting;
@@ -106,8 +110,12 @@ final class SchematicsView extends TabView {
         this.exportStructure = add(FlatButton.secondary(this.detailX + half + Theme.GAP, exportY,
                 this.detailWidth - half - Theme.GAP, tr("litematicaplus.schematics.export_structure"),
                 button -> export(SchematicExport.Format.STRUCTURE)));
-        this.placeButton = add(FlatButton.primary(this.detailX, exportY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
+        int placeY = exportY - Theme.CONTROL_HEIGHT - 4;
+        int deleteWidth = Math.max(half / 2, Math.min(half, this.font.width(tr("litematicaplus.schematics.delete_confirm")) + 12));
+        this.placeButton = add(FlatButton.primary(this.detailX, placeY, this.detailWidth - deleteWidth - Theme.GAP,
                 tr("litematicaplus.schematics.place"), button -> place()));
+        this.deleteButton = add(FlatButton.danger(this.detailX + this.detailWidth - deleteWidth, placeY, deleteWidth,
+                deleteLabel(), button -> delete()));
         add(FlatButton.secondary(this.detailX, buttonY, half, tr("litematicaplus.schematics.open_folder"),
                 button -> openFolder()));
         add(FlatButton.secondary(this.detailX + half + Theme.GAP, buttonY, this.detailWidth - half - Theme.GAP,
@@ -140,6 +148,67 @@ final class SchematicsView extends TabView {
         if (this.exportSponge != null) {
             this.exportSponge.active = file;
             this.exportStructure.active = file;
+        }
+        if (this.deleteButton != null) {
+            this.deleteButton.active = file && !this.deleting;
+            this.deleteButton.setMessage(deleteLabel());
+        }
+    }
+
+    private Component deleteLabel() {
+        return tr(this.deleteArmed != null && this.deleteArmed == this.selected
+                ? "litematicaplus.schematics.delete_confirm" : "litematicaplus.schematics.delete");
+    }
+
+    private void disarmDelete() {
+        this.deleteArmed = null;
+        this.deleteTicks = 0;
+    }
+
+    private void delete() {
+        Entry entry = this.selected;
+        if (entry == null || entry.directory() || this.deleting) {
+            return;
+        }
+        if (this.deleteArmed != entry) {
+            this.deleteArmed = entry;
+            this.deleteTicks = 80;
+            status(tr("litematicaplus.schematics.delete_hint", entry.name()));
+            updateButtons();
+            return;
+        }
+        disarmDelete();
+        this.deleting = true;
+        updateButtons();
+        try {
+            Workers.io().execute(() -> {
+                Component message;
+                try {
+                    boolean removed = Files.deleteIfExists(entry.path());
+                    message = tr(removed ? "litematicaplus.schematics.deleted" : "litematicaplus.schematics.delete_gone",
+                            entry.name());
+                } catch (IOException | RuntimeException exception) {
+                    LitematicaPlusClient.LOGGER.warn("Could not delete schematic {}", entry.path(), exception);
+                    message = tr("litematicaplus.schematics.delete_failed", Notify.describe(exception));
+                }
+                Component result = message;
+                this.minecraft.execute(() -> {
+                    this.deleting = false;
+                    if (this.selected == entry) {
+                        select(null);
+                        if (this.list != null) {
+                            this.list.selectItem(null);
+                        }
+                    }
+                    status(result);
+                    updateButtons();
+                    reload();
+                });
+            });
+        } catch (RejectedExecutionException exception) {
+            this.deleting = false;
+            status(tr("litematicaplus.schematics.delete_failed", Notify.describe(exception)));
+            updateButtons();
         }
     }
 
@@ -226,6 +295,9 @@ final class SchematicsView extends TabView {
     }
 
     private void select(Entry entry) {
+        if (entry != this.deleteArmed) {
+            disarmDelete();
+        }
         this.selected = entry;
         this.metadata = null;
         this.metadataError = null;
@@ -296,6 +368,10 @@ final class SchematicsView extends TabView {
     void tick() {
         if (this.statusTicks > 0 && --this.statusTicks == 0) {
             this.status = null;
+        }
+        if (this.deleteTicks > 0 && --this.deleteTicks == 0) {
+            disarmDelete();
+            updateButtons();
         }
     }
 

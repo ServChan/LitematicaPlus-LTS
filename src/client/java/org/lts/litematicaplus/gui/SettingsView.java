@@ -46,7 +46,11 @@ final class SettingsView extends TabView {
         void build(int x, int y, int width);
     }
 
+    private record Tab(Component label, Runnable select, java.util.function.BooleanSupplier active) {
+    }
+
     private static Category category = Category.RENDERING;
+    private static String extension;
 
     private LitematicaPlusConfig working = LitematicaPlusConfig.currentCopy();
     private FlatButton saveButton;
@@ -80,25 +84,24 @@ final class SettingsView extends TabView {
     void init() {
         this.toolItemX = -1;
         this.authorX = -1;
-        Category[] categories = Category.values();
+        List<Tab> tabs = tabs();
         int gap = this.width < 360 ? 3 : Theme.GAP;
         int textTotal = 0;
-        for (Category entry : categories) {
-            textTotal += this.font.width(tr("litematicaplus.settings.category." + entry.key));
+        for (Tab tab : tabs) {
+            textTotal += this.font.width(tab.label());
         }
-        int padding = Math.max(4, (this.width - gap * (categories.length - 1) - textTotal) / categories.length);
+        int padding = Math.max(4, (this.width - gap * (tabs.size() - 1) - textTotal) / tabs.size());
         int tabX = this.left;
-        for (int i = 0; i < categories.length; i++) {
-            Category entry = categories[i];
-            Component label = tr("litematicaplus.settings.category." + entry.key);
-            int width = i == categories.length - 1 ? this.left + this.width - tabX : this.font.width(label) + padding;
-            add(new FlatButton(tabX, this.top, Math.max(12, width), Theme.CONTROL_HEIGHT, label, FlatButton.Style.SECONDARY,
-                    button -> {
-                        category = entry;
+        for (int i = 0; i < tabs.size(); i++) {
+            Tab tab = tabs.get(i);
+            int width = i == tabs.size() - 1 ? this.left + this.width - tabX : this.font.width(tab.label()) + padding;
+            add(new FlatButton(tabX, this.top, Math.max(12, width), Theme.CONTROL_HEIGHT, tab.label(),
+                    FlatButton.Style.SECONDARY, button -> {
+                        tab.select().run();
                         this.page = 0;
                         this.listening = null;
                         this.screen.refresh();
-                    }).withState(() -> category == entry));
+                    }).withState(tab.active()));
             tabX += width + gap;
         }
         List<Row> rows = rows();
@@ -138,6 +141,25 @@ final class SettingsView extends TabView {
                     this.screen.refresh();
                 }));
         updateSave();
+    }
+
+    private static List<Tab> tabs() {
+        List<Tab> tabs = new ArrayList<>();
+        for (Category entry : Category.values()) {
+            tabs.add(new Tab(tr("litematicaplus.settings.category." + entry.key), () -> {
+                category = entry;
+                extension = null;
+            }, () -> extension == null && category == entry));
+        }
+        List<SettingsExtensions.Page> pages = SettingsExtensions.pages();
+        if (extension != null && pages.stream().noneMatch(page -> page.key().equals(extension))) {
+            extension = null;
+        }
+        for (SettingsExtensions.Page entry : pages) {
+            tabs.add(new Tab(tr("litematicaplus.settings.category." + entry.key()), () -> extension = entry.key(),
+                    () -> entry.key().equals(extension)));
+        }
+        return tabs;
     }
 
     private void updateSave() {
@@ -194,6 +216,16 @@ final class SettingsView extends TabView {
 
     private List<Row> rows() {
         List<Row> rows = new ArrayList<>();
+        if (extension != null) {
+            for (SettingsExtensions.Page entry : SettingsExtensions.pages()) {
+                if (entry.key().equals(extension)) {
+                    for (SettingsExtensions.Option option : entry.options().get()) {
+                        rows.add(extensionRow(option));
+                    }
+                }
+            }
+            return rows;
+        }
         switch (category) {
             case RENDERING -> {
                 rows.add(toggle("render_enabled", c -> c.renderEnabled, (c, v) -> c.renderEnabled = v));
@@ -327,6 +359,24 @@ final class SettingsView extends TabView {
                     setter.accept(this.working, !getter.apply(this.working));
                     changed();
                 })), key);
+    }
+
+    private Row extensionRow(SettingsExtensions.Option option) {
+        return switch (option) {
+            case SettingsExtensions.Toggle toggle -> (x, y, width) -> describe(add(FlatButton.toggle(x, y, width,
+                    tr("litematicaplus.option." + toggle.key()), toggle.getter(), button -> {
+                        toggle.setter().accept(!toggle.getter().getAsBoolean());
+                        this.screen.refresh();
+                    })), toggle.key());
+            case SettingsExtensions.Number number -> (x, y, width) -> {
+                Stepper stepper = add(new Stepper(x, y, width, tr("litematicaplus.option." + number.key()),
+                        number.getter(), number.setter(), number.min(), number.max(), number.step()));
+                String tip = "litematicaplus.option." + number.key() + ".tip";
+                if (Language.getInstance().has(tip)) {
+                    stepper.setTooltip(Tooltip.create(tr(tip)));
+                }
+            };
+        };
     }
 
     private Row number(String key, IntSupplier getter, IntConsumer setter, int min, int max, int step) {

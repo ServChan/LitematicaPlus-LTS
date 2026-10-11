@@ -38,10 +38,20 @@ repositories {
 
 loom {
     splitEnvironmentSourceSets()
+}
 
+sourceSets {
+    printer {
+        compileClasspath += sourceSets.client.output + sourceSets.client.compileClasspath
+        runtimeClasspath += sourceSets.client.output + sourceSets.client.runtimeClasspath
+    }
+}
+
+loom {
     mods {
         "litematicaplus" {
             sourceSet sourceSets.client
+            sourceSet sourceSets.printer
         }
     }
 }
@@ -84,6 +94,7 @@ dependencies {
     }
 
     gametestImplementation sourceSets.client.output
+    gametestImplementation sourceSets.printer.output
     gametestImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
 
     testImplementation sourceSets.client.output
@@ -197,9 +208,73 @@ test {
     }
 }
 
+def printerClasses = "org/lts/litematicaplus/printer/**"
+def printerAssets = "assets/litematicaplus_printer/**"
+
 jar {
     from("LICENSE") {
         rename { "${it}_${licenseArchiveName}" }
+    }
+    doLast {
+        def leaked = zipTree(archiveFile.get().asFile).matching {
+            include printerClasses
+            include printerAssets
+        }.files
+        if (!leaked.isEmpty()) {
+            throw new GradleException("Printer files leaked into the standard jar: ${leaked*.name}")
+        }
+    }
+}
+
+def printerModJson = tasks.register("printerModJson") {
+    def source = file("src/client/resources/fabric.mod.json")
+    def target = layout.buildDirectory.file("generated/printer/fabric.mod.json")
+    inputs.file source
+    inputs.property "version", modVersion
+    outputs.file target
+    doLast {
+        def json = new groovy.json.JsonSlurper().parse(source)
+        json.version = modVersion
+        json.name = json.name + " (printer)"
+        json.description = json.description + " Printer edition: places the schematic around you by itself."
+        json.entrypoints.client = json.entrypoints.client + ["org.lts.litematicaplus.printer.PrinterClient"]
+        def out = target.get().asFile
+        out.parentFile.mkdirs()
+        out.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)), "UTF-8")
+    }
+}
+
+def printerJar = tasks.register("printerJar", Zip) {
+    group = "build"
+    description = "Builds the printer edition that places the schematic around the player by itself."
+    dependsOn tasks.named("jar"), tasks.named("printerClasses"), printerModJson
+    archiveBaseName = project.archives_base_name
+    archiveVersion = modVersion
+    archiveClassifier = "printer"
+    archiveExtension = "jar"
+    destinationDirectory = tasks.named("jar", Jar).flatMap { it.destinationDirectory }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(zipTree(tasks.named("jar", Jar).flatMap { it.archiveFile })) {
+        exclude "fabric.mod.json"
+    }
+    from(sourceSets.printer.output)
+    from(printerModJson)
+    doLast {
+        def included = zipTree(archiveFile.get().asFile).matching { include printerClasses }.files
+        if (included.isEmpty()) {
+            throw new GradleException("Printer classes are missing from the printer jar")
+        }
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn printerJar
+}
+
+if (providers.gradleProperty("printerOnly").isPresent()) {
+    tasks.named("runClientGameTest") {
+        systemProperty "litematicaplus.printerOnly", "true"
     }
 }
 

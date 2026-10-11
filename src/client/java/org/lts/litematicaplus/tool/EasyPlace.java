@@ -48,6 +48,12 @@ import org.lts.litematicaplus.verify.StateComparator;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class EasyPlace {
+    public enum Outcome {
+        ACTED,
+        SKIPPED,
+        FAILED
+    }
+
     private enum Step {
         NONE,
         FOLLOW_UP,
@@ -119,7 +125,7 @@ public final class EasyPlace {
         GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, candidate -> isActionable(minecraft, candidate));
         if (hit != null) {
             sessionPlaced = true;
-            attempt(minecraft, hit, config);
+            attempt(minecraft, hit, config, true);
         }
     }
 
@@ -309,7 +315,30 @@ public final class EasyPlace {
         }
     }
 
-    private static void attempt(Minecraft minecraft, GhostRaycast.Hit hit, LitematicaPlusConfig config) {
+    public static boolean ready(Minecraft minecraft) {
+        return TickQueue.worldReady(minecraft) && !cooling() && !BreakAssist.busy(minecraft)
+                && !ToolController.get().holdingTool(minecraft);
+    }
+
+    public static Outcome actAt(Minecraft minecraft, BlockPos pos) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (!config.renderEnabled || !ready(minecraft) || !minecraft.player.mayBuild()
+                || minecraft.player.isFallFlying()) {
+            return Outcome.SKIPPED;
+        }
+        BlockState target = GhostEngine.get().schematicStateAt(pos.getX(), pos.getY(), pos.getZ());
+        if (target == null || target.isAir()) {
+            return Outcome.SKIPPED;
+        }
+        GhostRaycast.Hit hit = new GhostRaycast.Hit(pos.immutable(), target, MismatchType.MISSING);
+        if (!isActionable(minecraft, hit)) {
+            return Outcome.SKIPPED;
+        }
+        return attempt(minecraft, hit, config, false) ? Outcome.ACTED : Outcome.FAILED;
+    }
+
+    private static boolean attempt(Minecraft minecraft, GhostRaycast.Hit hit, LitematicaPlusConfig config,
+            boolean holdOnFailure) {
         LocalPlayer player = minecraft.player;
         ClientLevel level = minecraft.level;
         BlockPos pos = hit.pos();
@@ -319,34 +348,41 @@ public final class EasyPlace {
         if (step == Step.FOLLOW_UP) {
             if (FollowUps.start(minecraft, pos)) {
                 markPlacement(minecraft, pos);
+                return true;
             }
-            return;
+            return false;
         }
         if (step == Step.BREAK) {
             markPlacement(minecraft, pos);
             BreakAssist.start(minecraft, pos);
-            return;
+            return true;
         }
         if (step != Step.PLACE) {
-            return;
+            return false;
         }
         if (config.easyPlaceObserverDetect && target.getBlock() instanceof ObserverBlock && !observedReady(level, pos, target)) {
             diagnose(config, "litematicaplus.message.observer_wait");
-            hold(3);
-            return;
+            if (holdOnFailure) {
+                hold(3);
+            }
+            return false;
         }
         Item item = resolveItem(minecraft, target, config);
         if (item == Items.AIR) {
             diagnose(config, "litematicaplus.message.item_missing",
                     new ItemStack(InventoryHelper.itemFor(target)).getHoverName());
-            hold(5);
-            return;
+            if (holdOnFailure) {
+                hold(5);
+            }
+            return false;
         }
         PlacementSolver.Plan plan = solve(player, level, item, pos, target, config);
         if (plan == null) {
             diagnose(config, "litematicaplus.message.easy_place_orientation");
-            hold(3);
-            return;
+            if (holdOnFailure) {
+                hold(3);
+            }
+            return false;
         }
         markPlacement(minecraft, pos);
         int lead = plan.rotate() ? config.easyPlaceRotationLeadTicks : 0;
@@ -370,6 +406,7 @@ public final class EasyPlace {
         } else {
             execute(minecraft, pos.immutable(), target, item, plan);
         }
+        return true;
     }
 
     private static PlacementSolver.Plan solve(LocalPlayer player, ClientLevel level, Item item, BlockPos pos,
@@ -521,7 +558,7 @@ public final class EasyPlace {
         RECENT.remove(pos);
         GhostRaycast.Hit hit = new GhostRaycast.Hit(pos, target, MismatchType.MISSING);
         if (isActionable(minecraft, hit)) {
-            attempt(minecraft, hit, config);
+            attempt(minecraft, hit, config, true);
         }
     }
 

@@ -84,6 +84,13 @@ public final class Hotkeys {
         takeMaterials = add("take_materials", 0, minecraft -> { });
     }
 
+    public static KeyMapping register(String name, int key, Consumer<Minecraft> action) {
+        if (category == null) {
+            throw new IllegalStateException("Hotkeys are not registered yet");
+        }
+        return add(name, key, action);
+    }
+
     private static KeyMapping add(String name, int key, Consumer<Minecraft> action) {
         KeyMapping mapping = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key." + LitematicaPlusClient.MOD_ID + "." + name, InputConstants.Type.KEYBOARD,
