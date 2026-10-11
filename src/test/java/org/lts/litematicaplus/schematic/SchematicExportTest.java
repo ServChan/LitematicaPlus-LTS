@@ -95,4 +95,20 @@ class SchematicExportTest {
         Path structure = SchematicIo.export(source, SchematicExport.Format.STRUCTURE);
         assertMerged(SchematicIo.read(structure).regions().values().iterator().next());
     }
+
+    @Test
+    void metadataReportsDimensionsOfEveryFormat(@TempDir Path directory) throws IOException {
+        Path source = directory.resolve("sample.litematic");
+        SchematicIo.write(source, sample());
+        for (SchematicExport.Format format : SchematicExport.Format.values()) {
+            SchematicMetadata metadata = SchematicIo.readMetadata(SchematicIo.export(source, format));
+            assertEquals(5, metadata.enclosingX, format.name());
+            assertEquals(3, metadata.enclosingY, format.name());
+            assertEquals(2, metadata.enclosingZ, format.name());
+        }
+        SchematicMetadata litematic = SchematicIo.readMetadata(source);
+        assertEquals(5, litematic.enclosingX);
+        assertEquals(3, litematic.enclosingY);
+        assertEquals(2, litematic.enclosingZ);
+    }
 }

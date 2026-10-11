@@ -6,8 +6,10 @@ import java.nio.file.Path;
 import java.util.Locale;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.ShortTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.visitors.CollectFields;
 import net.minecraft.nbt.visitors.FieldSelector;
@@ -69,6 +71,7 @@ public final class SchematicIo {
             SchematicMetadata metadata = new SchematicMetadata();
             metadata.name = baseName(path);
             metadata.format = name.endsWith(".schem") ? "sponge" : name.endsWith(".schematic") ? "mcedit" : "structure";
+            readDimensions(path, metadata);
             return metadata;
         }
         CollectFields visitor = new CollectFields(
@@ -89,6 +92,51 @@ public final class SchematicIo {
             metadata.name = baseName(path);
         }
         return metadata;
+    }
+
+    private static void readDimensions(Path path, SchematicMetadata metadata) {
+        CollectFields visitor = switch (metadata.format) {
+            case "structure" -> new CollectFields(new FieldSelector(ListTag.TYPE, "size"));
+            case "mcedit" -> new CollectFields(new FieldSelector(ShortTag.TYPE, "Width"),
+                    new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"));
+            default -> new CollectFields(new FieldSelector(ShortTag.TYPE, "Width"),
+                    new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"),
+                    new FieldSelector("Schematic", ShortTag.TYPE, "Width"),
+                    new FieldSelector("Schematic", ShortTag.TYPE, "Height"),
+                    new FieldSelector("Schematic", ShortTag.TYPE, "Length"));
+        };
+        try {
+            NbtIo.parseCompressed(path, visitor, NbtAccounter.create(NBT_QUOTA));
+        } catch (IOException | RuntimeException exception) {
+            return;
+        }
+        if (!(visitor.getResult() instanceof CompoundTag root)) {
+            return;
+        }
+        int x;
+        int y;
+        int z;
+        CompoundTag body = root.getCompound("Schematic").orElse(root);
+        if (body.contains("Width")) {
+            x = body.getShortOr("Width", (short) 0) & 0xFFFF;
+            y = body.getShortOr("Height", (short) 0) & 0xFFFF;
+            z = body.getShortOr("Length", (short) 0) & 0xFFFF;
+        } else {
+            ListTag size = root.getListOrEmpty("size");
+            if (size.size() != 3) {
+                return;
+            }
+            x = size.getIntOr(0, 0);
+            y = size.getIntOr(1, 0);
+            z = size.getIntOr(2, 0);
+        }
+        if (x > 0 && y > 0 && z > 0) {
+            metadata.enclosingX = x;
+            metadata.enclosingY = y;
+            metadata.enclosingZ = z;
+            metadata.totalVolume = (long) x * y * z;
+            metadata.regionCount = 1;
+        }
     }
 
     public static void write(Path path, Schematic schematic) throws IOException {

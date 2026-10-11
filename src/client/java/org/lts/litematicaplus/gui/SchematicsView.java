@@ -17,6 +17,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Stream;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -33,10 +34,37 @@ final class SchematicsView extends TabView {
             String sizeText) {
     }
 
+    private enum Sort {
+        NAME(false),
+        SIZE(true),
+        WEIGHT(true),
+        DATE(true);
+
+        private final boolean descendingByDefault;
+
+        Sort(boolean descendingByDefault) {
+            this.descendingByDefault = descendingByDefault;
+        }
+
+        Sort next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+
+        String key() {
+            return "litematicaplus.schematics.sort." + name().toLowerCase(Locale.ROOT);
+        }
+    }
+
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter DAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+            .withZone(ZoneId.systemDefault());
     private static final Map<String, SchematicMetadata> METADATA = new ConcurrentHashMap<>();
+    private static final Map<String, Long> VOLUMES = new ConcurrentHashMap<>();
+    private static final long UNKNOWN_VOLUME = -1L;
     private static Path currentDirectory;
     private static String filter = "";
+    private static Sort sort = Sort.NAME;
+    private static boolean descending;
 
     private ListPanel<Entry> list;
     private FlatButton placeButton;
@@ -60,6 +88,8 @@ final class SchematicsView extends TabView {
     private PreviewWidget preview;
     private int previewSide;
     private final TextMemo parentText = new TextMemo();
+    private volatile int volumeRequest;
+    private boolean readingVolumes;
 
     SchematicsView(HubScreen screen) {
         super(screen);
@@ -69,6 +99,9 @@ final class SchematicsView extends TabView {
     Component summary() {
         if (this.status != null) {
             return this.status;
+        }
+        if (this.readingVolumes) {
+            return tr("litematicaplus.schematics.sort.reading");
         }
         Path root = PlacementManager.schematicsDirectory();
         Path directory = directory();
@@ -90,7 +123,28 @@ final class SchematicsView extends TabView {
         this.detailWidth = Math.max(130, Math.min(previews ? 270 : 230, this.width * (previews ? 46 : 42) / 100));
         int listWidth = this.width - this.detailWidth - Theme.GAP;
         this.detailX = this.left + listWidth + Theme.GAP;
-        EditBox search = field(this.left, this.top, listWidth, filter, tr("litematicaplus.schematics.search"), 64);
+        int sortWidth = 0;
+        for (Sort entry : Sort.values()) {
+            sortWidth = Math.max(sortWidth, this.font.width(tr(entry.key())) + 12);
+        }
+        int directionWidth = 24;
+        int searchWidth = listWidth - sortWidth - directionWidth - Theme.GAP * 2;
+        FlatButton sortButton = add(FlatButton.secondary(this.left + searchWidth + Theme.GAP, this.top, sortWidth,
+                tr(sort.key()), button -> {
+                    sort = sort.next();
+                    descending = sort.descendingByDefault;
+                    this.screen.refresh();
+                    loadVolumes();
+                }));
+        sortButton.setTooltip(Tooltip.create(tr("litematicaplus.schematics.sort.tip", tr(sort.key()))));
+        FlatButton directionButton = add(FlatButton.secondary(this.left + listWidth - directionWidth, this.top,
+                directionWidth, Component.literal(descending ? "\u2193" : "\u2191"), button -> {
+                    descending = !descending;
+                    this.screen.refresh();
+                }));
+        directionButton.setTooltip(Tooltip.create(tr(descending ? "litematicaplus.schematics.sort.descending"
+                : "litematicaplus.schematics.sort.ascending")));
+        EditBox search = field(this.left, this.top, searchWidth, filter, tr("litematicaplus.schematics.search"), 64);
         search.setResponder(value -> {
             filter = value;
             applyFilter();
@@ -226,6 +280,7 @@ final class SchematicsView extends TabView {
                     this.loading = false;
                     this.entries = result;
                     applyFilter();
+                    loadVolumes();
                 });
             });
         } catch (RejectedExecutionException exception) {
@@ -267,6 +322,94 @@ final class SchematicsView extends TabView {
         return result;
     }
 
+    private static String key(Entry entry) {
+        return entry.path() + "|" + entry.modified() + "|" + entry.size();
+    }
+
+    private static long volume(Entry entry) {
+        return VOLUMES.getOrDefault(key(entry), UNKNOWN_VOLUME);
+    }
+
+    private static long volumeOf(SchematicMetadata metadata) {
+        long volume = (long) metadata.enclosingX * metadata.enclosingY * metadata.enclosingZ;
+        return volume > 0L ? volume : UNKNOWN_VOLUME;
+    }
+
+    private void loadVolumes() {
+        if (sort != Sort.SIZE) {
+            this.readingVolumes = false;
+            return;
+        }
+        List<Entry> missing = new ArrayList<>();
+        for (Entry entry : this.entries) {
+            if (!entry.directory() && !VOLUMES.containsKey(key(entry))) {
+                missing.add(entry);
+            }
+        }
+        if (missing.isEmpty()) {
+            this.readingVolumes = false;
+            return;
+        }
+        int id = ++this.volumeRequest;
+        this.readingVolumes = true;
+        try {
+            Workers.io().execute(() -> {
+                for (Entry entry : missing) {
+                    if (id != this.volumeRequest) {
+                        return;
+                    }
+                    String key = key(entry);
+                    long volume = UNKNOWN_VOLUME;
+                    try {
+                        SchematicMetadata loaded = SchematicIo.readMetadata(entry.path());
+                        volume = volumeOf(loaded);
+                        if (METADATA.size() > 512) {
+                            METADATA.clear();
+                        }
+                        METADATA.put(key, loaded);
+                    } catch (IOException | RuntimeException exception) {
+                        LitematicaPlusClient.LOGGER.debug("Could not read the size of {}", entry.path(), exception);
+                    }
+                    if (VOLUMES.size() > 8192) {
+                        VOLUMES.clear();
+                    }
+                    VOLUMES.put(key, volume);
+                }
+                this.minecraft.execute(() -> {
+                    if (id == this.volumeRequest) {
+                        this.readingVolumes = false;
+                        applyFilter();
+                    }
+                });
+            });
+        } catch (RejectedExecutionException exception) {
+            this.readingVolumes = false;
+        }
+    }
+
+    private static Comparator<Entry> order() {
+        Comparator<Entry> byName = Comparator.comparing(entry -> entry.name().toLowerCase(Locale.ROOT));
+        Comparator<Entry> files = switch (sort) {
+            case NAME -> byName;
+            case SIZE -> Comparator.comparingLong(SchematicsView::volume);
+            case WEIGHT -> Comparator.comparingLong(Entry::size);
+            case DATE -> Comparator.comparingLong(Entry::modified);
+        };
+        if (descending) {
+            files = files.reversed();
+        }
+        Comparator<Entry> folders = sort == Sort.DATE ? Comparator.comparingLong(Entry::modified) : byName;
+        if (descending && (sort == Sort.NAME || sort == Sort.DATE)) {
+            folders = folders.reversed();
+        }
+        Comparator<Entry> filesThenName = files.thenComparing(byName);
+        Comparator<Entry> foldersThenName = folders.thenComparing(byName);
+        return Comparator.comparing(Entry::parent, Comparator.reverseOrder())
+                .thenComparing(Entry::directory, Comparator.reverseOrder())
+                .thenComparing(entry -> sort == Sort.SIZE && !entry.directory() && volume(entry) == UNKNOWN_VOLUME)
+                .thenComparing((a, b) -> a.directory() ? foldersThenName.compare(a, b) : filesThenName.compare(a, b));
+    }
+
     private void applyFilter() {
         if (this.list == null) {
             return;
@@ -278,6 +421,7 @@ final class SchematicsView extends TabView {
                 shown.add(entry);
             }
         }
+        shown.sort(order());
         this.list.setItems(shown);
         if (this.selected != null && !shown.contains(this.selected)) {
             select(null);
@@ -308,7 +452,7 @@ final class SchematicsView extends TabView {
         if (entry == null || entry.directory()) {
             return;
         }
-        String key = entry.path() + "|" + entry.modified() + "|" + entry.size();
+        String key = key(entry);
         SchematicMetadata cached = METADATA.get(key);
         if (cached != null) {
             this.metadata = cached;
@@ -434,10 +578,23 @@ final class SchematicsView extends TabView {
         graphics.fill(x + 9, y + 5, x + 17, y + rowHeight - 5, Theme.ACCENT_DARK);
         graphics.fill(x + 11, y + 8, x + 15, y + 9, Theme.TEXT_BRIGHT);
         graphics.fill(x + 11, y + 11, x + 15, y + 12, Theme.TEXT_BRIGHT);
-        String size = entry.sizeText();
+        String size = rowValue(entry);
         int sizeWidth = rowFont.width(size);
         Ui.clipped(graphics, rowFont, entry.name(), x + 24, textY, rowWidth - 36 - sizeWidth, Theme.TEXT);
         Ui.right(graphics, rowFont, size, x + rowWidth - 6, textY, Theme.TEXT_DIM);
+    }
+
+    private static String rowValue(Entry entry) {
+        return switch (sort) {
+            case SIZE -> {
+                SchematicMetadata meta = METADATA.get(key(entry));
+                yield meta != null && meta.enclosingX > 0
+                        ? meta.enclosingX + "x" + meta.enclosingY + "x" + meta.enclosingZ
+                        : VOLUMES.containsKey(key(entry)) ? "?" : "...";
+            }
+            case DATE -> DAY_TIME.format(Instant.ofEpochMilli(entry.modified()));
+            default -> entry.sizeText();
+        };
     }
 
     private String parentLabel() {
@@ -495,8 +652,12 @@ final class SchematicsView extends TabView {
         if (meta.enclosingX > 0) {
             y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.size",
                     meta.enclosingX + " x " + meta.enclosingY + " x " + meta.enclosingZ);
-            y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.blocks", Long.toString(meta.totalBlocks));
-            y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.regions", Integer.toString(meta.regionCount));
+            if (meta.totalBlocks > 0L) {
+                y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.blocks", Long.toString(meta.totalBlocks));
+            }
+            if (meta.regionCount > 1 || meta.totalBlocks > 0L) {
+                y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.regions", Integer.toString(meta.regionCount));
+            }
         }
         if (!meta.author.isBlank()) {
             y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.author", meta.author);
