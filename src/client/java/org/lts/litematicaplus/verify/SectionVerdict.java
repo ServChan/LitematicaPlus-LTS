@@ -26,15 +26,39 @@ public final class SectionVerdict {
     private final int[] counts;
     private final int[] correctIndices;
     private final int[] correctCounts;
+    private final int[] restateIndices;
+    private final int[] restateCounts;
     private final boolean worldKnown;
 
-    private SectionVerdict(byte[] categories, int[] counts, int[] correctIndices, int[] correctCounts,
-            boolean worldKnown) {
+    private SectionVerdict(byte[] categories, int[] counts, int[][] correct, int[][] restate, boolean worldKnown) {
         this.categories = categories;
         this.counts = counts;
-        this.correctIndices = correctIndices;
-        this.correctCounts = correctCounts;
+        this.correctIndices = correct[0];
+        this.correctCounts = correct[1];
+        this.restateIndices = restate[0];
+        this.restateCounts = restate[1];
         this.worldKnown = worldKnown;
+    }
+
+    private static int[][] sparse(int[] dense) {
+        int distinct = 0;
+        for (int value : dense) {
+            if (value != 0) {
+                distinct++;
+            }
+        }
+        if (distinct == 0) {
+            return new int[][]{NO_INTS, NO_INTS};
+        }
+        int[] indices = new int[distinct];
+        int[] values = new int[distinct];
+        for (int i = 0, next = 0; i < dense.length && next < distinct; i++) {
+            if (dense[i] != 0) {
+                indices[next] = i;
+                values[next++] = dense[i];
+            }
+        }
+        return new int[][]{indices, values};
     }
 
     private static byte[] uniform(MismatchType type) {
@@ -161,6 +185,7 @@ public final class SectionVerdict {
         byte[] categories = new byte[GhostSection.VOLUME];
         int[] counts = new int[TYPES];
         int[] correct = new int[globalIds.length];
+        int[] restate = new int[globalIds.length];
         short[] data = section.raw();
         if (world == null) {
             byte unknown = (byte) MismatchType.UNKNOWN.ordinal();
@@ -171,7 +196,7 @@ public final class SectionVerdict {
                     counts[unknown]++;
                 }
             }
-            return new SectionVerdict(categories, counts, NO_INTS, NO_INTS, false);
+            return new SectionVerdict(categories, counts, sparse(NO_INTS), sparse(NO_INTS), false);
         }
         StateComparator comparator = StateComparator.get();
         BlockState lastState = null;
@@ -200,20 +225,8 @@ public final class SectionVerdict {
             counts[ordinal]++;
             if (type == MismatchType.CORRECT) {
                 correct[paletteIndex]++;
-            }
-        }
-        int distinct = 0;
-        for (int value : correct) {
-            if (value != 0) {
-                distinct++;
-            }
-        }
-        int[] indices = distinct == 0 ? NO_INTS : new int[distinct];
-        int[] values = distinct == 0 ? NO_INTS : new int[distinct];
-        for (int i = 0, next = 0; i < correct.length && next < distinct; i++) {
-            if (correct[i] != 0) {
-                indices[next] = i;
-                values[next++] = correct[i];
+            } else if (type == MismatchType.WRONG_STATE) {
+                restate[paletteIndex]++;
             }
         }
         byte[] shared = categories;
@@ -226,7 +239,7 @@ public final class SectionVerdict {
         } else if (counts[MismatchType.CORRECT.ordinal()] == GhostSection.VOLUME) {
             shared = ALL_CORRECT;
         }
-        return new SectionVerdict(shared, counts, indices, values, true);
+        return new SectionVerdict(shared, counts, sparse(correct), sparse(restate), true);
     }
 
     public byte[] categories() {
@@ -251,6 +264,14 @@ public final class SectionVerdict {
 
     public int[] correctCounts() {
         return this.correctCounts;
+    }
+
+    public int[] restateIndices() {
+        return this.restateIndices;
+    }
+
+    public int[] restateCounts() {
+        return this.restateCounts;
     }
 
     public int correctFor(int paletteIndex) {

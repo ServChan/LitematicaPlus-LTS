@@ -623,7 +623,7 @@ public final class GhostEngine {
                     minecraft.execute(() -> {
                         if (target.buildToken == token) {
                             target.building = false;
-                            placement.markFailed(reason);
+                            placement.markBuildFailed(reason);
                         }
                     });
                 }
@@ -641,6 +641,10 @@ public final class GhostEngine {
         freeSlots(runtime);
         runtime.volume = volume;
         runtime.building = false;
+        SchematicPlacement placement = runtime.placement();
+        if (placement.loadState() == SchematicPlacement.LoadState.FAILED && placement.schematic() != null) {
+            placement.markReady(placement.schematic());
+        }
         runtime.resetTotals(volume.palette().length);
         runtime.scope = this.scope;
         for (Long2ObjectMap.Entry<GhostSection> entry : volume.sections().long2ObjectEntrySet()) {
@@ -905,7 +909,8 @@ public final class GhostEngine {
         }
         boolean render = config.renderEnabled;
         SectionJob.Options next = new SectionJob.Options(render && config.renderGhostBlocks,
-                render && config.renderOverlay, config.renderCollidingBlocks, config.lenientStates, config.looseBlocks,
+                render && config.renderOverlay, config.renderCollidingBlocks, config.ghostErrorsOnly, config.lenientStates,
+                config.looseBlocks,
                 config.soilInterchangeable,
                 config.trustHiddenBlocks && !Minecraft.getInstance().hasSingleplayerServer(),
                 config.overlayThroughWalls, config.useWorldCache,
@@ -917,14 +922,14 @@ public final class GhostEngine {
             boolean changed = this.options != null;
             this.options = next;
             this.blockEntities = blockEntities;
-            this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(),
+            this.optionsWithoutGhost = new SectionJob.Options(false, false, next.renderColliding(), next.ghostErrorsOnly(),
                     next.lenientStates(), next.looseBlocks(), next.soilSwap(), next.trustHidden(), next.throughWalls(),
                     next.worldCache(),
                     next.showMissing(), next.showExtra(), next.showWrongBlock(),
                     next.showWrongState(), next.fillAlpha(), next.lineAlpha());
             this.optionsOverlayOnly = new SectionJob.Options(false, next.overlay() && next.throughWalls(),
-                    next.renderColliding(), next.lenientStates(), next.looseBlocks(), next.soilSwap(), next.trustHidden(),
-                    next.throughWalls(),
+                    next.renderColliding(), next.ghostErrorsOnly(), next.lenientStates(), next.looseBlocks(), next.soilSwap(),
+                    next.trustHidden(), next.throughWalls(),
                     next.worldCache(),
                     next.showMissing(), next.showExtra(), next.showWrongBlock(), next.showWrongState(), next.fillAlpha(),
                     next.lineAlpha());
@@ -1453,14 +1458,17 @@ public final class GhostEngine {
                     continue;
                 }
             }
-            slot.failures = 0;
             try {
                 apply(runtime, slot, result);
+                slot.failures = 0;
             } catch (RuntimeException exception) {
                 closeSlot(runtime, slot);
                 if (this.failureLogs < MAX_FAILURE_LOGS) {
                     this.failureLogs++;
                     LitematicaPlusClient.LOGGER.error("Could not upload a schematic section", exception);
+                }
+                if (++slot.failures <= MAX_SLOT_FAILURES) {
+                    runtime.dirty.add(slot.key);
                 }
             }
         }

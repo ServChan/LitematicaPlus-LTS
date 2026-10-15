@@ -111,10 +111,11 @@ final class AddonsView extends TabView {
         this.chipY = y;
         y += 14;
         this.statusY = y;
-        this.statusLines = Math.min(MAX_STATUS_LINES, this.font.split(addon.status(), this.detailWidth).size());
+        boolean tight = this.height < 200;
+        this.statusLines = Math.min(tight ? 2 : MAX_STATUS_LINES, this.font.split(addon.status(), this.detailWidth).size());
         y += this.statusLines * 10 + 4;
         this.aboutY = y;
-        this.aboutLines = Math.min(MAX_ABOUT_LINES, this.font.split(addon.about(), this.detailWidth).size());
+        this.aboutLines = Math.min(tight ? 1 : MAX_ABOUT_LINES, this.font.split(addon.about(), this.detailWidth).size());
         y += this.aboutLines * 10 + 8;
         this.settingsY = -1;
         if (!addon.settings().isEmpty()) {

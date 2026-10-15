@@ -140,6 +140,29 @@ class SectionVerdictTest {
     }
 
     @Test
+    void wrongStateBlocksAreCountedSeparatelyFromCorrectOnes() {
+        BlockState north = Blocks.OAK_STAIRS.defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH);
+        BlockState south = north.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH);
+        int[] globalIds = {id(AIR), id(north)};
+        boolean[] solid = {false, true};
+        GhostSection section = new GhostSection();
+        section.set(GhostSection.index(0, 0, 0), (short) 1);
+        section.set(GhostSection.index(1, 0, 0), (short) 1);
+        section.set(GhostSection.index(2, 0, 0), (short) 1);
+        section.recount(solid);
+        BlockState[] world = new BlockState[GhostSection.VOLUME];
+        Arrays.fill(world, AIR);
+        world[GhostSection.index(0, 0, 0)] = north;
+        world[GhostSection.index(1, 0, 0)] = south;
+        SectionVerdict verdict = SectionVerdict.compute(section, globalIds, solid, world, true);
+        assertEquals(1, verdict.correctFor(1));
+        assertEquals(1, verdict.restateIndices().length);
+        assertEquals(1, verdict.restateIndices()[0]);
+        assertEquals(1, verdict.restateCounts()[0]);
+        assertEquals(1, verdict.count(MismatchType.MISSING));
+    }
+
+    @Test
     void verdictCountsCategoriesAndCorrectBlocksPerPaletteEntry() {
         BlockState[] palette = {AIR, STONE, Blocks.GLASS.defaultBlockState()};
         int[] globalIds = {id(palette[0]), id(palette[1]), id(palette[2])};

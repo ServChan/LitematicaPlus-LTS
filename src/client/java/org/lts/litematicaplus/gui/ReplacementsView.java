@@ -118,6 +118,9 @@ final class ReplacementsView extends TabView {
                 .onSelect(row -> {
                     source = row.block();
                     updateCandidates(placement);
+                    if (this.candidates != null) {
+                        this.candidates.setScroll(0);
+                    }
                 }));
         this.sourceRows = sourceRows(placement);
         this.sources.setItems(this.sourceRows);

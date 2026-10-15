@@ -11,6 +11,36 @@ public final class Ui {
     private Ui() {
     }
 
+    public static final java.time.Duration HINT_DELAY = java.time.Duration.ofMillis(500);
+
+    public static <T extends net.minecraft.client.gui.components.AbstractWidget> T hint(T widget, Component text) {
+        if (widget instanceof FlatButton button) {
+            button.withHint(text);
+        } else {
+            widget.setTooltip(net.minecraft.client.gui.components.Tooltip.create(text));
+        }
+        return widget;
+    }
+
+    public static void decorate(Iterable<? extends net.minecraft.client.gui.components.events.GuiEventListener> children) {
+        net.minecraft.locale.Language language = net.minecraft.locale.Language.getInstance();
+        for (net.minecraft.client.gui.components.events.GuiEventListener child : children) {
+            if (!(child instanceof net.minecraft.client.gui.components.AbstractWidget widget)) {
+                continue;
+            }
+            widget.setTooltipDelay(HINT_DELAY);
+            if (!(widget.getMessage().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents label)) {
+                continue;
+            }
+            String key = label.getKey();
+            if (language.has(key + ".help")) {
+                hint(widget, Component.translatable(key + ".help"));
+            } else if (key.startsWith("litematicaplus.option.") && language.has(key + ".tip")) {
+                hint(widget, Component.translatable(key + ".tip"));
+            }
+        }
+    }
+
     public static void panel(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
         graphics.fill(x, y, x + width, y + height, Theme.SURFACE);
         graphics.outline(x, y, width, height, Theme.BORDER);

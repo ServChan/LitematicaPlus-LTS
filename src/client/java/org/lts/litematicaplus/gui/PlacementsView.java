@@ -8,10 +8,13 @@ import java.util.Locale;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import org.lts.litematicaplus.compat.AxiomActions;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementGrid;
@@ -35,6 +38,7 @@ final class PlacementsView extends TabView {
     private int detailX;
     private int detailWidth;
     private int regionsTop;
+    private int failTop;
     private int knownCount = -1;
     private SchematicPlacement.LoadState knownState;
     private boolean knownLocked;
@@ -43,6 +47,8 @@ final class PlacementsView extends TabView {
     private final Map<SchematicPlacement, TextMemo> statusText = new IdentityHashMap<>();
     private final TextMemo regionOn = new TextMemo();
     private final TextMemo regionOff = new TextMemo();
+    private Component notice;
+    private int noticeTicks;
 
     PlacementsView(HubScreen screen) {
         super(screen);
@@ -50,6 +56,9 @@ final class PlacementsView extends TabView {
 
     @Override
     Component summary() {
+        if (this.notice != null) {
+            return this.notice;
+        }
         return tr("litematicaplus.placements.summary", PlacementManager.get().placements().size());
     }
 
@@ -60,6 +69,7 @@ final class PlacementsView extends TabView {
         this.statusText.keySet().retainAll(placements);
         this.knownCount = placements.size();
         this.regionsTop = 0;
+        this.failTop = 0;
         if (placements.isEmpty()) {
             add(FlatButton.primary(this.left + (this.width - 160) / 2, this.top + this.height / 2 + 30, 160,
                     tr("litematicaplus.overview.browse"), button -> this.screen.switchTab(HubScreen.Tab.SCHEMATICS)));
@@ -138,7 +148,7 @@ final class PlacementsView extends TabView {
                     value -> manager.move(selected, index == 0 ? value : selected.x(), index == 1 ? value : selected.y(),
                             index == 2 ? value : selected.z()), -30000000, 30000000, 1);
             stepper.active = !selected.locked();
-            add(stepper);
+            add(hint(stepper, "litematicaplus.placements.coordinate_tip"));
         }
         int third = (this.detailWidth - Theme.GAP * 2) / 3;
         int hereX = wide ? x : x + stepperWidth + Theme.GAP;
@@ -179,12 +189,28 @@ final class PlacementsView extends TabView {
                     this.screen.refresh();
                 }));
         y += Theme.CONTROL_HEIGHT + 4;
+        this.failTop = 0;
+        if (selected.loadState() == SchematicPlacement.LoadState.FAILED) {
+            this.failTop = y;
+            y += 24;
+        }
         if (schematic != null && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
             add(FlatButton.secondary(x, bottomY - Theme.CONTROL_HEIGHT - 4, this.detailWidth, gridLabel(selected),
                     button -> {
                         this.gridPage = true;
                         this.screen.refresh();
                     }));
+            bottomY -= Theme.CONTROL_HEIGHT + 4;
+        }
+        if (schematic != null && AxiomBridge.available() && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
+            int axiomY = bottomY - Theme.CONTROL_HEIGHT - 4;
+            FlatButton send = add(FlatButton.secondary(x, axiomY, half, tr("litematicaplus.axiom.send"),
+                    button -> notice(AxiomActions.sendPlacement(this.minecraft, selected))));
+            send.setTooltip(Tooltip.create(tr("litematicaplus.axiom.send.tip")));
+            send.active = !AxiomActions.busy();
+            FlatButton select = add(FlatButton.secondary(x + half + Theme.GAP, axiomY, this.detailWidth - half - Theme.GAP,
+                    tr("litematicaplus.axiom.select_placement"), button -> notice(AxiomActions.selectPlacement(selected))));
+            select.setTooltip(Tooltip.create(tr("litematicaplus.axiom.select_placement.tip")));
             bottomY -= Theme.CONTROL_HEIGHT + 4;
         }
         if (hasRegions) {
@@ -291,7 +317,7 @@ final class PlacementsView extends TabView {
                                 index == 2 ? value : current.offsetZ()));
                     }, -30000, 30000, 1);
             stepper.active = editable;
-            add(stepper);
+            add(hint(stepper, "litematicaplus.region.offset_tip"));
         }
         y += (Theme.CONTROL_HEIGHT + 2) * (wide ? 1 : 2) + 4;
         RegionPlacement current = selected.regionPlacement(region);
@@ -344,8 +370,8 @@ final class PlacementsView extends TabView {
             negative.active = editable;
             positive.active = editable;
             step.active = editable;
-            add(negative);
-            add(positive);
+            add(hint(negative, "litematicaplus.grid.repeat_negative_tip", axes[axis]));
+            add(hint(positive, "litematicaplus.grid.repeat_positive_tip", axes[axis]));
             add(step);
             y += Theme.CONTROL_HEIGHT + 4;
         }
@@ -359,6 +385,9 @@ final class PlacementsView extends TabView {
 
     @Override
     void tick() {
+        if (this.noticeTicks > 0 && --this.noticeTicks == 0) {
+            this.notice = null;
+        }
         if (this.list != null) {
             this.listScroll = this.list.scroll();
         }
@@ -450,10 +479,16 @@ final class PlacementsView extends TabView {
                     : tr("litematicaplus.placements.regions_blocks", volume.totalBlocks());
             Ui.label(graphics, this.font, label, this.detailX, this.regionsTop - 11);
         }
-        if (selected.loadState() == SchematicPlacement.LoadState.FAILED && this.regionsTop == 0) {
-            int y = this.top + this.height - Theme.CONTROL_HEIGHT - 24;
-            Ui.wrapped(graphics, this.font, tr("litematicaplus.placement.failed", selected.error()), this.detailX, y,
-                    this.detailWidth, 2, Theme.DANGER, mouseX, mouseY);
+        if (selected.loadState() == SchematicPlacement.LoadState.FAILED && this.failTop > 0) {
+            Ui.wrapped(graphics, this.font, tr("litematicaplus.placement.failed", selected.error()), this.detailX,
+                    this.failTop, this.detailWidth, 2, Theme.DANGER, mouseX, mouseY);
+        }
+    }
+
+    private void notice(Component message) {
+        if (message != null) {
+            this.notice = message;
+            this.noticeTicks = 160;
         }
     }
 }

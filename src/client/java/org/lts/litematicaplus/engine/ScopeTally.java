@@ -10,20 +10,23 @@ public final class ScopeTally {
     private static final int[] NONE = new int[0];
     private static final int UNKNOWN = MismatchType.UNKNOWN.ordinal();
     private static final int CORRECT = MismatchType.CORRECT.ordinal();
-    static final ScopeTally EMPTY = new ScopeTally(new int[MismatchType.VALUES.length], 0, NONE, NONE, NONE);
+    private static final int WRONG_STATE = MismatchType.WRONG_STATE.ordinal();
+    static final ScopeTally EMPTY = new ScopeTally(new int[MismatchType.VALUES.length], 0, NONE, NONE, NONE, NONE);
 
     final int[] counts;
     final int blocks;
     final int[] paletteIndices;
     final int[] totals;
     final int[] correct;
+    final int[] restate;
 
-    private ScopeTally(int[] counts, int blocks, int[] paletteIndices, int[] totals, int[] correct) {
+    private ScopeTally(int[] counts, int blocks, int[] paletteIndices, int[] totals, int[] correct, int[] restate) {
         this.counts = counts;
         this.blocks = blocks;
         this.paletteIndices = paletteIndices;
         this.totals = totals;
         this.correct = correct;
+        this.restate = restate;
     }
 
     public int count(MismatchType type) {
@@ -37,6 +40,7 @@ public final class ScopeTally {
     static final class Scratch {
         private int[] totals = NONE;
         private int[] correct = NONE;
+        private int[] restate = NONE;
         private int[] touched = new int[64];
         private int touchedCount;
 
@@ -44,11 +48,12 @@ public final class ScopeTally {
             if (this.totals.length < size) {
                 this.totals = new int[size];
                 this.correct = new int[size];
+                this.restate = new int[size];
             }
         }
 
         private void touch(int index) {
-            if (this.totals[index] == 0 && this.correct[index] == 0) {
+            if (this.totals[index] == 0 && this.correct[index] == 0 && this.restate[index] == 0) {
                 if (this.touchedCount == this.touched.length) {
                     this.touched = Arrays.copyOf(this.touched, this.touched.length * 2);
                 }
@@ -76,6 +81,7 @@ public final class ScopeTally {
         scratch.ensure(solid.length);
         int[] totals = scratch.totals;
         int[] correct = scratch.correct;
+        int[] restate = scratch.restate;
         scratch.touchedCount = 0;
         int blocks = 0;
         for (int index = 0; index < GhostSection.VOLUME; index++) {
@@ -103,6 +109,8 @@ public final class ScopeTally {
                 counts[category]++;
                 if (category == CORRECT && paletteIndex != 0) {
                     correct[paletteIndex]++;
+                } else if (category == WRONG_STATE && paletteIndex != 0) {
+                    restate[paletteIndex]++;
                 }
             } else if (isSolid && verified) {
                 counts[UNKNOWN]++;
@@ -112,15 +120,18 @@ public final class ScopeTally {
         int[] indices = distinct == 0 ? NONE : new int[distinct];
         int[] packedTotals = distinct == 0 ? NONE : new int[distinct];
         int[] packedCorrect = distinct == 0 ? NONE : new int[distinct];
+        int[] packedRestate = distinct == 0 ? NONE : new int[distinct];
         for (int i = 0; i < distinct; i++) {
             int paletteIndex = scratch.touched[i];
             indices[i] = paletteIndex;
             packedTotals[i] = totals[paletteIndex];
             packedCorrect[i] = correct[paletteIndex];
+            packedRestate[i] = restate[paletteIndex];
             totals[paletteIndex] = 0;
             correct[paletteIndex] = 0;
+            restate[paletteIndex] = 0;
         }
         scratch.touchedCount = 0;
-        return new ScopeTally(counts, blocks, indices, packedTotals, packedCorrect);
+        return new ScopeTally(counts, blocks, indices, packedTotals, packedCorrect, packedRestate);
     }
 }

@@ -7,10 +7,13 @@ import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.compat.AxiomActions;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.selection.AreaBox;
@@ -32,6 +35,7 @@ final class AreaView extends TabView {
     private int detailWidth;
     private int cornerTop;
     private int saveTop;
+    private int axiomTop;
 
     AreaView(HubScreen screen) {
         super(screen);
@@ -73,6 +77,7 @@ final class AreaView extends TabView {
         remove.active = selection.selectedBox() != null;
         int x = this.detailX;
         int y = this.top;
+        int cornersBottom = this.top;
         AreaBox box = selection.selectedBox();
         if (box != null) {
             EditBox name = field(x, y, this.detailWidth, box.name(), tr("litematicaplus.area.box_name"), 64);
@@ -84,10 +89,17 @@ final class AreaView extends TabView {
             this.cornerTop = y;
             y = cornerRow(x, y + 11, box, true);
             y = cornerRow(x, y + 11, box, false);
+            cornersBottom = y;
         } else {
             this.cornerTop = 0;
         }
         this.saveTop = this.top + this.height - Theme.CONTROL_HEIGHT * 2 - 4 - 22;
+        this.axiomTop = 0;
+        int axiomTop = this.saveTop - Theme.CONTROL_HEIGHT - 4 - 11;
+        if (AxiomBridge.available() && axiomTop >= cornersBottom + 2) {
+            this.axiomTop = axiomTop;
+            addAxiomRow(x, axiomTop + 11);
+        }
         int saveWidth = Math.min(110, this.detailWidth / 3);
         EditBox file = field(x, this.saveTop + 11, this.detailWidth, fileName, tr("litematicaplus.area.file_name"), 80);
         file.setResponder(value -> {
@@ -96,8 +108,57 @@ final class AreaView extends TabView {
             updateSave();
         });
         this.saveButton = add(FlatButton.primary(x + this.detailWidth - saveWidth,
-                this.top + this.height - Theme.CONTROL_HEIGHT, saveWidth, tr("litematicaplus.area.save"), button -> save()));
+                this.top + this.height - Theme.CONTROL_HEIGHT, saveWidth,
+                tr(this.overwriteArmed ? "litematicaplus.area.replace" : "litematicaplus.area.save"), button -> save()));
         updateSave();
+    }
+
+    private void addAxiomRow(int x, int y) {
+        int third = (this.detailWidth - Theme.GAP * 2) / 3;
+        FlatButton take = add(FlatButton.secondary(x, y, third, tr("litematicaplus.axiom.take_selection"), button -> {
+            Component message = AxiomActions.importSelection();
+            this.screen.refresh();
+            setStatus(message, Theme.TEXT_DIM);
+        }));
+        take.setTooltip(Tooltip.create(tr("litematicaplus.axiom.take_selection.tip")));
+        FlatButton give = add(FlatButton.secondary(x + third + Theme.GAP, y, third, tr("litematicaplus.axiom.give_selection"),
+                button -> setStatus(AxiomActions.selectAreas(SelectionManager.get().completeBoxes()), Theme.TEXT_DIM)));
+        give.setTooltip(Tooltip.create(tr("litematicaplus.axiom.give_selection.tip")));
+        give.active = !SelectionManager.get().completeBoxes().isEmpty();
+        FlatButton clipboard = add(FlatButton.secondary(x + (third + Theme.GAP) * 2, y,
+                this.detailWidth - (third + Theme.GAP) * 2, tr("litematicaplus.axiom.save_clipboard"),
+                button -> saveAxiomClipboard()));
+        clipboard.setTooltip(Tooltip.create(tr("litematicaplus.axiom.save_clipboard.tip")));
+    }
+
+    private void saveAxiomClipboard() {
+        if (this.saving) {
+            return;
+        }
+        String name = cleanName(fileName);
+        if (name.isEmpty()) {
+            name = "axiom_clipboard";
+        }
+        Path directory = PlacementManager.schematicsDirectory();
+        Path target = directory.resolve(name + SchematicIo.LITEMATIC_EXTENSION);
+        for (int suffix = 2; Files.exists(target); suffix++) {
+            target = directory.resolve(name + "_" + suffix + SchematicIo.LITEMATIC_EXTENSION);
+        }
+        String author = LitematicaPlusConfig.current().defaultAuthor.isBlank() && this.minecraft.player != null
+                ? this.minecraft.player.getGameProfile().name() : LitematicaPlusConfig.current().defaultAuthor;
+        this.saving = true;
+        updateSave();
+        setStatus(tr("litematicaplus.area.saving"), Theme.TEXT_DIM);
+        Component problem = AxiomActions.saveClipboard(this.minecraft, target, name, author, (message, saved) -> {
+            this.saving = false;
+            setStatus(message, saved ? Theme.SUCCESS : Theme.DANGER);
+            updateSave();
+        });
+        if (problem != null) {
+            this.saving = false;
+            setStatus(problem, Theme.WARNING);
+            updateSave();
+        }
     }
 
     private int cornerRow(int x, int y, AreaBox box, boolean first) {
@@ -274,7 +335,7 @@ final class AreaView extends TabView {
                     this.cornerTop + 12 + Theme.CONTROL_HEIGHT + 2);
         } else {
             int y = this.top + 2;
-            int limit = this.saveTop - 14;
+            int limit = (this.axiomTop > 0 ? this.axiomTop : this.saveTop) - 14;
             Component[] steps = {tr("litematicaplus.area.step1", LitematicaPlusConfig.current().toolItem),
                     tr("litematicaplus.area.step2"), tr("litematicaplus.area.step3")};
             int needed = 0;
@@ -294,6 +355,9 @@ final class AreaView extends TabView {
                 graphics.textWithWordWrap(this.font, tr("litematicaplus.area.step_note"), this.detailX, y + 4,
                         this.detailWidth, Theme.TEXT_DIM, false);
             }
+        }
+        if (this.axiomTop > 0) {
+            Ui.label(graphics, this.font, tr("litematicaplus.axiom.row_label"), this.detailX, this.axiomTop);
         }
         Ui.label(graphics, this.font, tr("litematicaplus.area.save_label"), this.detailX, this.saveTop);
         int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 1;

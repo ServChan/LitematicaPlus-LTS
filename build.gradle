@@ -272,6 +272,23 @@ tasks.named("assemble") {
     dependsOn printerJar
 }
 
+if (providers.gradleProperty("withAxiom").isPresent()) {
+    def axiomTest = configurations.detachedConfiguration(dependencies.create("maven.modrinth:axiom:${project.axiom_test_version}"))
+    axiomTest.transitive = false
+    tasks.named("runClientGameTest") {
+        systemProperty "litematicaplus.axiomOnly", "true"
+        doFirst {
+            systemProperty "fabric.addMods", axiomTest.singleFile.absolutePath
+        }
+    }
+}
+
+if (providers.gradleProperty("uiOnly").isPresent()) {
+    tasks.named("runClientGameTest") {
+        systemProperty "litematicaplus.uiOnly", "true"
+    }
+}
+
 if (providers.gradleProperty("printerOnly").isPresent()) {
     tasks.named("runClientGameTest") {
         systemProperty "litematicaplus.printerOnly", "true"

@@ -91,6 +91,16 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 checkHealthy();
                 return;
             }
+            if (System.getProperty("litematicaplus.axiomOnly") != null) {
+                AxiomSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
+            if (System.getProperty("litematicaplus.uiOnly") != null) {
+                UiSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
             if (System.getProperty("litematicaplus.featuresOnly") != null) {
                 FeaturesSuite.run(context, world);
                 checkHealthy();
@@ -168,6 +178,7 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
             context.setScreen(() -> null);
             context.getInput().resizeWindow(854, 480);
             context.waitTicks(10);
+            UiSuite.screens(context);
 
             world.getServer().runCommand("item replace entity @p weapon.mainhand with minecraft:stick");
             world.getConnection().waitForClientboundPackets();

@@ -195,6 +195,7 @@ public final class MaterialList {
         BlockState[] palette = volume.palette();
         long[] totals = runtime.totalByPalette();
         long[] correct = runtime.correctByPalette();
+        long[] restate = runtime.restateByPalette();
         Reference2LongOpenHashMap<Item> totalByItem = new Reference2LongOpenHashMap<>();
         Reference2LongOpenHashMap<Item> missingByItem = new Reference2LongOpenHashMap<>();
         int paletteSize = Math.min(palette.length, totals.length);
@@ -203,7 +204,9 @@ public final class MaterialList {
             if (total <= 0L) {
                 continue;
             }
-            long done = i < correct.length ? Math.max(0L, Math.min(total, correct[i])) : 0L;
+            long placed = (i < correct.length ? correct[i] : 0L)
+                    + (i < restate.length && countOf(palette[i]) <= 1 ? restate[i] : 0L);
+            long done = Math.max(0L, Math.min(total, placed));
             requirements(palette[i], (item, multiplier) -> {
                 totalByItem.addTo(item, total * multiplier);
                 missingByItem.addTo(item, (total - done) * multiplier);

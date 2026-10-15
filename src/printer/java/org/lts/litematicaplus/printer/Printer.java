@@ -15,6 +15,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.materials.MaterialList;
@@ -52,7 +53,7 @@ public final class Printer {
             return;
         }
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!config.renderEnabled || !EasyPlace.ready(minecraft)) {
+        if (!config.renderEnabled || AxiomBridge.pausesInput() || !EasyPlace.ready(minecraft)) {
             return;
         }
         double range = Math.min(PrinterConfig.current().range, player.blockInteractionRange());

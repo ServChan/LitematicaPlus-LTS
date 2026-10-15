@@ -66,7 +66,11 @@ final class EasyPlaceSuite {
         "minecraft:chest[facing=north,type=left]",
         "minecraft:chest[facing=north,type=right]",
         "minecraft:chest[facing=south]",
-        "minecraft:chest[facing=south]"
+        "minecraft:chest[facing=south]",
+        "minecraft:shulker_box[facing=down]",
+        "minecraft:red_shulker_box[facing=east]",
+        "minecraft:crafting_table",
+        "minecraft:ender_chest[facing=east]"
     };
     private static final int FIRST_SUPPORTED = 24;
     private static final int LAST_SUPPORTED = 28;
@@ -202,6 +206,7 @@ final class EasyPlaceSuite {
         supportUnderSnow(context, world);
         survivalBreakWrong(context, world);
         lockedSlotKeepsTool(context, world);
+        utilityBlocksNearBuild(context, world);
 
         context.runOnClient(client -> {
             LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
@@ -455,6 +460,84 @@ final class EasyPlaceSuite {
         world.getConnection().waitForClientboundPackets();
         LitematicaPlusGameTest.require(dirt, "easy place should take dirt from the main inventory into a free hotbar slot");
         LitematicaPlusGameTest.require(toolKept, "the pickaxe in the locked hotbar slot must stay where it is");
+    }
+
+    private static void utilityBlocksNearBuild(ClientGameTestContext context, TestSingleplayerContext world) {
+        BlockPos spot = BASE.offset(-30, 0, 0);
+        BlockPos table = spot;
+        BlockPos free = spot.east();
+        BlockPos correct = spot.east(2);
+        RegionBuilder builder = new RegionBuilder("Utility", 0, 0, 0, 3, 1, 1);
+        builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        builder.set(1, 0, 0, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        builder.set(2, 0, 0, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.name = "Utility";
+        Schematic schematic = new Schematic(metadata, Map.of("Utility", builder.build()));
+        Path file = context.computeOnClient(client -> {
+            Path target = PlacementManager.schematicsDirectory().resolve("gametest/utility.litematic");
+            try {
+                SchematicIo.write(target, schematic);
+            } catch (IOException exception) {
+                throw new UncheckedIOException(exception);
+            }
+            return target;
+        });
+        world.getServer().runCommand("setblock " + table.getX() + " " + table.getY() + " " + table.getZ()
+                + " minecraft:crafting_table");
+        world.getServer().runCommand("setblock " + correct.getX() + " " + correct.getY() + " " + correct.getZ()
+                + " minecraft:stone");
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.breakWrongBlocks = true;
+            config.easyPlaceRestrictArea = true;
+            config.excavationGuard = true;
+            config.excavationGuardOutside = true;
+            config.excavationGuardCorrect = true;
+            LitematicaPlusConfig.save(config);
+        });
+        SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, spot));
+        context.waitFor(client -> GhostEngine.get().categoryAt(table.getX(), table.getY(), table.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.WRONG_BLOCK
+                && GhostEngine.get().categoryAt(correct.getX(), correct.getY(), correct.getZ())
+                == org.lts.litematicaplus.verify.MismatchType.CORRECT, 400);
+        context.runOnClient(client -> org.lts.litematicaplus.tool.EasyPlace.actAt(client, table));
+        context.waitTicks(30);
+        boolean tableKept = world.getServer().computeOnServer(server -> server.overworld().getBlockState(table)
+                .is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE));
+        world.getServer().runCommand("item replace entity @p weapon.mainhand with minecraft:stone");
+        TestUi.aim(context, world, free.getX() + 0.5, free.getY(), free.getZ() - 1.5, free.getX() + 0.5, free.getY() + 0.01,
+                free.getZ() + 0.5);
+        TestUi.use(context, world, 10);
+        boolean strayBlocked = world.getServer().computeOnServer(server -> server.overworld().getBlockState(free).isAir());
+        world.getServer().runCommand("item replace entity @p weapon.mainhand with minecraft:shulker_box");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(6);
+        TestUi.use(context, world, 10);
+        boolean shulkerPlaced = world.getServer().computeOnServer(server -> server.overworld().getBlockState(free)
+                .is(net.minecraft.world.level.block.Blocks.SHULKER_BOX));
+        boolean[] guard = context.computeOnClient(client -> new boolean[]{
+                org.lts.litematicaplus.tool.BreakAssist.guardBlocks(client, free),
+                org.lts.litematicaplus.tool.BreakAssist.guardBlocks(client, table),
+                org.lts.litematicaplus.tool.BreakAssist.guardBlocks(client, correct)});
+        context.takeScreenshot("10e_utility_blocks");
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.breakWrongBlocks = false;
+            config.excavationGuard = false;
+            LitematicaPlusConfig.save(config);
+            PlacementManager.get().remove(placement);
+        });
+        world.getServer().runCommand("fill " + table.getX() + " " + table.getY() + " " + table.getZ() + " "
+                + correct.getX() + " " + correct.getY() + " " + correct.getZ() + " minecraft:air");
+        world.getServer().runCommand("item replace entity @p weapon.mainhand with minecraft:air");
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(tableKept, "easy place must not break a crafting table that stands on a wrong cell");
+        LitematicaPlusGameTest.require(strayBlocked, "a plain block next to the schematic must stay restricted");
+        LitematicaPlusGameTest.require(shulkerPlaced, "a shulker box must be placeable on a cell the schematic leaves empty");
+        LitematicaPlusGameTest.require(!guard[0], "the guard must let the player pick their shulker box back up");
+        LitematicaPlusGameTest.require(!guard[1], "the guard must allow breaking a wrong crafting table");
+        LitematicaPlusGameTest.require(guard[2], "the guard must protect a correct block");
     }
 
     private static int indexOf(String name) {

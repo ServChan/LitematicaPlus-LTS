@@ -103,6 +103,7 @@ public final class Addons {
                 case STACK_CALCULATOR -> "StackCalculator";
                 case INVENTORY_PROFILES -> "InventoryProfiles";
                 case MOD_MENU -> "ModMenu";
+                case AXIOM -> "Axiom";
                 case LITEMATICA -> "Litematica";
             };
             loggers.put(addon, ModLog.of(area));

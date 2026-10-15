@@ -261,7 +261,7 @@ public final class FollowUps {
         ClientLevel level = minecraft.level;
         LocalPlayer player = minecraft.player;
         if (chain == null || level == null || player == null || budget <= 0
-                || !LitematicaPlusConfig.current().easyPlaceFinishStates) {
+                || !LitematicaPlusConfig.current().easyPlaceFinishStates || !LitematicaPlusConfig.current().renderEnabled) {
             ACTIVE.remove(pos);
             return;
         }
@@ -286,7 +286,7 @@ public final class FollowUps {
         boolean sneakBlocked = player.isSecondaryUseActive() && (action.kind() == Kind.INTERACT
                 || action.kind() == Kind.EMPTY_HAND
                 || action.kind() == Kind.USE_ITEM && action.item() != net.minecraft.world.item.Items.ENDER_EYE);
-        if (!TickQueue.worldReady(minecraft) || sneakBlocked || BreakAssist.busy(minecraft)) {
+        if (!TickQueue.worldReady(minecraft) || sneakBlocked || BreakAssist.busy(minecraft) || EasyPlace.cooling()) {
             int remaining = TickQueue.worldReady(minecraft) && !sneakBlocked ? budget : budget - 1;
             if (!TickQueue.after(STEP_TICKS, () -> step(minecraft, pos, remaining))) {
                 ACTIVE.remove(pos);

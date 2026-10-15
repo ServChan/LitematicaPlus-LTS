@@ -7,7 +7,6 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -36,6 +35,7 @@ public final class BreakAssist {
     private static final int GENERAL_GRACE_TICKS = 20;
     private static final Set<BlockPos> CLEARING = new HashSet<>();
     private static boolean bypassGuard;
+    private static boolean manual;
 
     private BreakAssist() {
     }
@@ -52,6 +52,9 @@ public final class BreakAssist {
     public static boolean eligible(ClientLevel level, BlockPos pos, BlockState world, BlockState target,
             LitematicaPlusConfig config) {
         if (target.isAir() || world.isAir() || world.getBlock() instanceof LiquidBlock) {
+            return false;
+        }
+        if (UtilityBlocks.keep(world.getBlock(), level.getBlockEntity(pos))) {
             return false;
         }
         if (config.easyPlaceSubstitutes && Substitutes.accepts(target, world)) {
@@ -73,7 +76,7 @@ public final class BreakAssist {
         if (!config.breakWrongBlocks || !structurallyWrong(target, world)) {
             return false;
         }
-        return world.getDestroySpeed(level, pos) >= 0.0F && !(level.getBlockEntity(pos) instanceof Container);
+        return world.getDestroySpeed(level, pos) >= 0.0F && !UtilityBlocks.keep(world.getBlock(), level.getBlockEntity(pos));
     }
 
     static boolean structurallyWrong(BlockState target, BlockState world) {
@@ -112,11 +115,12 @@ public final class BreakAssist {
         }
     }
 
-    public static void start(Minecraft minecraft, BlockPos pos) {
+    public static void start(Minecraft minecraft, BlockPos pos, boolean byEasyPlace) {
         BlockPos key = pos.immutable();
         if (!CLEARING.isEmpty() || !CLEARING.add(key)) {
             return;
         }
+        manual = byEasyPlace;
         try {
             begin(minecraft, key);
         } catch (RuntimeException exception) {
@@ -189,7 +193,7 @@ public final class BreakAssist {
             return;
         }
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
-        if (!TickQueue.worldReady(minecraft) || !config.easyPlaceEnabled || !config.renderEnabled) {
+        if (!TickQueue.worldReady(minecraft) || manual && !config.easyPlaceEnabled || !config.renderEnabled) {
             minecraft.gameMode.stopDestroyBlock();
             CLEARING.remove(pos);
             return;

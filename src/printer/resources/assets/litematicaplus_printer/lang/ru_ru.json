@@ -1,6 +1,7 @@
 {
   "key.litematicaplus.toggle_printer": "Вкл/выкл принтер",
   "litematicaplus.settings.category.printer": "Принтер",
+  "litematicaplus.settings.category.printer.help": "Принтер сам ставит недостающие блоки вокруг вас по настройкам лёгкой установки.",
   "litematicaplus.option.printer_enabled": "Принтер",
   "litematicaplus.option.printer_enabled.tip": "Сам ставит недостающие блоки схемы вокруг вас, без кликов. Берёт настройки лёгкой установки: темп, поворот без движения камеры, доведение состояний, выкапывание неверных блоков и замены. Сохраняется сразу.",
   "litematicaplus.option.printer_range": "Дальность принтера",

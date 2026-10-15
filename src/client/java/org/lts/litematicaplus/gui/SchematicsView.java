@@ -20,6 +20,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusClient;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.preview.PreviewService;
@@ -70,6 +71,7 @@ final class SchematicsView extends TabView {
     private FlatButton placeButton;
     private FlatButton exportSponge;
     private FlatButton exportStructure;
+    private FlatButton exportBlueprint;
     private FlatButton deleteButton;
     private Entry deleteArmed;
     private int deleteTicks;
@@ -105,13 +107,24 @@ final class SchematicsView extends TabView {
         }
         Path root = PlacementManager.schematicsDirectory();
         Path directory = directory();
+        Path axiom = axiomRoot();
+        if (axiom != null && directory.startsWith(axiom) && !directory.startsWith(root)) {
+            String inside = axiom.relativize(directory).toString().replace('\\', '/');
+            return Component.literal("Axiom" + (inside.isEmpty() ? "" : "/" + inside));
+        }
         String relative = directory.startsWith(root) ? root.relativize(directory).toString().replace('\\', '/') : "";
         return Component.literal(root.getFileName() + (relative.isEmpty() ? "" : "/" + relative));
     }
 
+    private static Path axiomRoot() {
+        return AxiomBridge.installed() ? AxiomBridge.blueprintsDirectory() : null;
+    }
+
     private static Path directory() {
         Path root = PlacementManager.schematicsDirectory();
-        if (currentDirectory == null || !currentDirectory.startsWith(root)) {
+        Path axiom = axiomRoot();
+        if (currentDirectory == null || !currentDirectory.startsWith(root)
+                && (axiom == null || !currentDirectory.startsWith(axiom))) {
             currentDirectory = root;
         }
         return currentDirectory;
@@ -158,12 +171,17 @@ final class SchematicsView extends TabView {
                 .empty(tr("litematicaplus.schematics.empty_title"), tr("litematicaplus.schematics.empty_hint")));
         int buttonY = this.top + this.height - Theme.CONTROL_HEIGHT;
         int half = (this.detailWidth - Theme.GAP) / 2;
+        int third = (this.detailWidth - Theme.GAP * 2) / 3;
         int exportY = buttonY - Theme.CONTROL_HEIGHT - 4;
-        this.exportSponge = add(FlatButton.secondary(this.detailX, exportY, half,
+        this.exportSponge = add(FlatButton.secondary(this.detailX, exportY, third,
                 tr("litematicaplus.schematics.export_sponge"), button -> export(SchematicExport.Format.SPONGE)));
-        this.exportStructure = add(FlatButton.secondary(this.detailX + half + Theme.GAP, exportY,
-                this.detailWidth - half - Theme.GAP, tr("litematicaplus.schematics.export_structure"),
-                button -> export(SchematicExport.Format.STRUCTURE)));
+        this.exportStructure = add(FlatButton.secondary(this.detailX + third + Theme.GAP, exportY, third,
+                tr("litematicaplus.schematics.export_structure"), button -> export(SchematicExport.Format.STRUCTURE)));
+        this.exportBlueprint = add(FlatButton.secondary(this.detailX + (third + Theme.GAP) * 2, exportY,
+                this.detailWidth - (third + Theme.GAP) * 2, tr("litematicaplus.schematics.export_blueprint"),
+                button -> export(SchematicExport.Format.BLUEPRINT)));
+        this.exportBlueprint.setTooltip(Tooltip.create(tr(AxiomBridge.installed()
+                ? "litematicaplus.schematics.export_blueprint.tip_axiom" : "litematicaplus.schematics.export_blueprint.tip")));
         int placeY = exportY - Theme.CONTROL_HEIGHT - 4;
         int deleteWidth = Math.max(half / 2, Math.min(half, this.font.width(tr("litematicaplus.schematics.delete_confirm")) + 12));
         this.placeButton = add(FlatButton.primary(this.detailX, placeY, this.detailWidth - deleteWidth - Theme.GAP,
@@ -202,6 +220,7 @@ final class SchematicsView extends TabView {
         if (this.exportSponge != null) {
             this.exportSponge.active = file;
             this.exportStructure.active = file;
+            this.exportBlueprint.active = file;
         }
         if (this.deleteButton != null) {
             this.deleteButton.active = file && !this.deleting;
@@ -291,10 +310,15 @@ final class SchematicsView extends TabView {
     private static List<Entry> listDirectory(Path directory) {
         List<Entry> result = new ArrayList<>();
         Path root = PlacementManager.schematicsDirectory();
+        Path axiom = axiomRoot();
         try {
             Files.createDirectories(directory);
             if (!directory.equals(root)) {
-                result.add(new Entry(directory.getParent(), true, true, "..", 0L, 0L, ""));
+                result.add(new Entry(directory.equals(axiom) ? root : directory.getParent(), true, true, "..", 0L, 0L, ""));
+            } else if (axiom != null && !axiom.startsWith(root)) {
+                result.add(new Entry(axiom, true, false,
+                        Component.translatable("litematicaplus.schematics.axiom_folder").getString(), 0L,
+                        Files.isDirectory(axiom) ? Files.getLastModifiedTime(axiom).toMillis() : 0L, ""));
             }
             List<Entry> found = new ArrayList<>();
             try (Stream<Path> stream = Files.list(directory)) {
@@ -488,10 +512,12 @@ final class SchematicsView extends TabView {
     private void activate(Entry entry) {
         if (entry.directory()) {
             currentDirectory = entry.path();
-            this.selected = null;
-            this.metadata = null;
+            select(null);
             this.entries = List.of();
-            updateButtons();
+            if (this.list != null) {
+                this.list.setItems(List.of());
+                this.list.setScroll(0);
+            }
             reload();
         } else {
             place();
@@ -536,7 +562,9 @@ final class SchematicsView extends TabView {
             Workers.io().execute(() -> {
                 Component message;
                 try {
-                    Path target = SchematicIo.export(entry.path(), format);
+                    Path target = format == SchematicExport.Format.BLUEPRINT && AxiomBridge.installed()
+                            ? SchematicIo.export(entry.path(), format, AxiomBridge.blueprintsDirectory())
+                            : SchematicIo.export(entry.path(), format);
                     message = tr("litematicaplus.schematics.exported", target.getFileName().toString());
                 } catch (IOException | RuntimeException exception) {
                     LitematicaPlusClient.LOGGER.warn("Could not export schematic {}", entry.path(), exception);

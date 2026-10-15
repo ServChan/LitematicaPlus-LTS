@@ -53,7 +53,7 @@ public final class McEditCodec {
             int id = ids[index] & 0xFF;
             if (addNibbles != null && (index >> 1) < addNibbles.length) {
                 int packed = addNibbles[index >> 1];
-                id |= ((index & 1) == 0 ? packed >> 4 & 0xF : packed & 0xF) << 8;
+                id |= ((index & 1) == 0 ? packed & 0xF : packed >> 4 & 0xF) << 8;
             } else if (addBytes != null && index < addBytes.length) {
                 id |= (addBytes[index] & 0xF) << 8;
             }

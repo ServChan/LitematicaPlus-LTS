@@ -235,8 +235,12 @@ public final class InfoHud {
         if (targeted != null) {
             lines++;
         }
-        int height = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0) + rows.size() * LINE
-                + (rows.isEmpty() ? 0 : 4);
+        int fixed = PADDING * 2 + lines * LINE + 1 + (placement != null ? 7 : 0);
+        int roomRows = Math.max(0, (graphics.guiHeight() - MARGIN * 2 - fixed - 4) / LINE);
+        if (rows.size() > roomRows) {
+            rows = rows.subList(0, roomRows);
+        }
+        int height = fixed + rows.size() * LINE + (rows.isEmpty() ? 0 : 4);
         int x = left(graphics.guiWidth(), fractionX);
         int y = top(graphics.guiHeight(), height, fractionY);
         graphics.fill(x, y, x + WIDTH, y + height, Theme.HUD_BACKGROUND);

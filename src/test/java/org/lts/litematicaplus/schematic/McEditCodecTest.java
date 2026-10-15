@@ -1,6 +1,7 @@
 package org.lts.litematicaplus.schematic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +66,17 @@ class McEditCodecTest {
         CompoundTag tile = region.blockEntities().get(SchematicRegion.localKey(3, 0, 0));
         assertNotNull(tile);
         assertEquals("minecraft:chest", tile.getStringOr("id", ""));
+    }
+
+    @Test
+    void addBlocksUseTheLowNibbleForEvenIndices() throws IOException {
+        CompoundTag root = legacy();
+        root.putByteArray("AddBlocks", new byte[]{0x10, 0x00});
+        Schematic schematic = McEditCodec.read(root, "Old");
+        SchematicRegion region = schematic.regions().get("Old");
+        assertEquals(Blocks.STONE.defaultBlockState(), region.state(0, 0, 0));
+        assertFalse("minecraft:orange_wool".equals(BuiltInRegistries.BLOCK.getKey(region.state(1, 0, 0).getBlock()).toString()));
+        assertTrue(region.state(2, 0, 0).is(Blocks.OAK_STAIRS));
     }
 
     @Test

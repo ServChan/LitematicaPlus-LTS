@@ -45,6 +45,7 @@ public final class ContainerHelper {
     private static MaterialPanel panel;
     private static TransferJob job;
     private static int refreshIn;
+    private static int seenState;
     private static int statusHold;
     private static Int2IntOpenHashMap highlighted = new Int2IntOpenHashMap();
     private static Item focusItem;
@@ -178,7 +179,7 @@ public final class ContainerHelper {
         if (statusHold > 0) {
             statusHold--;
         }
-        if (--refreshIn <= 0) {
+        if (--refreshIn <= 0 || screen.getMenu().getStateId() != seenState) {
             refresh(screen);
         }
     }
@@ -212,6 +213,7 @@ public final class ContainerHelper {
 
     private static void refresh(AbstractContainerScreen<?> screen) {
         refreshIn = REFRESH_TICKS;
+        seenState = screen.getMenu().getStateId();
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         MaterialCache.Snapshot snapshot = MaterialCache.get();

@@ -107,7 +107,7 @@ public final class NoteTuner {
             clear();
             return;
         }
-        if (!TickQueue.worldReady(minecraft) || BreakAssist.busy(minecraft)) {
+        if (!TickQueue.worldReady(minecraft) || BreakAssist.busy(minecraft) || EasyPlace.cooling()) {
             if (BreakAssist.busy(minecraft)) {
                 long now = TickQueue.now();
                 JOBS.values().forEach(job -> job.lastProgressTick = now);

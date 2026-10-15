@@ -166,6 +166,7 @@ public final class SectionMesher {
         byte[] categories = verdict.categories();
         LayerRange layer = job.layer();
         boolean colliding = job.options().renderColliding();
+        boolean errorsOnly = job.options().ghostErrorsOnly();
         BlockModelLighter.enableCaching();
         try {
             ModelBlockRenderer blockRenderer = new ModelBlockRenderer(true, true, job.blockColors());
@@ -182,8 +183,8 @@ public final class SectionMesher {
                     continue;
                 }
                 byte category = categories[index];
-                boolean render = category == MISSING || category == UNKNOWN
-                        || colliding && (category == WRONG_BLOCK || category == WRONG_STATE);
+                boolean wrong = category == WRONG_BLOCK || category == WRONG_STATE;
+                boolean render = errorsOnly ? wrong : category == MISSING || category == UNKNOWN || colliding && wrong;
                 if (!render) {
                     continue;
                 }

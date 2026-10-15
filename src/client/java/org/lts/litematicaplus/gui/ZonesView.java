@@ -25,6 +25,7 @@ final class ZonesView extends TabView {
     private int hintY;
     private List<ZonePlan.Zone> shown = List.of();
     private Object knownVolume;
+    private Object knownClaims;
 
     ZonesView(HubScreen screen) {
         super(screen);
@@ -52,6 +53,7 @@ final class ZonesView extends TabView {
         this.detailWidth = this.width - listWidth - Theme.GAP;
         this.shown = zones.zones(placement);
         this.knownVolume = this.shown;
+        this.knownClaims = java.util.Map.copyOf(placement.zoneClaims());
         this.list = add(new ListPanel<ZonePlan.Zone>(this.left, this.top, listWidth, this.height, Theme.ROW_HEIGHT,
                 tr("litematicaplus.tab.zones"), (graphics, rowFont, zone, x, y, w, h, isSelected, hovered) ->
                 renderRow(graphics, rowFont, placement, zone, x, y, w, h))
@@ -74,21 +76,27 @@ final class ZonesView extends TabView {
         int y = this.top + 11;
         int third = (this.detailWidth - Theme.GAP * 2) / 3;
         ZonePlan plan = placement.zonePlan();
-        add(new Stepper(x, y, third, tr("litematicaplus.zones.columns"), () -> placement.zonePlan().columns(),
+        boolean narrow = third < 110;
+        Stepper columns = add(new Stepper(x, y, third, tr("litematicaplus.zones.columns"), () -> placement.zonePlan().columns(),
                 value -> {
                     manager.setZonePlan(placement, placement.zonePlan().withColumns(value));
                     this.screen.refresh();
                 }, 1, ZonePlan.MAX_SPLIT, 1));
-        add(new Stepper(x + third + Theme.GAP, y, third, tr("litematicaplus.zones.rows"),
+        Stepper rows = add(new Stepper(x + third + Theme.GAP, y, third, tr("litematicaplus.zones.rows"),
                 () -> placement.zonePlan().rows(), value -> {
                     manager.setZonePlan(placement, placement.zonePlan().withRows(value));
                     this.screen.refresh();
                 }, 1, ZonePlan.MAX_SPLIT, 1));
-        add(new Stepper(x + (third + Theme.GAP) * 2, y, this.detailWidth - (third + Theme.GAP) * 2,
+        Stepper floors = add(new Stepper(x + (third + Theme.GAP) * 2, y, this.detailWidth - (third + Theme.GAP) * 2,
                 tr("litematicaplus.zones.floors"), () -> placement.zonePlan().floors(), value -> {
                     manager.setZonePlan(placement, placement.zonePlan().withFloors(value));
                     this.screen.refresh();
                 }, 1, ZonePlan.MAX_SPLIT, 1));
+        if (narrow) {
+            columns.compact();
+            rows.compact();
+            floors.compact();
+        }
         y += Theme.CONTROL_HEIGHT + 15;
         this.infoY = y;
         y += 22;
@@ -105,7 +113,7 @@ final class ZonesView extends TabView {
                     }
                     this.screen.refresh();
                 }));
-        claim.active = zone != null && plan.active();
+        claim.active = zone != null && plan.active() && this.minecraft.player != null;
         boolean focused = zone != null && zones.focused(zone);
         FlatButton focus = add(FlatButton.secondary(x + half + Theme.GAP, y, this.detailWidth - half - Theme.GAP,
                 tr(focused ? "litematicaplus.zones.show_all" : "litematicaplus.zones.focus"), button -> {
@@ -172,7 +180,8 @@ final class ZonesView extends TabView {
     void tick() {
         SchematicPlacement placement = PlacementManager.get().selected();
         if (placement != null && placement.schematic() != null
-                && ZoneManager.get().zones(placement) != this.knownVolume) {
+                && (ZoneManager.get().zones(placement) != this.knownVolume
+                || !placement.zoneClaims().equals(this.knownClaims))) {
             this.screen.refresh();
         }
     }

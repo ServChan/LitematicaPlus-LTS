@@ -169,6 +169,7 @@ public final class PlacementEditorScreen extends Screen {
         y += ROW;
         addRenderableWidget(FlatButton.primary(x, y, inner, tr("litematicaplus.editor.done"), button -> onClose()));
         this.hintTop = y + ROW + 4;
+        Ui.decorate(children());
     }
 
     private boolean pasteAvailable() {

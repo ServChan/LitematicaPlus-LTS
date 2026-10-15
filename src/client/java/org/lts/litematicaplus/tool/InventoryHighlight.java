@@ -15,6 +15,7 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.world.LayerRange;
 
 public final class InventoryHighlight {
     private static final int REFRESH_TICKS = 10;
@@ -28,12 +29,23 @@ public final class InventoryHighlight {
 
     private static List<BlockPos> positions = List.of();
     private static int ticks;
+    private static LayerRange layer = LayerRange.ALL;
 
     private InventoryHighlight() {
     }
 
     public static List<BlockPos> positions() {
-        return positions;
+        LayerRange current = GhostEngine.get().layer();
+        if (current.unrestricted()) {
+            return positions;
+        }
+        List<BlockPos> visible = new ArrayList<>(positions.size());
+        for (BlockPos pos : positions) {
+            if (current.contains(pos.getX(), pos.getY(), pos.getZ())) {
+                visible.add(pos);
+            }
+        }
+        return visible;
     }
 
     public static void tick(Minecraft minecraft) {
@@ -42,6 +54,11 @@ public final class InventoryHighlight {
             positions = List.of();
             ticks = 0;
             return;
+        }
+        LayerRange current = GhostEngine.get().layer();
+        if (!current.equals(layer)) {
+            layer = current;
+            ticks = 0;
         }
         if (ticks++ % REFRESH_TICKS != 0) {
             return;

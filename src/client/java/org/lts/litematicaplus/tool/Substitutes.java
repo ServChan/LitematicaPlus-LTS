@@ -172,7 +172,7 @@ public final class Substitutes {
         return item != Items.AIR && snapshot().contains(item);
     }
 
-    public static Item find(Inventory inventory, BlockState target) {
+    public static Item find(Inventory inventory, BlockState target, Predicate<Item> usable) {
         Block wanted = target.getBlock();
         Predicate<Block> family = null;
         if (wanted instanceof WallBlock) {
@@ -187,7 +187,8 @@ public final class Substitutes {
         if (family != null) {
             for (int slot = 0; slot < 36; slot++) {
                 ItemStack stack = inventory.getItem(slot);
-                if (stack.getItem() instanceof BlockItem blockItem && family.test(blockItem.getBlock())) {
+                if (stack.getItem() instanceof BlockItem blockItem && family.test(blockItem.getBlock())
+                        && usable.test(blockItem)) {
                     return stack.getItem();
                 }
             }
@@ -195,7 +196,7 @@ public final class Substitutes {
         Set<Item> list = snapshot();
         for (int slot = 0; slot < 36; slot++) {
             ItemStack stack = inventory.getItem(slot);
-            if (!stack.isEmpty() && list.contains(stack.getItem())) {
+            if (!stack.isEmpty() && list.contains(stack.getItem()) && usable.test(stack.getItem())) {
                 return stack.getItem();
             }
         }

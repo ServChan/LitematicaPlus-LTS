@@ -33,6 +33,8 @@ public enum Addon {
     INVENTORY_PROFILES("inventoryprofilesnext", List.of(new Setting("material_helper", config -> config.materialHelper,
             (config, value) -> config.materialHelper = value))),
     MOD_MENU("modmenu", List.of()),
+    AXIOM("axiom", List.of(new Setting("axiom_editor_pause", config -> config.axiomEditorPause,
+            (config, value) -> config.axiomEditorPause = value))),
     LITEMATICA("litematica", List.of());
 
     public enum State {
@@ -129,6 +131,7 @@ public enum Addon {
             case JADE -> Addons.jadeRegistered() ? State.ACTIVE : State.FAILED;
             case STACK_CALCULATOR -> StackCalculatorBridge.available() ? State.ACTIVE : State.FAILED;
             case INVENTORY_PROFILES -> InventoryLocks.available() ? State.ACTIVE : State.FAILED;
+            case AXIOM -> AxiomBridge.available() ? State.ACTIVE : State.FAILED;
             case LITEMATICA -> State.CONFLICT;
             default -> State.ACTIVE;
         };
@@ -158,6 +161,8 @@ public enum Addon {
                     : base + "active", Component.translatable(WorldCache.available()
                     ? "litematicaplus.addon.voxy.cache_on" : "litematicaplus.addon.voxy.cache_off"));
             case LITEMATICA -> Component.translatable(base + "conflict", version());
+            case AXIOM -> state == State.FAILED ? Component.translatable(base + "failed", version())
+                    : Component.translatable(AxiomBridge.active() ? base + "active" : base + "standby", version());
             case IRIS, MOD_MENU -> Component.translatable(base + "active");
             default -> Component.translatable(base + (state == State.ACTIVE ? "active" : "failed"));
         };

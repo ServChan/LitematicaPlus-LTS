@@ -1,6 +1,7 @@
 {
   "key.litematicaplus.toggle_printer": "Activar impresora",
   "litematicaplus.settings.category.printer": "Impresora",
+  "litematicaplus.settings.category.printer.help": "La impresora coloca sola los bloques que faltan a tu alrededor con los ajustes de colocación fácil.",
   "litematicaplus.option.printer_enabled": "Impresora",
   "litematicaplus.option.printer_enabled.tip": "Coloca sola los bloques que faltan del esquema a tu alrededor, sin hacer clic. Usa los ajustes de colocación fácil: ritmo, giro sin mover la cámara, ajuste de estados, romper bloques incorrectos y sustitutos. Se guarda al instante.",
   "litematicaplus.option.printer_range": "Alcance de la impresora",

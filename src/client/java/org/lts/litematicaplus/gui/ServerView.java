@@ -202,7 +202,7 @@ final class ServerView extends TabView {
         }
         int x = this.detailX;
         int y = this.top;
-        Ui.heading(graphics, this.font, Component.literal(selected.title()), x, y, 1.0F, Theme.TEXT_BRIGHT);
+        Ui.clipped(graphics, this.font, selected.title(), x, y, this.detailWidth, Theme.TEXT_BRIGHT);
         y += LINE_HEIGHT + 4;
         y = line(graphics, x, y, "litematicaplus.server.owner", selected.owner().name());
         y = line(graphics, x, y, "litematicaplus.server.modified_by", selected.lastModifiedBy().name());

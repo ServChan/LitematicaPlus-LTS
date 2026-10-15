@@ -43,6 +43,15 @@ public final class InventoryHelper {
         return false;
     }
 
+    public static boolean hasWithData(Inventory inventory, Item item) {
+        for (int slot = 0; slot < MAIN_SIZE; slot++) {
+            if (reachable(slot) && usable(inventory.getItem(slot), item, true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean ensureInHand(Minecraft minecraft, Item item) {
         LocalPlayer player = minecraft.player;
         if (player == null || item == Items.AIR) {
@@ -136,11 +145,13 @@ public final class InventoryHelper {
         }
         ItemStack displaced = inventory.getItem(slot);
         if (!displaced.isEmpty()) {
-                int free = inventory.getFreeSlot();
-            if (free >= 0 && free < MAIN_SIZE && !InventoryLocks.locked(free)) {
+            int free = freeStorageSlot(inventory, config);
+            if (free >= 0) {
                 ItemStack moved = displaced.copy();
                 inventory.setItem(free, moved);
                 minecraft.gameMode.handleCreativeModeItemAdd(moved, menuSlot(free));
+            } else if (!displaced.getComponentsPatch().isEmpty()) {
+                return false;
             }
         }
         ItemStack stack = creative.copy();
@@ -185,6 +196,16 @@ public final class InventoryHelper {
             }
         }
         return fallback;
+    }
+
+    private static int freeStorageSlot(Inventory inventory, LitematicaPlusConfig config) {
+        for (int slot = 0; slot < MAIN_SIZE; slot++) {
+            if (inventory.getItem(slot).isEmpty() && !InventoryLocks.locked(slot)
+                    && (slot >= HOTBAR_SIZE || !hotbarProtected(config, slot))) {
+                return slot;
+            }
+        }
+        return -1;
     }
 
     private static boolean hotbarProtected(LitematicaPlusConfig config, int slot) {

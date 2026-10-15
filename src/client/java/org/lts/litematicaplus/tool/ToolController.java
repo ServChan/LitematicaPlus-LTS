@@ -20,6 +20,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.Session;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -100,7 +101,11 @@ public final class ToolController {
         }
         TickQueue.tick(minecraft);
         EntityAssist.tick(minecraft);
-        EasyPlace.tick(minecraft);
+        if (AxiomBridge.pausesInput()) {
+            EasyPlace.dropRequest();
+        } else {
+            EasyPlace.tick(minecraft);
+        }
         PasteController.tick(minecraft);
     }
 

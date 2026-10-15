@@ -10,6 +10,7 @@ import org.lts.litematicaplus.compat.LitematicaConflict;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerHelper;
+import org.lts.litematicaplus.materials.ContainerMemory;
 import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
@@ -36,6 +37,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         GhostRenderer.register();
         ContainerHelper.register();
         EnderChestMemory.register();
+        ContainerMemory.register();
         MaterialTooltips.register();
         LitematicaConflict.register();
         SyncmaticaClient.register();
@@ -58,6 +60,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         ToolController.get().tick(minecraft);
         InfoHud.tick(minecraft);
         InventoryHighlight.tick(minecraft);
+        ContainerMemory.tick(minecraft);
         TopView.tick(minecraft);
         Hotkeys.tick(minecraft);
         SyncmaticaClient.get().tick();

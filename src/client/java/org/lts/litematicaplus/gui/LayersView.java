@@ -135,7 +135,7 @@ final class LayersView extends TabView {
         int stepperWidth = (this.width - toggleWidth - hereWidth * 2 - Theme.GAP * 4) / 2;
         boolean on = xAxis ? clip.xEnabled() : clip.zEnabled();
         String name = xAxis ? "X" : "Z";
-        add(FlatButton.toggle(this.left, y, toggleWidth, Component.literal(name),
+        hint(add(FlatButton.toggle(this.left, y, toggleWidth, Component.literal(name),
                 () -> xAxis ? GhostEngine.get().clip().xEnabled() : GhostEngine.get().clip().zEnabled(), button -> {
                     LayerRange.Clip current = GhostEngine.get().clip();
                     boolean enable = !(xAxis ? current.xEnabled() : current.zEnabled());
@@ -146,7 +146,7 @@ final class LayersView extends TabView {
                         next = next.withEnabled(true);
                     }
                     applyClip(next);
-                }));
+                })), "litematicaplus.layers.axis_toggle_tip", name);
         int x = this.left + toggleWidth + Theme.GAP;
         Stepper low = new Stepper(x, y, stepperWidth, tr("litematicaplus.layers.min", name),
                 () -> xAxis ? GhostEngine.get().clip().minX() : GhostEngine.get().clip().minZ(),

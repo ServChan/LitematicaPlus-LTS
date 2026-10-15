@@ -27,6 +27,7 @@ public final class FlatButton extends AbstractButton {
     private BooleanSupplier warning = () -> false;
     private boolean shiftHeld;
     private String index;
+    private Component hint;
     private final TextMemo label = new TextMemo();
     private final TextMemo fitted = new TextMemo();
 
@@ -34,9 +35,23 @@ public final class FlatButton extends AbstractButton {
         super(x, y, width, height, message);
         this.style = style;
         this.action = action;
-        int reserved = style == Style.TOGGLE ? 40 : style == Style.TAB ? 34 : 8;
-        if (Minecraft.getInstance().font.width(message) > width - reserved) {
-            setTooltip(Tooltip.create(message));
+        updateTooltip();
+    }
+
+    public FlatButton withHint(Component text) {
+        this.hint = text;
+        updateTooltip();
+        return this;
+    }
+
+    private void updateTooltip() {
+        Component message = getMessage();
+        int reserved = this.style == Style.TOGGLE ? 40 : this.style == Style.TAB ? 34 : 8;
+        boolean clipped = Minecraft.getInstance().font.width(message) > getWidth() - reserved;
+        if (this.hint != null) {
+            setTooltip(Tooltip.create(clipped ? message.copy().append("\n").append(this.hint) : this.hint));
+        } else {
+            setTooltip(clipped ? Tooltip.create(message) : null);
         }
     }
 
@@ -173,8 +188,9 @@ public final class FlatButton extends AbstractButton {
     @Override
     public void setMessage(Component message) {
         super.setMessage(message);
-        int reserved = this.style == Style.TOGGLE ? 40 : this.style == Style.TAB ? 34 : 8;
-        setTooltip(Minecraft.getInstance().font.width(message) > getWidth() - reserved ? Tooltip.create(message) : null);
+        if (this.style != null) {
+            updateTooltip();
+        }
     }
 
     @Override

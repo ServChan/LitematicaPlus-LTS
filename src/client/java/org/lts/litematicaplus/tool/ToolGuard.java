@@ -25,7 +25,8 @@ public final class ToolGuard {
     }
 
     public static boolean blocks(Minecraft minecraft) {
-        if (!LitematicaPlusConfig.current().toolUseGuard || minecraft.player == null || minecraft.level == null
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (!config.toolUseGuard || !config.renderEnabled || minecraft.player == null || minecraft.level == null
                 || !(minecraft.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
             return false;
         }
@@ -38,6 +39,10 @@ public final class ToolGuard {
         BlockPos pos = hit.getBlockPos();
         BlockState target = GhostEngine.get().schematicStateAnywhere(pos.getX(), pos.getY(), pos.getZ());
         BlockState world = minecraft.level.getBlockState(pos);
+        if (!minecraft.player.isSecondaryUseActive() && EasyPlace.isInteractable(minecraft.level, pos, world)
+                && !(world.getBlock() instanceof CampfireBlock)) {
+            return false;
+        }
         if (target == null || target.isAir() || world.isAir() || wanted(world.getBlock(), target.getBlock())) {
             return false;
         }

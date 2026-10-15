@@ -205,6 +205,11 @@ public final class SchematicPlacement {
         this.error = message == null ? Component.empty() : message;
     }
 
+    public void markBuildFailed(Component message) {
+        this.loadState = LoadState.FAILED;
+        this.error = message == null ? Component.empty() : message;
+    }
+
     public int markLoading() {
         this.loadState = LoadState.LOADING;
         this.error = Component.empty();

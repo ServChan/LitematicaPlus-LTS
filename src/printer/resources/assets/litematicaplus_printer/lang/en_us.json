@@ -1,6 +1,7 @@
 {
   "key.litematicaplus.toggle_printer": "Toggle printer",
   "litematicaplus.settings.category.printer": "Printer",
+  "litematicaplus.settings.category.printer.help": "The printer places missing blocks around you by itself, using the easy place settings.",
   "litematicaplus.option.printer_enabled": "Printer",
   "litematicaplus.option.printer_enabled.tip": "Places missing schematic blocks around you by itself, without clicking. Uses the easy place settings: pace, fake rotation, finishing states, breaking wrong blocks and substitutes. Saved right away.",
   "litematicaplus.option.printer_range": "Printer reach",

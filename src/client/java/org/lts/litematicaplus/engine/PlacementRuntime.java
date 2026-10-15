@@ -28,6 +28,7 @@ public final class PlacementRuntime {
     final long[] counts = new long[MismatchType.VALUES.length];
     PlacementVolume volume;
     long[] correctByPalette = new long[0];
+    long[] restateByPalette = new long[0];
     boolean[] specialByPalette = new boolean[0];
     int generation;
     volatile int buildToken;
@@ -40,6 +41,7 @@ public final class PlacementRuntime {
     final long[] scopedCounts = new long[MismatchType.VALUES.length];
     long[] scopedTotals = new long[0];
     long[] scopedCorrect = new long[0];
+    long[] scopedRestate = new long[0];
     long scopedBlocks;
 
     PlacementRuntime(SchematicPlacement placement) {
@@ -144,6 +146,10 @@ public final class PlacementRuntime {
         return scoped() ? this.scopedCorrect : this.correctByPalette;
     }
 
+    public long[] restateByPalette() {
+        return scoped() ? this.scopedRestate : this.restateByPalette;
+    }
+
     public double progress() {
         long total = totalBlocks();
         if (total <= 0L) {
@@ -172,6 +178,13 @@ public final class PlacementRuntime {
                 this.correctByPalette[indices[i]] += (long) sign * correct[i];
             }
         }
+        int[] restateIndices = verdict.restateIndices();
+        int[] restate = verdict.restateCounts();
+        for (int i = 0; i < restateIndices.length; i++) {
+            if (restateIndices[i] < this.restateByPalette.length) {
+                this.restateByPalette[restateIndices[i]] += (long) sign * restate[i];
+            }
+        }
         this.verifiedSections += sign;
         if (verdict.worldKnown()) {
             this.knownSections += sign;
@@ -191,6 +204,7 @@ public final class PlacementRuntime {
             if (index < this.scopedTotals.length) {
                 this.scopedTotals[index] += (long) sign * tally.totals[i];
                 this.scopedCorrect[index] += (long) sign * tally.correct[i];
+                this.scopedRestate[index] += (long) sign * tally.restate[i];
             }
         }
     }
@@ -200,6 +214,7 @@ public final class PlacementRuntime {
         int size = this.correctByPalette.length;
         this.scopedTotals = new long[size];
         this.scopedCorrect = new long[size];
+        this.scopedRestate = new long[size];
         this.scopedBlocks = 0L;
         this.scopeGeneration++;
         this.scopeReady = true;
@@ -211,6 +226,7 @@ public final class PlacementRuntime {
     void resetTotals(int paletteSize) {
         java.util.Arrays.fill(this.counts, 0L);
         this.correctByPalette = new long[paletteSize];
+        this.restateByPalette = new long[paletteSize];
         this.verifiedSections = 0;
         this.knownSections = 0;
         resetScope();

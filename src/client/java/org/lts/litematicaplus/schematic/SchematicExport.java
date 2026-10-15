@@ -22,11 +22,12 @@ import org.lts.litematicaplus.util.LocalizedException;
 public final class SchematicExport {
     public static final long MAX_EXPORT_VOLUME = 1L << 25;
     public static final long MAX_STRUCTURE_BLOCKS = 1L << 22;
-    private static final int OUTSIDE = -1;
+    static final int OUTSIDE = -1;
 
     public enum Format {
         SPONGE(".schem"),
-        STRUCTURE(".nbt");
+        STRUCTURE(".nbt"),
+        BLUEPRINT(".bp");
 
         private final String extension;
 
@@ -49,7 +50,7 @@ public final class SchematicExport {
         }
     }
 
-    private record Merged(int sizeX, int sizeY, int sizeZ, BlockState[] palette, int[] cells,
+    record Merged(int sizeX, int sizeY, int sizeZ, BlockState[] palette, int[] cells,
             List<CompoundTag> blockEntities, List<CompoundTag> entities) {
         long index(int x, int y, int z) {
             return ((long) y * this.sizeZ + z) * this.sizeX + x;
@@ -60,7 +61,11 @@ public final class SchematicExport {
     }
 
     public static CompoundTag encode(Schematic schematic, Format format) throws IOException {
-        return format == Format.SPONGE ? sponge(schematic) : structure(schematic);
+        return switch (format) {
+            case SPONGE -> sponge(schematic);
+            case STRUCTURE -> structure(schematic);
+            case BLUEPRINT -> throw new IllegalArgumentException("Axiom blueprints are not NBT files");
+        };
     }
 
     public static CompoundTag sponge(Schematic schematic) throws IOException {
@@ -213,7 +218,7 @@ public final class SchematicExport {
         return root;
     }
 
-    private static Merged merge(Schematic schematic, long limit) throws IOException {
+    static Merged merge(Schematic schematic, long limit) throws IOException {
         int minX = schematic.minX();
         int minY = schematic.minY();
         int minZ = schematic.minZ();
@@ -231,6 +236,7 @@ public final class SchematicExport {
         Map<BlockState, Integer> lookup = new IdentityHashMap<>();
         List<CompoundTag> blockEntities = new ArrayList<>();
         List<CompoundTag> entities = new ArrayList<>();
+        int dataVersion = schematic.metadata().dataVersion;
         for (SchematicRegion region : schematic.regions().values()) {
             int[] local = new int[region.palette().length];
             for (int i = 0; i < local.length; i++) {
@@ -262,17 +268,20 @@ public final class SchematicExport {
             }
             for (Long2ObjectMap.Entry<CompoundTag> entry : region.blockEntities().long2ObjectEntrySet()) {
                 long key = entry.getLongKey();
-                CompoundTag tag = entry.getValue().copy();
+                CompoundTag tag = BlockStateNbt.fixBlockEntity(entry.getValue(), dataVersion).copy();
                 tag.putInt("x", SchematicRegion.localKeyX(key) + offsetX);
                 tag.putInt("y", SchematicRegion.localKeyY(key) + offsetY);
                 tag.putInt("z", SchematicRegion.localKeyZ(key) + offsetZ);
                 blockEntities.add(tag);
             }
+            int originX = region.posX() - minX;
+            int originY = region.posY() - minY;
+            int originZ = region.posZ() - minZ;
             for (CompoundTag entity : region.entities()) {
-                CompoundTag tag = entity.copy();
+                CompoundTag tag = BlockStateNbt.fixEntity(entity, dataVersion).copy();
                 ListTag pos = tag.getListOrEmpty("Pos");
-                tag.put("Pos", doubles(pos.getDoubleOr(0, 0.0) + offsetX, pos.getDoubleOr(1, 0.0) + offsetY,
-                        pos.getDoubleOr(2, 0.0) + offsetZ));
+                tag.put("Pos", doubles(pos.getDoubleOr(0, 0.0) + originX, pos.getDoubleOr(1, 0.0) + originY,
+                        pos.getDoubleOr(2, 0.0) + originZ));
                 tag.remove("UUID");
                 entities.add(tag);
             }

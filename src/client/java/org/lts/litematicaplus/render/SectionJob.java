@@ -33,6 +33,7 @@ public record SectionJob(
             boolean ghostBlocks,
             boolean overlay,
             boolean renderColliding,
+            boolean ghostErrorsOnly,
             boolean lenientStates,
             boolean looseBlocks,
             boolean soilSwap,

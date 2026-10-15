@@ -14,6 +14,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.gui.PlacementEditorScreen;
@@ -79,6 +80,8 @@ public final class Hotkeys {
                 (config, value) -> config.breakWrongBlocks = value);
         toggle("toggle_substitutes", "easy_place_substitutes", config -> config.easyPlaceSubstitutes,
                 (config, value) -> config.easyPlaceSubstitutes = value);
+        toggle("toggle_ghost_errors_only", "ghost_errors_only", config -> config.ghostErrorsOnly,
+                (config, value) -> config.ghostErrorsOnly = value);
         toggle("toggle_inventory_highlight", "inventory_highlight", config -> config.inventoryHighlight,
                 (config, value) -> config.inventoryHighlight = value);
         takeMaterials = add("take_materials", 0, minecraft -> { });
@@ -207,7 +210,8 @@ public final class Hotkeys {
     }
 
     public static boolean onKeyPress(Minecraft minecraft, int action, KeyEvent event) {
-        if (action == InputConstants.RELEASE || minecraft.player == null || minecraft.gui.screen() != null) {
+        if (action == InputConstants.RELEASE || minecraft.player == null || minecraft.gui.screen() != null
+                || AxiomBridge.pausesInput()) {
             return false;
         }
         int held = modifiersOf(event);
@@ -248,7 +252,7 @@ public final class Hotkeys {
     }
 
     static void tick(Minecraft minecraft) {
-        boolean blocked = minecraft.player == null || minecraft.gui.screen() != null;
+        boolean blocked = minecraft.player == null || minecraft.gui.screen() != null || AxiomBridge.pausesInput();
         for (Entry entry : ENTRIES) {
             while (entry.mapping().consumeClick()) {
                 if (!blocked && clickAllowed(entry)) {

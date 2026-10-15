@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
@@ -24,13 +25,22 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.lts.litematicaplus.Hotkeys;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.tool.Substitutes;
 
 final class SettingsView extends TabView {
+    private static final int HEADER_HEIGHT = 14;
+    private static final int ROW_PITCH = Theme.CONTROL_HEIGHT + 4;
+    private static final String[] HOTKEY_GROUPS = {"menus", "actions", "toggles", "other"};
+
     private enum Category {
         RENDERING("rendering"),
+        VERIFY("verify"),
+        HUD("hud"),
         TOOLS("tools"),
         EASY_PLACE("easy_place"),
+        BREAKING("breaking"),
+        MATERIALS("materials"),
         HOTKEYS("hotkeys"),
         PERFORMANCE("performance");
 
@@ -46,7 +56,13 @@ final class SettingsView extends TabView {
         void build(int x, int y, int width);
     }
 
-    private record Tab(Component label, Runnable select, java.util.function.BooleanSupplier active) {
+    private record Line(Component header, Row row) {
+    }
+
+    private record Placed(int page, Line item, int x, int y, int width) {
+    }
+
+    private record Tab(Component label, Runnable select, BooleanSupplier active) {
     }
 
     private static Category category = Category.RENDERING;
@@ -60,10 +76,15 @@ final class SettingsView extends TabView {
     private String toolItemText = this.working.toolItem;
     private int page;
     private int pages = 1;
+    private int optionsX;
+    private int optionsWidth;
+    private final List<Placed> headers = new ArrayList<>();
     private int toolItemX = -1;
     private int toolItemY;
+    private int toolItemLabel;
     private int authorX = -1;
     private int authorY;
+    private int authorLabel;
     private KeyMapping listening;
     private int listeningModifiers;
     private int pendingModifierKey = -1;
@@ -84,54 +105,67 @@ final class SettingsView extends TabView {
     void init() {
         this.toolItemX = -1;
         this.authorX = -1;
+        this.headers.clear();
         List<Tab> tabs = tabs();
-        int gap = this.width < 360 ? 3 : Theme.GAP;
-        int textTotal = 0;
+        int labelWidth = 0;
         for (Tab tab : tabs) {
-            textTotal += this.font.width(tab.label());
+            labelWidth = Math.max(labelWidth, this.font.width(tab.label()));
         }
-        int padding = Math.max(4, (this.width - gap * (tabs.size() - 1) - textTotal) / tabs.size());
-        int tabX = this.left;
-        for (int i = 0; i < tabs.size(); i++) {
-            Tab tab = tabs.get(i);
-            int width = i == tabs.size() - 1 ? this.left + this.width - tabX : this.font.width(tab.label()) + padding;
-            add(new FlatButton(tabX, this.top, Math.max(12, width), Theme.CONTROL_HEIGHT, tab.label(),
-                    FlatButton.Style.SECONDARY, button -> {
+        int listWidth = Math.min(Math.max(64, labelWidth + 20), Math.max(64, this.width * 30 / 100));
+        int pitch = Math.max(13, Math.min(Theme.CONTROL_HEIGHT + 2, (this.height + 2) / tabs.size()));
+        int tabY = this.top;
+        for (Tab tab : tabs) {
+            FlatButton button = add(new FlatButton(this.left, tabY, listWidth, pitch - 2, tab.label(), FlatButton.Style.TAB,
+                    pressed -> {
                         tab.select().run();
                         this.page = 0;
                         this.listening = null;
                         this.screen.refresh();
                     }).withState(tab.active()));
-            tabX += width + gap;
+            if (this.font.width(tab.label()) <= listWidth - 15) {
+                button.setTooltip(null);
+            }
+            tabY += pitch;
         }
-        List<Row> rows = rows();
-        int rowsTop = this.top + Theme.CONTROL_HEIGHT + 8;
+        this.optionsX = this.left + listWidth + 10;
+        this.optionsWidth = this.left + this.width - this.optionsX;
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
-        int columns = this.width >= 380 ? 2 : 1;
-        int columnWidth = (this.width - Theme.GAP * (columns - 1)) / columns;
-        int visibleRows = Math.max(1, (bottomY - 14 - rowsTop) / (Theme.CONTROL_HEIGHT + 4));
-        int perPage = visibleRows * columns;
-        this.pages = Math.max(1, (rows.size() + perPage - 1) / perPage);
-        this.page = Math.max(0, Math.min(this.page, this.pages - 1));
-        int start = this.page * perPage;
-        for (int i = start; i < Math.min(rows.size(), start + perPage); i++) {
-            int slot = i - start;
-            rows.get(i).build(this.left + slot % columns * (columnWidth + Theme.GAP),
-                    rowsTop + slot / columns * (Theme.CONTROL_HEIGHT + 4), columnWidth);
+        List<Placed> placed = layout(rows(), this.optionsX, this.optionsWidth, this.top, bottomY - 14);
+        this.pages = 1;
+        for (Placed entry : placed) {
+            this.pages = Math.max(this.pages, entry.page() + 1);
         }
-        FlatButton previous = add(FlatButton.secondary(this.left, bottomY, 24, Component.literal("<"), button -> {
-            this.page--;
-            this.screen.refresh();
-        }));
-        previous.active = this.page > 0;
-        FlatButton next = add(FlatButton.secondary(this.left + 70, bottomY, 24, Component.literal(">"), button -> {
-            this.page++;
-            this.screen.refresh();
-        }));
-        next.active = this.page < this.pages - 1;
+        this.page = Math.max(0, Math.min(this.page, this.pages - 1));
+        for (Placed entry : placed) {
+            if (entry.page() != this.page) {
+                continue;
+            }
+            if (entry.item().header() != null) {
+                this.headers.add(entry);
+            } else {
+                entry.item().row().build(entry.x(), entry.y(), entry.width());
+            }
+        }
+        if (this.pages > 1) {
+            FlatButton previous = add(FlatButton.secondary(this.optionsX, bottomY, 24, Component.literal("<"), button -> {
+                this.page--;
+                this.screen.refresh();
+            }));
+            previous.active = this.page > 0;
+            FlatButton next = add(FlatButton.secondary(this.optionsX + 70, bottomY, 24, Component.literal(">"), button -> {
+                this.page++;
+                this.screen.refresh();
+            }));
+            next.active = this.page < this.pages - 1;
+        }
         int right = this.left + this.width;
-        this.saveButton = add(FlatButton.primary(right - 90, bottomY, 90, tr("litematicaplus.button.save"), button -> save()));
-        this.revertButton = add(FlatButton.secondary(right - 90 - Theme.GAP - 80, bottomY, 80,
+        int pager = this.pages > 1 ? 94 + Theme.GAP : 0;
+        int room = this.optionsWidth - pager - Theme.GAP;
+        int saveWidth = Math.max(48, Math.min(90, room * 9 / 17));
+        int revertWidth = Math.max(44, Math.min(80, room - saveWidth));
+        this.saveButton = add(FlatButton.primary(right - saveWidth, bottomY, saveWidth, tr("litematicaplus.button.save"),
+                button -> save()));
+        this.revertButton = add(FlatButton.secondary(right - saveWidth - Theme.GAP - revertWidth, bottomY, revertWidth,
                 tr("litematicaplus.button.revert"), button -> {
                     this.working = LitematicaPlusConfig.currentCopy();
                     this.dirty = false;
@@ -141,6 +175,46 @@ final class SettingsView extends TabView {
                     this.screen.refresh();
                 }));
         updateSave();
+    }
+
+    private static List<Placed> layout(List<Line> items, int x, int width, int top, int limit) {
+        int columns = width >= 380 ? 2 : 1;
+        int columnWidth = (width - Theme.GAP * (columns - 1)) / columns;
+        List<Placed> placed = new ArrayList<>();
+        int page = 0;
+        int y = top;
+        int column = 0;
+        Line section = null;
+        for (Line item : items) {
+            if (item.header() != null) {
+                if (column > 0) {
+                    column = 0;
+                    y += ROW_PITCH;
+                }
+                if (y > top && y + HEADER_HEIGHT + Theme.CONTROL_HEIGHT > limit) {
+                    page++;
+                    y = top;
+                }
+                section = item;
+                placed.add(new Placed(page, item, x, y, width));
+                y += HEADER_HEIGHT;
+                continue;
+            }
+            if (column == 0 && y > top && y + Theme.CONTROL_HEIGHT > limit) {
+                page++;
+                y = top;
+                if (section != null) {
+                    placed.add(new Placed(page, section, x, y, width));
+                    y += HEADER_HEIGHT;
+                }
+            }
+            placed.add(new Placed(page, item, x + column * (columnWidth + Theme.GAP), y, columnWidth));
+            if (++column == columns) {
+                column = 0;
+                y += ROW_PITCH;
+            }
+        }
+        return placed;
     }
 
     private static List<Tab> tabs() {
@@ -214,13 +288,30 @@ final class SettingsView extends TabView {
         updateSave();
     }
 
-    private List<Row> rows() {
-        List<Row> rows = new ArrayList<>();
+    private static Line header(String key) {
+        return new Line(tr("litematicaplus.settings.section." + key), null);
+    }
+
+    private static Line row(Row row) {
+        return new Line(null, row);
+    }
+
+    private Line toggle(String key, Function<LitematicaPlusConfig, Boolean> getter,
+            BiConsumer<LitematicaPlusConfig, Boolean> setter) {
+        return row((x, y, width) -> describe(add(FlatButton.toggle(x, y, width, tr("litematicaplus.option." + key),
+                () -> getter.apply(this.working), button -> {
+                    setter.accept(this.working, !getter.apply(this.working));
+                    changed();
+                })), key));
+    }
+
+    private List<Line> rows() {
+        List<Line> rows = new ArrayList<>();
         if (extension != null) {
             for (SettingsExtensions.Page entry : SettingsExtensions.pages()) {
                 if (entry.key().equals(extension)) {
                     for (SettingsExtensions.Option option : entry.options().get()) {
-                        rows.add(extensionRow(option));
+                        rows.add(row(extensionRow(option)));
                     }
                 }
             }
@@ -228,68 +319,85 @@ final class SettingsView extends TabView {
         }
         switch (category) {
             case RENDERING -> {
+                rows.add(header("schematic"));
                 rows.add(toggle("render_enabled", c -> c.renderEnabled, (c, v) -> c.renderEnabled = v));
                 rows.add(toggle("render_ghost", c -> c.renderGhostBlocks, (c, v) -> c.renderGhostBlocks = v));
+                rows.add(toggle("ghost_errors_only", c -> c.ghostErrorsOnly, (c, v) -> c.ghostErrorsOnly = v));
                 rows.add(toggle("ghosts_loaded_only", c -> c.ghostsOnlyLoaded, (c, v) -> c.ghostsOnlyLoaded = v));
+                rows.add(toggle("render_block_entities", c -> c.renderBlockEntities, (c, v) -> c.renderBlockEntities = v));
+                rows.add(toggle("render_colliding", c -> c.renderCollidingBlocks, (c, v) -> c.renderCollidingBlocks = v));
                 rows.add(percent("ghost_alpha", () -> Math.round(this.working.ghostAlpha * 100.0F),
                         v -> this.working.ghostAlpha = v / 100.0F, 20));
+                rows.add(number("render_distance", () -> this.working.renderDistance,
+                        v -> this.working.renderDistance = v, 32, 2048, 32));
+                rows.add(header("errors"));
                 rows.add(toggle("render_overlay", c -> c.renderOverlay, (c, v) -> c.renderOverlay = v));
+                rows.add(toggle("overlay_xray", c -> c.overlayThroughWalls, (c, v) -> c.overlayThroughWalls = v));
                 rows.add(percent("overlay_fill_alpha", () -> Math.round(this.working.overlayFillAlpha * 100.0F),
                         v -> this.working.overlayFillAlpha = v / 100.0F, 0));
                 rows.add(percent("overlay_line_alpha", () -> Math.round(this.working.overlayLineAlpha * 100.0F),
                         v -> this.working.overlayLineAlpha = v / 100.0F, 0));
-                rows.add(toggle("overlay_xray", c -> c.overlayThroughWalls, (c, v) -> c.overlayThroughWalls = v));
-                rows.add(toggle("render_colliding", c -> c.renderCollidingBlocks, (c, v) -> c.renderCollidingBlocks = v));
-                rows.add(toggle("render_block_entities", c -> c.renderBlockEntities, (c, v) -> c.renderBlockEntities = v));
+                rows.add(toggle("inventory_highlight", c -> c.inventoryHighlight, (c, v) -> c.inventoryHighlight = v));
+                rows.add(header("frames"));
+                rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
+                rows.add(toggle("selection_boxes", c -> c.renderSelectionBoxes, (c, v) -> c.renderSelectionBoxes = v));
+            }
+            case VERIFY -> {
+                rows.add(header("rules"));
                 rows.add(toggle("lenient_states", c -> c.lenientStates, (c, v) -> c.lenientStates = v));
                 rows.add(toggle("loose_blocks", c -> c.looseBlocks, (c, v) -> c.looseBlocks = v));
                 rows.add(toggle("soil_interchangeable", c -> c.soilInterchangeable, (c, v) -> c.soilInterchangeable = v));
-                rows.add(toggle("inventory_highlight", c -> c.inventoryHighlight, (c, v) -> c.inventoryHighlight = v));
                 rows.add(toggle("trust_hidden", c -> c.trustHiddenBlocks, (c, v) -> c.trustHiddenBlocks = v));
-                rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
+                rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
+                rows.add(header("scope"));
                 rows.add(toggle("count_visible_only", c -> c.countVisibleOnly, (c, v) -> c.countVisibleOnly = v));
-                rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
-                rows.add(toggle("selection_boxes", c -> c.renderSelectionBoxes, (c, v) -> c.renderSelectionBoxes = v));
-                rows.add(number("render_distance", () -> this.working.renderDistance,
-                        v -> this.working.renderDistance = v, 32, 2048, 32));
+                rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
+            }
+            case HUD -> {
                 rows.add(toggle("hud_enabled", c -> c.hudEnabled, (c, v) -> c.hudEnabled = v));
-                rows.add(this::hudPositionRow);
+                rows.add(row(this::hudPositionRow));
                 rows.add(number("hud_material_lines", () -> this.working.hudMaterialLines,
                         v -> this.working.hudMaterialLines = v, 0, 16, 1));
                 rows.add(toggle("note_tuning_hud", c -> c.noteTuningHud, (c, v) -> c.noteTuningHud = v));
                 rows.add(toggle("hud_diagnostics", c -> c.hudDiagnostics, (c, v) -> c.hudDiagnostics = v));
             }
             case TOOLS -> {
+                rows.add(header("tool"));
                 rows.add(toggle("tool_enabled", c -> c.toolEnabled, (c, v) -> c.toolEnabled = v));
-                rows.add(this::toolItemRow);
-                rows.add(this::authorRow);
-                rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
-                rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
+                rows.add(row(this::toolItemRow));
                 rows.add(toggle("pick_block", c -> c.pickBlockEnabled, (c, v) -> c.pickBlockEnabled = v));
-                rows.add(this::lockedSlotsRow);
-                rows.add(toggle("placement_restriction", c -> c.placementRestriction, (c, v) -> c.placementRestriction = v));
-                rows.add(toggle("material_helper", c -> c.materialHelper, (c, v) -> c.materialHelper = v));
-                rows.add(toggle("material_follows_render", c -> c.materialHelperFollowsRender,
-                        (c, v) -> c.materialHelperFollowsRender = v));
-                rows.add(toggle("material_panel", c -> c.materialPanel, (c, v) -> c.materialPanel = v));
-                rows.add(toggle("material_exact", c -> c.materialExactTake, (c, v) -> c.materialExactTake = v));
-                rows.add(toggle("material_tooltips", c -> c.materialTooltips, (c, v) -> c.materialTooltips = v));
-                rows.add(toggle("ender_chest_materials", c -> c.enderChestMaterials, (c, v) -> c.enderChestMaterials = v));
-                rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
-                rows.add(this::pasteReplaceRow);
-                rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
-                rows.add(toggle("paste_entities", c -> c.pasteEntities, (c, v) -> c.pasteEntities = v));
-                rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
+                rows.add(header("paste"));
+                rows.add(row(this::pasteReplaceRow));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
                         v -> this.working.pasteCommandsPerTick = v, 1, 16, 1));
+                rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
+                rows.add(toggle("paste_entities", c -> c.pasteEntities, (c, v) -> c.pasteEntities = v));
+                rows.add(header("schematics"));
+                rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
+                rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
+                rows.add(row(this::authorRow));
+                rows.add(header("together"));
+                rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
+                rows.add(toggle("zone_hide_messages", c -> c.zoneHideMessages, (c, v) -> c.zoneHideMessages = v));
+                if (AxiomBridge.installed()) {
+                    rows.add(header("axiom"));
+                    rows.add(toggle("axiom_editor_pause", c -> c.axiomEditorPause, (c, v) -> c.axiomEditorPause = v));
+                }
             }
             case EASY_PLACE -> {
+                rows.add(header("basics"));
                 rows.add(toggle("easy_place", c -> c.easyPlaceEnabled, (c, v) -> c.easyPlaceEnabled = v));
                 rows.add(toggle("easy_place_hold", c -> c.easyPlaceHold, (c, v) -> c.easyPlaceHold = v));
-                rows.add(this::presetRow);
+                rows.add(row(this::presetRow));
                 rows.add(number("easy_place_delay", () -> this.working.easyPlaceDelayTicks,
                         v -> this.working.easyPlaceDelayTicks = v, 0, 20, 1));
                 rows.add(toggle("easy_place_jitter", c -> c.easyPlaceJitter, (c, v) -> c.easyPlaceJitter = v));
+                rows.add(toggle("easy_place_restrict", c -> c.easyPlaceRestrictArea, (c, v) -> c.easyPlaceRestrictArea = v));
+                rows.add(toggle("placement_restriction", c -> c.placementRestriction, (c, v) -> c.placementRestriction = v));
+                rows.add(toggle("easy_place_interaction", c -> c.easyPlaceAllowInteraction,
+                        (c, v) -> c.easyPlaceAllowInteraction = v));
+                rows.add(toggle("easy_place_diagnostics", c -> c.easyPlaceDiagnostics, (c, v) -> c.easyPlaceDiagnostics = v));
+                rows.add(header("rotation"));
                 rows.add(toggle("easy_place_fake_rotation", c -> c.easyPlaceFakeRotation,
                         (c, v) -> c.easyPlaceFakeRotation = v));
                 rows.add(number("easy_place_lead", () -> this.working.easyPlaceRotationLeadTicks,
@@ -298,44 +406,73 @@ final class SettingsView extends TabView {
                 rows.add(toggle("easy_place_strict", c -> c.easyPlaceStrictOrientation,
                         (c, v) -> c.easyPlaceStrictOrientation = v));
                 rows.add(toggle("easy_place_air", c -> c.easyPlaceAirPlacement, (c, v) -> c.easyPlaceAirPlacement = v));
+                rows.add(header("states"));
                 rows.add(toggle("easy_place_finish", c -> c.easyPlaceFinishStates, (c, v) -> c.easyPlaceFinishStates = v));
                 rows.add(toggle("easy_place_ignite", c -> c.easyPlaceIgnite, (c, v) -> c.easyPlaceIgnite = v));
                 rows.add(toggle("easy_place_waterlog", c -> c.easyPlaceWaterlog, (c, v) -> c.easyPlaceWaterlog = v));
-                rows.add(toggle("easy_place_interaction", c -> c.easyPlaceAllowInteraction,
-                        (c, v) -> c.easyPlaceAllowInteraction = v));
-                rows.add(toggle("easy_place_restrict", c -> c.easyPlaceRestrictArea, (c, v) -> c.easyPlaceRestrictArea = v));
                 rows.add(toggle("easy_place_observer", c -> c.easyPlaceObserverDetect,
                         (c, v) -> c.easyPlaceObserverDetect = v));
+                rows.add(toggle("entity_placement", c -> c.entityPlacement, (c, v) -> c.entityPlacement = v));
+                rows.add(header("items"));
                 rows.add(toggle("easy_place_ignore_data", c -> c.easyPlaceIgnoreItemData,
                         (c, v) -> c.easyPlaceIgnoreItemData = v));
-                rows.add(toggle("easy_place_diagnostics", c -> c.easyPlaceDiagnostics, (c, v) -> c.easyPlaceDiagnostics = v));
                 rows.add(toggle("easy_place_substitutes", c -> c.easyPlaceSubstitutes, (c, v) -> c.easyPlaceSubstitutes = v));
-                rows.add(this::substitutesRow);
-                rows.add(toggle("entity_placement", c -> c.entityPlacement, (c, v) -> c.entityPlacement = v));
+                rows.add(row(this::substitutesRow));
+                rows.add(row(this::lockedSlotsRow));
+            }
+            case BREAKING -> {
+                rows.add(header("guard"));
                 rows.add(toggle("excavation_guard", c -> c.excavationGuard, (c, v) -> c.excavationGuard = v));
-                rows.add(toggle("tool_use_guard", c -> c.toolUseGuard, (c, v) -> c.toolUseGuard = v));
                 rows.add(toggle("excavation_guard_outside", c -> c.excavationGuardOutside,
                         (c, v) -> c.excavationGuardOutside = v));
                 rows.add(toggle("excavation_guard_correct", c -> c.excavationGuardCorrect,
                         (c, v) -> c.excavationGuardCorrect = v));
                 rows.add(toggle("excavation_guard_hint", c -> c.excavationGuardHint, (c, v) -> c.excavationGuardHint = v));
+                rows.add(toggle("tool_use_guard", c -> c.toolUseGuard, (c, v) -> c.toolUseGuard = v));
+                rows.add(header("assist"));
                 rows.add(toggle("auto_tool_switch", c -> c.autoToolSwitch, (c, v) -> c.autoToolSwitch = v));
-                rows.add(toggle("terrain_auto_replace", c -> c.terrainAutoReplace, (c, v) -> c.terrainAutoReplace = v));
                 rows.add(toggle("break_wrong_blocks", c -> c.breakWrongBlocks, (c, v) -> c.breakWrongBlocks = v));
+                rows.add(toggle("terrain_auto_replace", c -> c.terrainAutoReplace, (c, v) -> c.terrainAutoReplace = v));
+            }
+            case MATERIALS -> {
+                rows.add(header("helper"));
+                rows.add(toggle("material_helper", c -> c.materialHelper, (c, v) -> c.materialHelper = v));
+                rows.add(toggle("material_panel", c -> c.materialPanel, (c, v) -> c.materialPanel = v));
+                rows.add(toggle("material_exact", c -> c.materialExactTake, (c, v) -> c.materialExactTake = v));
+                rows.add(toggle("material_tooltips", c -> c.materialTooltips, (c, v) -> c.materialTooltips = v));
+                rows.add(toggle("material_follows_render", c -> c.materialHelperFollowsRender,
+                        (c, v) -> c.materialHelperFollowsRender = v));
+                rows.add(header("sources"));
+                rows.add(toggle("ender_chest_materials", c -> c.enderChestMaterials, (c, v) -> c.enderChestMaterials = v));
+                rows.add(toggle("container_memory", c -> c.containerMemory, (c, v) -> c.containerMemory = v));
+                rows.add(toggle("container_highlight", c -> c.containerHighlight, (c, v) -> c.containerHighlight = v));
             }
             case HOTKEYS -> {
-                for (Hotkeys.Entry entry : Hotkeys.entries()) {
-                    rows.add((x, y, width) -> hotkeyRow(entry, x, y, width));
+                for (String group : HOTKEY_GROUPS) {
+                    boolean first = true;
+                    for (Hotkeys.Entry entry : Hotkeys.entries()) {
+                        if (!hotkeyGroup(entry.name()).equals(group)) {
+                            continue;
+                        }
+                        if (first) {
+                            rows.add(header(group));
+                            first = false;
+                        }
+                        rows.add(row((x, y, width) -> hotkeyRow(entry, x, y, width)));
+                    }
                 }
             }
             case PERFORMANCE -> {
-                rows.add((x, y, width) -> add(new Stepper(x, y, width, tr("litematicaplus.option.worker_threads"),
-                        () -> this.working.workerThreads, v -> {
-                            this.working.workerThreads = v;
-                            changed();
-                        }, 0, 16, 1).format(v -> v == 0
-                                ? tr("litematicaplus.settings.auto", this.working.resolvedWorkerThreads()).getString()
-                                : Integer.toString(v))));
+                rows.add(row((x, y, width) -> {
+                    Stepper stepper = add(new Stepper(x, y, width, tr("litematicaplus.option.worker_threads"),
+                            () -> this.working.workerThreads, v -> {
+                                this.working.workerThreads = v;
+                                changed();
+                            }, 0, 16, 1).format(v -> v == 0
+                                    ? tr("litematicaplus.settings.auto", this.working.resolvedWorkerThreads()).getString()
+                                    : Integer.toString(v)));
+                    describe(stepper, "worker_threads");
+                }));
                 rows.add(number("mesh_uploads", () -> this.working.meshUploadsPerFrame,
                         v -> this.working.meshUploadsPerFrame = v, 1, 256, 4));
                 rows.add(number("snapshot_budget", () -> this.working.snapshotBudgetMicros,
@@ -345,20 +482,19 @@ final class SettingsView extends TabView {
         return rows;
     }
 
-    private static void describe(FlatButton button, String key) {
-        String tip = "litematicaplus.option." + key + ".tip";
-        if (Language.getInstance().has(tip)) {
-            button.setTooltip(Tooltip.create(tr("litematicaplus.option." + key).copy().append("\n").append(tr(tip))));
-        }
+    private static String hotkeyGroup(String name) {
+        return switch (name) {
+            case "open_menu", "edit_placement", "open_layers", "open_materials" -> "menus";
+            case "tool_mode", "layer_mode", "layer_up", "layer_down", "toggle_clip", "take_materials" -> "actions";
+            default -> name.startsWith("toggle_") ? "toggles" : "other";
+        };
     }
 
-    private Row toggle(String key, Function<LitematicaPlusConfig, Boolean> getter,
-            BiConsumer<LitematicaPlusConfig, Boolean> setter) {
-        return (x, y, width) -> describe(add(FlatButton.toggle(x, y, width, tr("litematicaplus.option." + key),
-                () -> getter.apply(this.working), button -> {
-                    setter.accept(this.working, !getter.apply(this.working));
-                    changed();
-                })), key);
+    private static void describe(net.minecraft.client.gui.components.AbstractWidget widget, String key) {
+        String tip = "litematicaplus.option." + key + ".tip";
+        if (Language.getInstance().has(tip)) {
+            widget.setTooltip(Tooltip.create(tr("litematicaplus.option." + key).copy().append("\n").append(tr(tip))));
+        }
     }
 
     private Row extensionRow(SettingsExtensions.Option option) {
@@ -368,35 +504,26 @@ final class SettingsView extends TabView {
                         toggle.setter().accept(!toggle.getter().getAsBoolean());
                         this.screen.refresh();
                     })), toggle.key());
-            case SettingsExtensions.Number number -> (x, y, width) -> {
-                Stepper stepper = add(new Stepper(x, y, width, tr("litematicaplus.option." + number.key()),
-                        number.getter(), number.setter(), number.min(), number.max(), number.step()));
-                String tip = "litematicaplus.option." + number.key() + ".tip";
-                if (Language.getInstance().has(tip)) {
-                    stepper.setTooltip(Tooltip.create(tr(tip)));
-                }
-            };
+            case SettingsExtensions.Number number -> (x, y, width) -> describe(add(new Stepper(x, y, width,
+                    tr("litematicaplus.option." + number.key()), number.getter(), number.setter(), number.min(),
+                    number.max(), number.step())), number.key());
         };
     }
 
-    private Row number(String key, IntSupplier getter, IntConsumer setter, int min, int max, int step) {
-        return (x, y, width) -> {
-            Stepper stepper = add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter, value -> {
-                setter.accept(value);
-                changed();
-            }, min, max, step));
-            String tip = "litematicaplus.option." + key + ".tip";
-            if (Language.getInstance().has(tip)) {
-                stepper.setTooltip(Tooltip.create(tr(tip)));
-            }
-        };
+    private Line number(String key, IntSupplier getter, IntConsumer setter, int min, int max, int step) {
+        return row((x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
+                value -> {
+                    setter.accept(value);
+                    changed();
+                }, min, max, step)), key));
     }
 
-    private Row percent(String key, IntSupplier getter, IntConsumer setter, int min) {
-        return (x, y, width) -> add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter, value -> {
-            setter.accept(value);
-            changed();
-        }, min, 100, 5).format(value -> value + "%"));
+    private Line percent(String key, IntSupplier getter, IntConsumer setter, int min) {
+        return row((x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
+                value -> {
+                    setter.accept(value);
+                    changed();
+                }, min, 100, 5).format(value -> value + "%")), key));
     }
 
     private void presetRow(int x, int y, int width) {
@@ -538,9 +665,11 @@ final class SettingsView extends TabView {
         int labelWidth = Math.min(width / 2, this.font.width(tr("litematicaplus.option.tool_item")) + 12);
         this.toolItemX = x;
         this.toolItemY = y;
+        this.toolItemLabel = labelWidth;
         EditBox box = field(x + labelWidth, y, width - labelWidth, this.toolItemText,
                 tr("litematicaplus.option.tool_item"), 96);
         box.setTextColor(this.toolItemValid ? Theme.TEXT : Theme.DANGER);
+        describe(box, "tool_item");
         box.setResponder(value -> {
             this.toolItemText = value;
             String clean = value.strip().toLowerCase(Locale.ROOT);
@@ -551,13 +680,13 @@ final class SettingsView extends TabView {
             box.setTextColor(valid ? Theme.TEXT : Theme.DANGER);
             if (valid) {
                 this.working.toolItem = id.toString();
-                this.status = Component.empty();
+                changed();
             } else {
+                this.dirty = true;
                 this.status = tr("litematicaplus.error.tool_item");
                 this.statusColor = Theme.DANGER;
+                updateSave();
             }
-            this.dirty = true;
-            updateSave();
         });
     }
 
@@ -565,8 +694,10 @@ final class SettingsView extends TabView {
         int labelWidth = Math.min(width / 2, this.font.width(tr("litematicaplus.option.default_author")) + 12);
         this.authorX = x;
         this.authorY = y;
+        this.authorLabel = labelWidth;
         EditBox box = field(x + labelWidth, y, width - labelWidth, this.working.defaultAuthor,
                 tr("litematicaplus.option.default_author"), 64);
+        describe(box, "default_author");
         box.setResponder(value -> {
             this.working.defaultAuthor = value;
             changed();
@@ -587,37 +718,48 @@ final class SettingsView extends TabView {
     }
 
     private void lockedSlotsRow(int x, int y, int width) {
-        SlotLockStrip strip = add(new SlotLockStrip(x, y, width, tr("litematicaplus.option.locked_slots"),
+        describe(add(new SlotLockStrip(x, y, width, tr("litematicaplus.option.locked_slots"),
                 () -> this.working.lockedHotbarSlots, value -> {
                     this.working.lockedHotbarSlots = value;
                     changed();
-                }));
-        strip.setTooltip(Tooltip.create(tr("litematicaplus.option.locked_slots").copy().append("\n")
-                .append(tr("litematicaplus.option.locked_slots.tip"))));
+                })), "locked_slots");
     }
 
     private void pasteReplaceRow(int x, int y, int width) {
-        add(FlatButton.secondary(x, y, width, tr("litematicaplus.option.paste_replace",
+        describe(add(FlatButton.secondary(x, y, width, tr("litematicaplus.option.paste_replace",
                 tr("litematicaplus.paste_replace." + this.working.pasteReplace.name().toLowerCase(Locale.ROOT))), button -> {
                     this.working.pasteReplace = this.working.pasteReplace.next();
                     changed();
                     this.screen.refresh();
-                }));
+                })), "paste_replace");
     }
 
     @Override
     void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        graphics.fill(this.optionsX - 6, this.top, this.optionsX - 5, this.top + this.height, Theme.DIVIDER);
+        for (Placed header : this.headers) {
+            Component text = header.item().header();
+            int textY = header.y() + 3;
+            Ui.section(graphics, this.font, text, header.x(), textY, header.width());
+            int lineX = header.x() + 12 + this.font.width(text);
+            if (lineX < header.x() + header.width()) {
+                Blueprint.dashed(graphics, lineX, textY + 4, header.x() + header.width() - lineX, Theme.DIVIDER);
+            }
+        }
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
-        graphics.centeredText(this.font, (this.page + 1) + " / " + this.pages, this.left + 47, bottomY + 6, Theme.TEXT_DIM);
+        if (this.pages > 1) {
+            graphics.centeredText(this.font, (this.page + 1) + " / " + this.pages, this.optionsX + 47, bottomY + 6,
+                    Theme.TEXT_DIM);
+        }
         if (this.toolItemX >= 0) {
-            graphics.text(this.font, tr("litematicaplus.option.tool_item"), this.toolItemX, this.toolItemY + 6,
-                    Theme.ACCENT, false);
+            Ui.clipped(graphics, this.font, tr("litematicaplus.option.tool_item").getString(), this.toolItemX,
+                    this.toolItemY + 6, this.toolItemLabel - 4, Theme.ACCENT);
         }
         if (this.authorX >= 0) {
-            graphics.text(this.font, tr("litematicaplus.option.default_author"), this.authorX, this.authorY + 6,
-                    Theme.ACCENT, false);
+            Ui.clipped(graphics, this.font, tr("litematicaplus.option.default_author").getString(), this.authorX,
+                    this.authorY + 6, this.authorLabel - 4, Theme.ACCENT);
         }
-        Ui.wrapped(graphics, this.font, this.status, this.left, bottomY - 12, this.width, 1, this.statusColor,
+        Ui.wrapped(graphics, this.font, this.status, this.optionsX, bottomY - 12, this.optionsWidth, 1, this.statusColor,
                 mouseX, mouseY);
     }
 }

@@ -72,7 +72,7 @@ public final class LitematicCodec {
         root.put("Metadata", writeMetadata(schematic.metadata()));
         CompoundTag regions = new CompoundTag();
         for (SchematicRegion region : schematic.regions().values()) {
-            regions.put(region.name(), writeRegion(region));
+            regions.put(region.name(), writeRegion(region, schematic.metadata().dataVersion));
         }
         root.put("Regions", regions);
         return root;
@@ -174,7 +174,7 @@ public final class LitematicCodec {
                 tag.getListOrEmpty("PendingBlockTicks").copy(), tag.getListOrEmpty("PendingFluidTicks").copy());
     }
 
-    private static CompoundTag writeRegion(SchematicRegion region) {
+    private static CompoundTag writeRegion(SchematicRegion region, int dataVersion) {
         CompoundTag tag = new CompoundTag();
         tag.put("Position", vector(region.posX(), region.posY(), region.posZ()));
         tag.put("Size", vector(region.sizeX(), region.sizeY(), region.sizeZ()));
@@ -186,7 +186,7 @@ public final class LitematicCodec {
         tag.putLongArray("BlockStates", region.states().raw());
         ListTag tiles = new ListTag();
         for (Long2ObjectMap.Entry<CompoundTag> entry : region.blockEntities().long2ObjectEntrySet()) {
-            CompoundTag tile = entry.getValue().copy();
+            CompoundTag tile = BlockStateNbt.fixBlockEntity(entry.getValue(), dataVersion).copy();
             tile.putInt("x", SchematicRegion.localKeyX(entry.getLongKey()));
             tile.putInt("y", SchematicRegion.localKeyY(entry.getLongKey()));
             tile.putInt("z", SchematicRegion.localKeyZ(entry.getLongKey()));
@@ -195,7 +195,7 @@ public final class LitematicCodec {
         tag.put("TileEntities", tiles);
         ListTag entities = new ListTag();
         for (CompoundTag entity : region.entities()) {
-            entities.add(entity.copy());
+            entities.add(BlockStateNbt.fixEntity(entity, dataVersion).copy());
         }
         tag.put("Entities", entities);
         tag.put("PendingBlockTicks", region.pendingBlockTicks().copy());

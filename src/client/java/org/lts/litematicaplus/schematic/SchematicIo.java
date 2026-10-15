@@ -1,6 +1,10 @@
 package org.lts.litematicaplus.schematic;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -26,7 +30,7 @@ public final class SchematicIo {
     public static boolean isSupported(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return name.endsWith(LITEMATIC_EXTENSION) || name.endsWith(".nbt") || name.endsWith(".schem")
-                || name.endsWith(".schematic");
+                || name.endsWith(".schematic") || name.endsWith(AxiomBlueprintCodec.EXTENSION);
     }
 
     public static String baseName(Path path) {
@@ -35,7 +39,16 @@ public final class SchematicIo {
         return dot > 0 ? name.substring(0, dot) : name;
     }
 
+    public static boolean isBlueprint(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(AxiomBlueprintCodec.EXTENSION);
+    }
+
     public static Schematic read(Path path) throws IOException {
+        if (isBlueprint(path)) {
+            try (InputStream input = new BufferedInputStream(Files.newInputStream(path))) {
+                return AxiomBlueprintCodec.read(input, baseName(path));
+            }
+        }
         CompoundTag root;
         try {
             root = NbtIo.readCompressed(path, NbtAccounter.create(NBT_QUOTA));
@@ -67,6 +80,9 @@ public final class SchematicIo {
 
     public static SchematicMetadata readMetadata(Path path) throws IOException {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (isBlueprint(path)) {
+            return read(path).metadata().copy();
+        }
         if (!name.endsWith(LITEMATIC_EXTENSION)) {
             SchematicMetadata metadata = new SchematicMetadata();
             metadata.name = baseName(path);
@@ -141,15 +157,39 @@ public final class SchematicIo {
 
     public static void write(Path path, Schematic schematic) throws IOException {
         SchematicExport.Format format = SchematicExport.Format.of(path.getFileName().toString());
+        if (format == SchematicExport.Format.BLUEPRINT) {
+            writeBlueprint(path, schematic);
+            return;
+        }
         writeRoot(path, format == null ? LitematicCodec.write(schematic) : SchematicExport.encode(schematic, format));
     }
 
+    private static void writeBlueprint(Path path, Schematic schematic) throws IOException {
+        Path parent = path.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Path temp = path.resolveSibling(path.getFileName() + ".tmp");
+        try {
+            try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(temp))) {
+                AxiomBlueprintCodec.write(output, schematic);
+            }
+            AtomicFilePersistence.replace(temp, path);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
     public static Path export(Path source, SchematicExport.Format format) throws IOException {
+        return export(source, format, source.toAbsolutePath().getParent());
+    }
+
+    public static Path export(Path source, SchematicExport.Format format, Path directory) throws IOException {
         Schematic schematic = read(source);
         String base = baseName(source);
-        Path target = source.resolveSibling(base + format.extension());
+        Path target = directory.resolve(base + format.extension());
         for (int suffix = 2; Files.exists(target); suffix++) {
-            target = source.resolveSibling(base + "_" + suffix + format.extension());
+            target = directory.resolve(base + "_" + suffix + format.extension());
         }
         write(target, schematic);
         return target;

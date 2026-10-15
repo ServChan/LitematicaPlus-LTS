@@ -70,12 +70,14 @@ public final class EasyPlace {
     private static final int RETRY_ATTEMPTS = 8;
     private static final int RETRY_WAIT_TICKS = 10;
     private static final int UNSOLVED_TICKS = 20;
+    private static final int REQUEST_TICKS = 20;
     private static final Map<BlockPos, Long> RECENT = new HashMap<>();
     private static final Map<BlockPos, Unsolved> UNSOLVED = new HashMap<>();
     private static long globalReadyTick;
     private static boolean sessionConsumed;
     private static boolean sessionPlaced;
     private static boolean requested;
+    private static long requestedTick;
     private static boolean idle = true;
     private static long lastFakeTick = Long.MIN_VALUE / 2;
     private static ClientLevel lastLevel;
@@ -101,16 +103,23 @@ public final class EasyPlace {
         LitematicaPlusConfig config = LitematicaPlusConfig.current();
         boolean down = minecraft.options.keyUse.isDown();
         boolean wanted = requested || down && sessionConsumed && config.easyPlaceHold;
+        boolean waiting = cooling() || BreakAssist.busy(minecraft);
+        boolean keep = requested && waiting && TickQueue.now() - requestedTick < REQUEST_TICKS && active(config)
+                && minecraft.gui.screen() == null && !ToolController.get().holdingTool(minecraft);
         requested = false;
         if (wanted && active(config) && !minecraft.player.isFallFlying() && minecraft.gui.screen() == null
-                && !cooling() && !BreakAssist.busy(minecraft)
-                && !ToolController.get().holdingTool(minecraft) && (config.easyPlaceHold || !sessionPlaced)) {
+                && !waiting && !ToolController.get().holdingTool(minecraft) && (config.easyPlaceHold || !sessionPlaced)) {
             act(minecraft, config);
         }
+        requested = keep;
         if (!down) {
             sessionConsumed = false;
             sessionPlaced = false;
         }
+    }
+
+    public static void dropRequest() {
+        requested = false;
     }
 
     private static boolean active(LitematicaPlusConfig config) {
@@ -193,6 +202,7 @@ public final class EasyPlace {
         if (target) {
             sessionConsumed = true;
             requested = true;
+            requestedTick = TickQueue.now();
             return true;
         }
         if (sessionConsumed) {
@@ -354,7 +364,7 @@ public final class EasyPlace {
         }
         if (step == Step.BREAK) {
             markPlacement(minecraft, pos);
-            BreakAssist.start(minecraft, pos);
+            BreakAssist.start(minecraft, pos, holdOnFailure);
             return true;
         }
         if (step != Step.PLACE) {
@@ -369,8 +379,10 @@ public final class EasyPlace {
         }
         Item item = resolveItem(minecraft, target, config);
         if (item == Items.AIR) {
-            diagnose(config, "litematicaplus.message.item_missing",
-                    new ItemStack(InventoryHelper.itemFor(target)).getHoverName());
+            Item wanted = InventoryHelper.itemFor(target);
+            diagnose(config, InventoryHelper.hasWithData(player.getInventory(), wanted)
+                    ? "litematicaplus.message.item_has_data" : "litematicaplus.message.item_missing",
+                    new ItemStack(wanted).getHoverName());
             if (holdOnFailure) {
                 hold(5);
             }
@@ -458,7 +470,8 @@ public final class EasyPlace {
             return alternative;
         }
         if (config.easyPlaceSubstitutes) {
-            return Substitutes.find(player.getInventory(), target);
+            return Substitutes.find(player.getInventory(), target,
+                    candidate -> InventoryHelper.has(player.getInventory(), candidate, config));
         }
         return Items.AIR;
     }
@@ -592,6 +605,10 @@ public final class EasyPlace {
             return false;
         }
         BlockState wanted = engine.schematicStateAt(target.getX(), target.getY(), target.getZ());
+        if ((wanted == null || wanted.isAir()) && stack.getItem() instanceof BlockItem blockItem
+                && UtilityBlocks.workstation(blockItem.getBlock())) {
+            return false;
+        }
         if (margin <= 0 && wanted != null && InventoryHelper.itemFor(wanted) == stack.getItem()) {
             return false;
         }

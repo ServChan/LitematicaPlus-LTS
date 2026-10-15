@@ -12,12 +12,14 @@ import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DynamicGpuData;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Util;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.materials.ContainerMemory;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
@@ -39,8 +41,10 @@ public final class BoxRenderer {
     private static final int SELECTION_ACTIVE_FILL = 0x2055FF55;
     private static final int CORNER_FIRST_COLOR = 0xFFFF5555;
     private static final int CORNER_SECOND_COLOR = 0xFF5B8CFF;
-    private static final int HIGHLIGHT_COLOR = 0xFF9BF07A;
-    private static final int HIGHLIGHT_FILL = 0x309BF07A;
+    private static final int HIGHLIGHT_COLOR = 0xFFE8FF3A;
+    private static final int HIGHLIGHT_FILL = 0xE8FF3A;
+    private static final int CONTAINER_COLOR = 0xFFFFA62B;
+    private static final int CONTAINER_FOCUS_COLOR = 0xFF00E5FF;
     private static final double MAX_DISTANCE = 768.0;
     private static final double TOP_VIEW_DISTANCE = 2560.0;
     private static final NativeWriter LINES = new NativeWriter(1 << 12);
@@ -118,10 +122,25 @@ public final class BoxRenderer {
                 }
             }
         }
+        float pulse = (float) (0.5 + 0.5 * Math.sin(Util.getMillis() / 260.0));
         if (visible && config.renderEnabled && config.inventoryHighlight) {
+            int fill = Math.round(0x30 + pulse * 0x40) << 24 | HIGHLIGHT_FILL;
             for (BlockPos pos : InventoryHighlight.positions()) {
-                box(LINES, FILLS, camera, pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02, pos.getX() + 0.98,
-                        pos.getY() + 0.98, pos.getZ() + 0.98, HIGHLIGHT_COLOR, 2.0F, HIGHLIGHT_FILL);
+                box(LINES, FILLS, camera, pos.getX() - 0.03, pos.getY() - 0.03, pos.getZ() - 0.03, pos.getX() + 1.03,
+                        pos.getY() + 1.03, pos.getZ() + 1.03, HIGHLIGHT_COLOR, 3.0F, fill);
+            }
+        }
+        if (visible) {
+            for (ContainerMemory.Box container : ContainerMemory.boxes()) {
+                BlockPos a = container.pos();
+                BlockPos b = container.pair() == null ? a : container.pair();
+                int color = container.focused() ? CONTAINER_FOCUS_COLOR : CONTAINER_COLOR;
+                int alpha = container.focused() ? Math.round(0x30 + pulse * 0x50) : 0x28;
+                box(XRAY_LINES, XRAY_FILLS, camera, Math.min(a.getX(), b.getX()) - 0.02,
+                        Math.min(a.getY(), b.getY()) - 0.02, Math.min(a.getZ(), b.getZ()) - 0.02,
+                        Math.max(a.getX(), b.getX()) + 1.02, Math.max(a.getY(), b.getY()) + 1.02,
+                        Math.max(a.getZ(), b.getZ()) + 1.02, color, container.focused() ? 4.0F : 2.5F,
+                        alpha << 24 | color & 0xFFFFFF);
             }
         }
         if (visible && config.entityPlacement) {

@@ -46,6 +46,7 @@ public final class HudLayoutScreen extends Screen {
         y += Theme.CONTROL_HEIGHT + 4;
         addRenderableWidget(FlatButton.primary(left, y, TOOLBAR_WIDTH, Component.translatable("litematicaplus.button.done"),
                 button -> onClose()));
+        Ui.decorate(children());
     }
 
     private void corner(int x, int y, int width, String key, float fractionX, float fractionY) {
@@ -98,7 +99,8 @@ public final class HudLayoutScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overPanel(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overPanel(event.x(), event.y())
+                && getChildAt(event.x(), event.y()).isEmpty()) {
             setFocused(null);
             this.dragging = true;
             this.grabX = event.x() - panelLeft();

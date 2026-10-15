@@ -76,6 +76,11 @@ abstract class TabView {
         return add(box);
     }
 
+    protected static <T extends net.minecraft.client.gui.components.AbstractWidget> T hint(T widget, String key,
+            Object... args) {
+        return Ui.hint(widget, Component.translatable(key, args));
+    }
+
     protected static Component tr(String key, Object... args) {
         return Component.translatable(key, args);
     }

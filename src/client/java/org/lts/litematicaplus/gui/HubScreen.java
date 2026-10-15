@@ -173,7 +173,7 @@ public final class HubScreen extends Screen {
     protected void init() {
         this.sidebarWidth = this.width < 440 ? 86 : Theme.SIDEBAR_WIDTH;
         int y = Theme.HEADER_HEIGHT + 8;
-        int pitch = Math.max(15, Math.min(23, (this.height - y - 2) / Tab.values().length));
+        int pitch = Math.max(11, Math.min(23, (this.height - y - 2) / Tab.values().length));
         for (Tab entry : Tab.values()) {
             FlatButton button = new FlatButton(0, y, this.sidebarWidth, pitch - 1, entry.title(), FlatButton.Style.TAB,
                     pressed -> switchTab(entry)).withState(() -> this.tab == entry)
@@ -192,6 +192,7 @@ public final class HubScreen extends Screen {
         this.view.bounds(contentX, contentY, this.width - contentX - Theme.PADDING,
                 this.height - contentY - Theme.PADDING);
         this.view.init();
+        Ui.decorate(children());
     }
 
     private TabView create(Tab target) {
@@ -307,6 +308,10 @@ public final class HubScreen extends Screen {
             return true;
         }
         if (event.key() == InputConstants.KEY_ESCAPE) {
+            onClose();
+            return true;
+        }
+        if (!typing(getFocused()) && org.lts.litematicaplus.Hotkeys.matches("open_menu", event)) {
             onClose();
             return true;
         }

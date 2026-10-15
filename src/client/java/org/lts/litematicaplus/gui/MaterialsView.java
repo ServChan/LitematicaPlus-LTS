@@ -16,9 +16,11 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
 import org.lts.litematicaplus.LitematicaPlusClient;
+import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.hud.InfoHud;
+import org.lts.litematicaplus.materials.ContainerMemory;
 import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialExport;
 import org.lts.litematicaplus.materials.MaterialList;
@@ -60,6 +62,9 @@ final class MaterialsView extends TabView {
         Component summary = tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
         if (this.anyPacked) {
             summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.packed_hint"));
+        }
+        if (LitematicaPlusConfig.current().containerMemory && !this.entries.isEmpty()) {
+            summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.locate_hint"));
         }
         if (!EnderChestMemory.counted()) {
             return summary;
@@ -106,6 +111,7 @@ final class MaterialsView extends TabView {
         this.showStacks = this.width >= 400;
         this.list = add(new ListPanel<MaterialList.Entry>(this.left, listTop, this.width, this.top + this.height - listTop,
                 Theme.ROW_HEIGHT, tr("litematicaplus.tab.materials"), this::renderRow)
+                .onPress(this::locate)
                 .describe(entry -> InfoHud.stackOf(entry.item()).getHoverName().getString() + " " + entry.missing())
                 .empty(tr("litematicaplus.materials.empty_title"), tr("litematicaplus.materials.empty_hint")));
         recompute();
@@ -144,7 +150,38 @@ final class MaterialsView extends TabView {
         this.anyPacked = packed;
         this.entries = shown;
         this.rowText.clear();
+        MaterialList.Entry previous = this.list.selectedItem();
+        int keep = this.list.scroll();
         this.list.setItems(shown);
+        if (previous != null) {
+            int index = -1;
+            for (int i = 0; i < shown.size(); i++) {
+                if (shown.get(i).item() == previous.item()) {
+                    index = i;
+                    break;
+                }
+            }
+            this.list.select(index);
+            this.list.setScroll(keep);
+        }
+    }
+
+    private void locate(MaterialList.Entry entry) {
+        LitematicaPlusConfig config = LitematicaPlusConfig.current();
+        if (!config.containerMemory) {
+            status(tr("litematicaplus.materials.locate_off"));
+            return;
+        }
+        Component name = InfoHud.stackOf(entry.item()).getHoverName();
+        int found = ContainerMemory.toggleFocus(this.minecraft, entry.item());
+        if (found < 0) {
+            status(tr("litematicaplus.materials.locate_cleared"));
+        } else if (found == 0) {
+            status(tr(ContainerMemory.any() ? "litematicaplus.materials.locate_none"
+                    : "litematicaplus.materials.locate_empty", name));
+        } else {
+            status(tr("litematicaplus.materials.locate_found", name, found));
+        }
     }
 
     private void exportRow() {
@@ -241,6 +278,9 @@ final class MaterialsView extends TabView {
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, MaterialList.Entry entry, int x, int y,
             int rowWidth, int rowHeight, boolean isSelected, boolean hovered) {
         ItemStack stack = InfoHud.stackOf(entry.item());
+        if (entry.item() == ContainerMemory.focus()) {
+            graphics.fill(x + 1, y + 2, x + 3, y + rowHeight - 2, Theme.ACCENT);
+        }
         graphics.fakeItem(stack, x + 5, y + 3);
         int textY = y + (rowHeight - 8) / 2;
         int right = x + rowWidth - 6;

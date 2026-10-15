@@ -70,6 +70,7 @@ public final class LitematicaPlusConfig {
     public boolean renderSelectionBoxes = true;
     public boolean overlayThroughWalls = false;
     public boolean renderCollidingBlocks = false;
+    public boolean ghostErrorsOnly = false;
     public boolean renderBlockEntities = true;
     public float ghostAlpha = 0.65F;
     public float overlayFillAlpha = 0.22F;
@@ -141,11 +142,14 @@ public final class LitematicaPlusConfig {
     public int lockedHotbarSlots = 0;
     public Map<String, Integer> hotkeyModifiers = new HashMap<>();
     public boolean inventoryHighlight = false;
+    public boolean containerMemory = true;
+    public boolean containerHighlight = true;
     public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
     public boolean pasteEntities = true;
     public boolean syncmaticaEnabled = true;
+    public boolean axiomEditorPause = true;
     public String schematicsDirectory = "schematics";
     public String defaultAuthor = "";
     public String zoneTeam = "";
