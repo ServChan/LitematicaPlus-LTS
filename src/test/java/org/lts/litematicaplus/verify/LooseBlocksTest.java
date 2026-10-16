@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.junit.jupiter.api.Test;
 import org.lts.litematicaplus.TestBootstrap;
+import org.lts.litematicaplus.tool.Substitutes;
 
 class LooseBlocksTest {
     private static MismatchType compare(BlockState schematic, BlockState world, boolean loose) {
@@ -55,6 +56,16 @@ class LooseBlocksTest {
                 compare(Blocks.IRON_DOOR.defaultBlockState(), Blocks.OAK_DOOR.defaultBlockState(), true));
         assertFalse(StateComparator.get().sameGroup(Blocks.CHEST, Blocks.BARREL));
         assertTrue(StateComparator.get().sameGroup(Blocks.OAK_PLANKS, Blocks.STONE));
+    }
+
+    @Test
+    void wallsNeverStandInForEachOther() {
+        TestBootstrap.ensure();
+        assertFalse(StateComparator.get().sameGroup(Blocks.COBBLESTONE_WALL, Blocks.STONE_BRICK_WALL));
+        assertEquals(MismatchType.WRONG_BLOCK,
+                compare(Blocks.COBBLESTONE_WALL.defaultBlockState(), Blocks.MOSSY_COBBLESTONE_WALL.defaultBlockState(), true));
+        assertFalse(Substitutes.accepts(Blocks.COBBLESTONE_WALL.defaultBlockState(),
+                Blocks.STONE_BRICK_WALL.defaultBlockState()));
     }
 
     @Test

@@ -24,7 +24,6 @@ import net.minecraft.world.level.block.BaseCoralFanBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
-import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.util.AtomicFilePersistence;
@@ -162,8 +161,7 @@ public final class Substitutes {
         if (present == wanted) {
             return false;
         }
-        if (wanted instanceof WallBlock && present instanceof WallBlock
-                || wanted instanceof FenceGateBlock && present instanceof FenceGateBlock
+        if (wanted instanceof FenceGateBlock && present instanceof FenceGateBlock
                 || wanted instanceof TrapDoorBlock && present instanceof TrapDoorBlock
                 || wanted instanceof BaseCoralFanBlock && present instanceof BaseCoralFanBlock) {
             return true;
@@ -175,9 +173,7 @@ public final class Substitutes {
     public static Item find(Inventory inventory, BlockState target, Predicate<Item> usable) {
         Block wanted = target.getBlock();
         Predicate<Block> family = null;
-        if (wanted instanceof WallBlock) {
-            family = block -> block instanceof WallBlock;
-        } else if (wanted instanceof FenceGateBlock) {
+        if (wanted instanceof FenceGateBlock) {
             family = block -> block instanceof FenceGateBlock;
         } else if (wanted instanceof TrapDoorBlock) {
             family = block -> block instanceof TrapDoorBlock;

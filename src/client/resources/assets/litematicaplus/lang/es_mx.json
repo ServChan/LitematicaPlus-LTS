@@ -645,7 +645,7 @@
   "litematicaplus.option.easy_place_diagnostics": "Explicar rechazos",
   "litematicaplus.option.easy_place_diagnostics.tip": "Muestra sobre la barra por qué no se colocó un bloque.",
   "litematicaplus.option.easy_place_substitutes": "Materiales sustitutos",
-  "litematicaplus.option.easy_place_substitutes.tip": "Si falta el bloque exacto, coloca otro muro, portón, trampilla o coral del mismo tipo, o un bloque de tu lista de sustitutos.",
+  "litematicaplus.option.easy_place_substitutes.tip": "Si falta el bloque exacto, coloca otro portón, trampilla o coral del mismo tipo, o un bloque de tu lista de sustitutos.",
   "litematicaplus.option.substitutes_add": "Agregar de la mano (%s)",
   "litematicaplus.option.substitutes_add.tip": "Agrega el bloque de tu mano principal a la lista de sustitutos. El número es el tamaño de la lista.",
   "litematicaplus.option.substitutes_clear": "Vaciar lista",

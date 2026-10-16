@@ -645,7 +645,7 @@
   "litematicaplus.option.easy_place_diagnostics": "Explain refusals",
   "litematicaplus.option.easy_place_diagnostics.tip": "Shows above the hotbar why a block was not placed.",
   "litematicaplus.option.easy_place_substitutes": "Substitute materials",
-  "litematicaplus.option.easy_place_substitutes.tip": "When the exact block is missing, places another wall, gate, trapdoor or coral fan of the same kind, or a block from your substitute list.",
+  "litematicaplus.option.easy_place_substitutes.tip": "When the exact block is missing, places another gate, trapdoor or coral fan of the same kind, or a block from your substitute list.",
   "litematicaplus.option.substitutes_add": "Add held block (%s)",
   "litematicaplus.option.substitutes_add.tip": "Adds the block in your main hand to the substitute list. The number is the list size.",
   "litematicaplus.option.substitutes_clear": "Clear list",

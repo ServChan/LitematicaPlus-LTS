@@ -645,7 +645,7 @@
   "litematicaplus.option.easy_place_diagnostics": "Объяснять отказы",
   "litematicaplus.option.easy_place_diagnostics.tip": "Показывает над хотбаром, почему блок не поставлен.",
   "litematicaplus.option.easy_place_substitutes": "Замена материалов",
-  "litematicaplus.option.easy_place_substitutes.tip": "Если нужного блока нет, ставит другую стену, калитку, люк или коралл того же вида либо блок из списка замен.",
+  "litematicaplus.option.easy_place_substitutes.tip": "Если нужного блока нет, ставит другую калитку, люк или коралл того же вида либо блок из списка замен.",
   "litematicaplus.option.substitutes_add": "Добавить из руки (%s)",
   "litematicaplus.option.substitutes_add.tip": "Добавляет блок из основной руки в список замен. Число показывает размер списка.",
   "litematicaplus.option.substitutes_clear": "Очистить список",

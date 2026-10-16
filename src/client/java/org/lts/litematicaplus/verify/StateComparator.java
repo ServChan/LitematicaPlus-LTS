@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.RedstoneWireBlock;
 import net.minecraft.world.level.block.RedstoneLampBlock;
 import net.minecraft.world.level.block.TargetBlock;
 import net.minecraft.world.level.block.TntBlock;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.piston.MovingPistonBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonHeadBlock;
@@ -120,7 +121,7 @@ public final class StateComparator {
                 && !(block instanceof PistonHeadBlock) && !(block instanceof MovingPistonBlock)
                 && !(block instanceof ObserverBlock) && !(block instanceof DispenserBlock)
                 && !(block instanceof HopperBlock) && !(block instanceof NoteBlock) && !(block instanceof TntBlock)
-                && !(block instanceof RedstoneLampBlock) && !(block instanceof TargetBlock)
+                && !(block instanceof RedstoneLampBlock) && !(block instanceof TargetBlock) && !(block instanceof WallBlock)
                 && block != Blocks.IRON_DOOR && block != Blocks.IRON_TRAPDOOR && block != Blocks.STRUCTURE_VOID
                 && block != Blocks.BARRIER && block != Blocks.LIGHT;
     }
