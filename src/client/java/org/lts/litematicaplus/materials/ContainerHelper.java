@@ -85,7 +85,7 @@ public final class ContainerHelper {
             ScreenMouseEvents.allowMouseScroll(screen).register((current, mouseX, mouseY, horizontal, vertical) ->
                     panel == null || !panel.contains(mouseX, mouseY) || !panel.scroll(vertical));
             ScreenKeyboardEvents.allowKeyPress(screen).register((current, event) -> {
-                if (current.getFocused() instanceof EditBox) {
+                if (current.isInputCaptured() || current.getFocused() instanceof EditBox) {
                     return true;
                 }
                 if (Hotkeys.takeMaterials() != null && Hotkeys.matches("take_materials", event)) {
