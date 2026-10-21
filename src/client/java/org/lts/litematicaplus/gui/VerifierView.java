@@ -68,7 +68,8 @@ final class VerifierView extends TabView {
                 Theme.ROW_HEIGHT, tr("litematicaplus.tab.verifier"), this::renderRow)
                 .describe(mismatch -> tr("litematicaplus.mismatch." + mismatch.type().key()).getString() + " "
                         + mismatch.pos().toShortString())
-                .onSelect(mismatch -> BoxRenderer.setFocus(mismatch.pos(), mismatch.type().color()))
+                .onSelect(mismatch -> BoxRenderer.setFocus(mismatch.pos(),
+                        LitematicaPlusConfig.current().mismatchColor(mismatch.type())))
                 .empty(tr("litematicaplus.verifier.empty_title"), tr("litematicaplus.verifier.empty_hint")));
         FlatButton clear = add(FlatButton.secondary(this.left + this.width - 150, listBottom + 4, 150,
                 tr("litematicaplus.verifier.clear_focus"), button -> BoxRenderer.setFocus(null, 0)));
@@ -183,7 +184,8 @@ final class VerifierView extends TabView {
     private void renderRow(GuiGraphicsExtractor graphics, Font rowFont, GhostEngine.Mismatch mismatch, int x, int y,
             int rowWidth, int rowHeight, boolean isSelected, boolean hovered) {
         int textY = y + (rowHeight - 8) / 2;
-        graphics.fill(x + 7, y + 7, x + 15, y + rowHeight - 7, mismatch.type().color());
+        graphics.fill(x + 7, y + 7, x + 15, y + rowHeight - 7,
+                LitematicaPlusConfig.current().mismatchColor(mismatch.type()));
         RowText text = this.rowText.computeIfAbsent(mismatch, this::rowText);
         graphics.text(rowFont, text.type(), x + 21, textY, mismatch.type().textColor(), false);
         int typeWidth = Math.max(78, rowFont.width(text.type()) + 8);

@@ -147,9 +147,9 @@ public final class BoxRenderer {
             for (EntityAssist.Ghost ghost : EntityAssist.visible()) {
                 AABB bounds = ghost.box();
                 int color = switch (ghost.status()) {
-                    case INCOMPLETE -> MismatchType.WRONG_STATE.color();
-                    case BLOCKED -> MismatchType.WRONG_BLOCK.color();
-                    default -> MismatchType.MISSING.color();
+                    case INCOMPLETE -> config.mismatchColor(MismatchType.WRONG_STATE);
+                    case BLOCKED -> config.mismatchColor(MismatchType.WRONG_BLOCK);
+                    default -> config.mismatchColor(MismatchType.MISSING);
                 };
                 box(LINES, FILLS, camera, bounds.minX - 0.01, bounds.minY - 0.01, bounds.minZ - 0.01, bounds.maxX + 0.01,
                         bounds.maxY + 0.01, bounds.maxZ + 0.01, color, 2.0F, color & 0x38FFFFFF);

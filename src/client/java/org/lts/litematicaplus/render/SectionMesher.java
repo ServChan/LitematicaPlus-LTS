@@ -29,6 +29,7 @@ public final class SectionMesher {
     private static final byte WRONG_BLOCK = (byte) MismatchType.WRONG_BLOCK.ordinal();
     private static final byte WRONG_STATE = (byte) MismatchType.WRONG_STATE.ordinal();
     private static final byte UNKNOWN = (byte) MismatchType.UNKNOWN.ordinal();
+    private static final byte NONE = (byte) MismatchType.NONE.ordinal();
     private static final int DOWN = 1;
     private static final int UP = 2;
     private static final int NORTH = 4;
@@ -77,7 +78,7 @@ public final class SectionMesher {
                     SectionPos.y(live.sectionKey()), SectionPos.z(live.sectionKey()));
             if (cached != null) {
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), cached.world(), cached.border(), 0, live.neighbours(), null, live.layer(), live.level(),
+                        live.specialByPalette(), live.hiddenByPalette(), cached.world(), cached.border(), 0, live.neighbours(), null, live.layer(), live.level(),
                         live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         } else if (live.world() != null && live.border() != null && live.unknownFaces() != 0 && options.worldCache()) {
@@ -91,7 +92,7 @@ public final class SectionMesher {
                     }
                 }
                 job = new SectionJob(live.sectionKey(), live.generation(), live.revision(), section, volume,
-                        live.specialByPalette(), live.world(), border, 0, live.neighbours(), null, live.layer(), live.level(),
+                        live.specialByPalette(), live.hiddenByPalette(), live.world(), border, 0, live.neighbours(), null, live.layer(), live.level(),
                         live.blockModels(), live.fluidModels(), live.blockColors(), options);
             }
         }
@@ -162,6 +163,7 @@ public final class SectionMesher {
         BlockState[] palette = volume.palette();
         boolean[] solid = volume.solid();
         boolean[] special = job.specialByPalette();
+        boolean[] hidden = job.hiddenByPalette();
         short[] raw = job.section().raw();
         byte[] categories = verdict.categories();
         LayerRange layer = job.layer();
@@ -179,7 +181,7 @@ public final class SectionMesher {
                     continue;
                 }
                 int paletteIndex = value & 0xFFFF;
-                if (!solid[paletteIndex]) {
+                if (!solid[paletteIndex] || paletteIndex < hidden.length && hidden[paletteIndex]) {
                     continue;
                 }
                 byte category = categories[index];
@@ -217,7 +219,7 @@ public final class SectionMesher {
     private void buildOverlay(SectionJob job, SectionVerdict verdict, GhostBlockView view, int originX, int originY,
             int originZ) {
         SectionJob.Options options = job.options();
-        byte[] categories = verdict.categories();
+        byte[] categories = withoutHidden(job, verdict.categories());
         LayerRange layer = job.layer();
         boolean layered = !layer.unrestricted();
         BlockState[] world = job.world();
@@ -266,7 +268,7 @@ public final class SectionMesher {
             if (exposed == 0) {
                 continue;
             }
-            int rgb = MismatchType.VALUES[category].color() & 0xFFFFFF;
+            int rgb = options.color(category) & 0xFFFFFF;
             float fillAlpha = category == MISSING ? options.fillAlpha() * 0.45F : options.fillAlpha();
             if (fillAlpha > 0.004F) {
                 emitFill(x, y, z, exposed, abgr(rgb, fillAlpha));
@@ -289,6 +291,27 @@ public final class SectionMesher {
                 emitEdges(x, y, z, exposed, concave, abgr(rgb, options.lineAlpha()));
             }
         }
+    }
+
+    private static byte[] withoutHidden(SectionJob job, byte[] categories) {
+        boolean[] hidden = job.hiddenByPalette();
+        boolean any = false;
+        for (boolean value : hidden) {
+            any |= value;
+        }
+        if (!any) {
+            return categories;
+        }
+        short[] raw = job.section().raw();
+        byte[] visible = categories.clone();
+        for (int index = 0; index < GhostSection.VOLUME; index++) {
+            short value = raw[index];
+            int paletteIndex = value & 0xFFFF;
+            if (value != GhostSection.OUTSIDE && paletteIndex < hidden.length && hidden[paletteIndex]) {
+                visible[index] = NONE;
+            }
+        }
+        return visible;
     }
 
     private static boolean shown(byte category, SectionJob.Options options) {

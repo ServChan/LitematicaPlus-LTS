@@ -3,10 +3,12 @@ package org.lts.litematicaplus.gui;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -14,9 +16,14 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.hud.InfoHud;
@@ -30,7 +37,7 @@ import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.util.Notify;
 
 final class MaterialsView extends TabView {
-    private record RowText(String available, String missing, String total, String name) {
+    private record RowText(String available, String missing, String total, String name, boolean hidden) {
     }
 
     private static MaterialList.Sort sort = MaterialList.Sort.MISSING;
@@ -48,6 +55,8 @@ final class MaterialsView extends TabView {
     private Component status;
     private int statusTicks;
     private final Map<MaterialList.Entry, RowText> rowText = new IdentityHashMap<>();
+    private final Map<Item, Set<Block>> blocksByItem = new IdentityHashMap<>();
+    private FlatButton hideGhosts;
     private final TextMemo[] headers = {new TextMemo(), new TextMemo(), new TextMemo()};
 
     MaterialsView(HubScreen screen) {
@@ -60,6 +69,10 @@ final class MaterialsView extends TabView {
             return this.status;
         }
         Component summary = tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        int hidden = GhostEngine.get().hiddenBlocks().size();
+        if (hidden > 0) {
+            summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.hidden_summary", hidden));
+        }
         if (this.anyPacked) {
             summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.packed_hint"));
         }
@@ -89,19 +102,21 @@ final class MaterialsView extends TabView {
         if (this.exporting) {
             exportRow();
         } else {
-            int third = (this.width - Theme.GAP * 2) / 3;
-            add(FlatButton.secondary(this.left, this.top, third, tr("litematicaplus.materials.sort",
+            int quarter = (this.width - Theme.GAP * 3) / 4;
+            add(FlatButton.secondary(this.left, this.top, quarter, tr("litematicaplus.materials.sort",
                     tr("litematicaplus.materials.sort." + sort.name().toLowerCase(Locale.ROOT))), button -> {
                         sort = sort.next();
                         this.screen.refresh();
                     }));
-            add(FlatButton.toggle(this.left + third + Theme.GAP, this.top, third,
+            add(FlatButton.toggle(this.left + quarter + Theme.GAP, this.top, quarter,
                     tr("litematicaplus.materials.hide_completed"), () -> hideCompleted, button -> {
                         hideCompleted = !hideCompleted;
                         recompute();
                     }));
-            add(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, this.top, this.width - (third + Theme.GAP) * 2,
-                    tr("litematicaplus.materials.export"), button -> {
+            this.hideGhosts = add(FlatButton.toggle(this.left + (quarter + Theme.GAP) * 2, this.top, quarter,
+                    tr("litematicaplus.materials.hide_ghosts"), this::selectedHidden, button -> toggleGhosts()));
+            add(FlatButton.secondary(this.left + (quarter + Theme.GAP) * 3, this.top,
+                    this.width - (quarter + Theme.GAP) * 3, tr("litematicaplus.materials.export"), button -> {
                         this.exporting = true;
                         this.screen.refresh();
                     }));
@@ -136,6 +151,15 @@ final class MaterialsView extends TabView {
         }
         List<MaterialList.Entry> all = MaterialList.compute(runtime,
                 this.minecraft.player == null ? null : this.minecraft.player.getInventory(), sort);
+        this.blocksByItem.clear();
+        if (runtime != null && runtime.volume() != null) {
+            for (BlockState state : runtime.volume().palette()) {
+                Item item = MaterialList.itemOf(state);
+                if (item != Items.AIR) {
+                    this.blocksByItem.computeIfAbsent(item, ignored -> new HashSet<>()).add(state.getBlock());
+                }
+            }
+        }
         List<MaterialList.Entry> shown = new ArrayList<>();
         long missing = 0L;
         boolean packed = false;
@@ -164,6 +188,40 @@ final class MaterialsView extends TabView {
             this.list.select(index);
             this.list.setScroll(keep);
         }
+    }
+
+    private boolean hidden(MaterialList.Entry entry) {
+        Set<Block> blocks = this.blocksByItem.get(entry.item());
+        if (blocks == null || blocks.isEmpty()) {
+            return false;
+        }
+        GhostEngine engine = GhostEngine.get();
+        for (Block block : blocks) {
+            if (!engine.hidden(block)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean selectedHidden() {
+        MaterialList.Entry entry = this.list == null ? null : this.list.selectedItem();
+        return entry != null && hidden(entry);
+    }
+
+    private void toggleGhosts() {
+        MaterialList.Entry entry = this.list == null ? null : this.list.selectedItem();
+        Set<Block> blocks = entry == null ? null : this.blocksByItem.get(entry.item());
+        if (blocks == null || blocks.isEmpty()) {
+            status(tr("litematicaplus.materials.hide_ghosts_pick"));
+            return;
+        }
+        boolean hide = !hidden(entry);
+        GhostEngine.get().setHidden(blocks, hide);
+        Session.markDirty();
+        this.rowText.clear();
+        Component name = InfoHud.stackOf(entry.item()).getHoverName();
+        status(tr(hide ? "litematicaplus.message.ghost_hidden" : "litematicaplus.message.ghost_shown", name));
     }
 
     private void locate(MaterialList.Entry entry) {
@@ -266,6 +324,10 @@ final class MaterialsView extends TabView {
     void tick() {
         if (this.list != null) {
             this.scroll = this.list.scroll();
+            if (this.hideGhosts != null) {
+                MaterialList.Entry selected = this.list.selectedItem();
+                this.hideGhosts.active = selected != null && this.blocksByItem.containsKey(selected.item());
+            }
             if (this.statusTicks > 0 && --this.statusTicks == 0) {
                 this.status = null;
             }
@@ -292,13 +354,18 @@ final class MaterialsView extends TabView {
         Ui.right(graphics, rowFont, text.missing(), right - this.columnWidth, textY, done ? Theme.SUCCESS : Theme.TEXT_BRIGHT);
         Ui.right(graphics, rowFont, text.total(), right - this.columnWidth * 2 - 10, textY, Theme.TEXT_DIM);
         int nameWidth = rowWidth - 30 - this.columnWidth * 3 - 16;
-        Ui.clipped(graphics, rowFont, text.name(), x + 26, textY, nameWidth, done ? Theme.TEXT_DIM : Theme.TEXT);
+        Ui.clipped(graphics, rowFont, text.name(), x + 26, textY, nameWidth,
+                done || text.hidden() ? Theme.TEXT_DIM : Theme.TEXT);
     }
 
     private RowText rowText(MaterialList.Entry entry, ItemStack stack, boolean done) {
+        boolean hidden = hidden(entry);
+        String name = stack.getHoverName().getString();
+        if (hidden) {
+            name = tr("litematicaplus.materials.ghosts_hidden", name).getString();
+        }
         return new RowText(entry.haveText(), done ? tr("litematicaplus.materials.done").getString()
-                : compact(entry.missing(), stack.getMaxStackSize()), Long.toString(entry.total()),
-                stack.getHoverName().getString());
+                : compact(entry.missing(), stack.getMaxStackSize()), Long.toString(entry.total()), name, hidden);
     }
 
     private String compact(long count, int stackSize) {

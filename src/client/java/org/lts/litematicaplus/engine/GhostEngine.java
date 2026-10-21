@@ -80,6 +80,7 @@ public final class GhostEngine {
     private ClientLevel level;
     private BlockStateModelSet modelIdentity;
     private LayerRange layer = LayerRange.ALL;
+    private final Set<Block> hiddenBlocks = new HashSet<>();
     private LayerRange scope;
     private SectionJob.Options options;
     private SectionJob.Options optionsWithoutGhost;
@@ -171,7 +172,11 @@ public final class GhostEngine {
         }
         for (PlacementRuntime runtime : this.runtimes.values()) {
             PlacementVolume volume = runtime.volume;
-            if (volume != null && runtime.placement().enabled() && volume.paletteIndexAt(x, y, z) >= 0) {
+            if (volume == null || !runtime.placement().enabled()) {
+                continue;
+            }
+            int paletteIndex = volume.paletteIndexAt(x, y, z);
+            if (paletteIndex >= 0 && !runtime.hidden(paletteIndex)) {
                 return runtime;
             }
         }
@@ -336,7 +341,7 @@ public final class GhostEngine {
             }
             SectionSlot slot = candidate.slot();
             byte[] categories = slot.verdict.categories();
-            GhostSection filtered = paletteFilter == null ? null : volume.section(slot.key);
+            GhostSection filtered = paletteFilter == null && !runtime.anyHidden ? null : volume.section(slot.key);
             for (int index = 0; index < GhostSection.VOLUME; index++) {
                 byte category = categories[index];
                 if (!wanted[category]) {
@@ -345,7 +350,11 @@ public final class GhostEngine {
                 if (filtered != null) {
                     short value = filtered.get(index);
                     int paletteIndex = value & 0xFFFF;
-                    if (value == GhostSection.OUTSIDE || paletteIndex >= paletteFilter.length || !paletteFilter[paletteIndex]) {
+                    if (paletteFilter != null && (value == GhostSection.OUTSIDE || paletteIndex >= paletteFilter.length
+                            || !paletteFilter[paletteIndex])) {
+                        continue;
+                    }
+                    if (value != GhostSection.OUTSIDE && runtime.hidden(paletteIndex)) {
                         continue;
                     }
                 }
@@ -417,6 +426,44 @@ public final class GhostEngine {
             markEverythingDirty();
             refreshScope();
         }
+    }
+
+    public Set<Block> hiddenBlocks() {
+        return Collections.unmodifiableSet(this.hiddenBlocks);
+    }
+
+    public boolean hidden(Block block) {
+        return this.hiddenBlocks.contains(block);
+    }
+
+    public void setHidden(Collection<Block> blocks, boolean hidden) {
+        boolean changed = false;
+        for (Block block : blocks) {
+            if (block.defaultBlockState().isAir()) {
+                continue;
+            }
+            changed |= hidden ? this.hiddenBlocks.add(block) : this.hiddenBlocks.remove(block);
+        }
+        if (changed) {
+            hiddenChanged();
+        }
+    }
+
+    public void setHiddenBlocks(Collection<Block> blocks) {
+        Set<Block> next = new HashSet<>(blocks);
+        next.removeIf(block -> block.defaultBlockState().isAir());
+        if (!next.equals(this.hiddenBlocks)) {
+            this.hiddenBlocks.clear();
+            this.hiddenBlocks.addAll(next);
+            hiddenChanged();
+        }
+    }
+
+    private void hiddenChanged() {
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            computeHidden(runtime);
+        }
+        markEverythingDirty();
     }
 
     public LayerRange scope() {
@@ -659,9 +706,28 @@ public final class GhostEngine {
             runtime.dirty.add(key);
         }
         computeSpecials(runtime);
+        computeHidden(runtime);
         if (this.scope != null) {
             rescope(runtime);
         }
+    }
+
+    private void computeHidden(PlacementRuntime runtime) {
+        PlacementVolume volume = runtime.volume;
+        if (volume == null || this.hiddenBlocks.isEmpty()) {
+            runtime.hiddenByPalette = new boolean[0];
+            runtime.anyHidden = false;
+            return;
+        }
+        BlockState[] palette = volume.palette();
+        boolean[] hidden = new boolean[palette.length];
+        boolean any = false;
+        for (int i = 0; i < palette.length; i++) {
+            hidden[i] = this.hiddenBlocks.contains(palette[i].getBlock());
+            any |= hidden[i];
+        }
+        runtime.hiddenByPalette = hidden;
+        runtime.anyHidden = any;
     }
 
     private void computeSpecials(PlacementRuntime runtime) {
@@ -915,7 +981,9 @@ public final class GhostEngine {
                 config.trustHiddenBlocks && !Minecraft.getInstance().hasSingleplayerServer(),
                 config.overlayThroughWalls, config.useWorldCache,
                 config.showMissing, config.showExtra, config.showWrongBlock, config.showWrongState,
-                config.overlayFillAlpha, config.overlayLineAlpha);
+                config.overlayFillAlpha, config.overlayLineAlpha, config.mismatchColor(MismatchType.MISSING),
+                config.mismatchColor(MismatchType.EXTRA), config.mismatchColor(MismatchType.WRONG_BLOCK),
+                config.mismatchColor(MismatchType.WRONG_STATE));
         boolean blockEntities = config.renderBlockEntities;
         refreshScope();
         if (!next.equals(this.options) || blockEntities != this.blockEntities) {
@@ -926,13 +994,14 @@ public final class GhostEngine {
                     next.lenientStates(), next.looseBlocks(), next.soilSwap(), next.trustHidden(), next.throughWalls(),
                     next.worldCache(),
                     next.showMissing(), next.showExtra(), next.showWrongBlock(),
-                    next.showWrongState(), next.fillAlpha(), next.lineAlpha());
+                    next.showWrongState(), next.fillAlpha(), next.lineAlpha(), next.missingColor(), next.extraColor(),
+                    next.wrongBlockColor(), next.wrongStateColor());
             this.optionsOverlayOnly = new SectionJob.Options(false, next.overlay() && next.throughWalls(),
                     next.renderColliding(), next.ghostErrorsOnly(), next.lenientStates(), next.looseBlocks(), next.soilSwap(),
                     next.trustHidden(), next.throughWalls(),
                     next.worldCache(),
                     next.showMissing(), next.showExtra(), next.showWrongBlock(), next.showWrongState(), next.fillAlpha(),
-                    next.lineAlpha());
+                    next.lineAlpha(), next.missingColor(), next.extraColor(), next.wrongBlockColor(), next.wrongStateColor());
             if (changed) {
                 for (PlacementRuntime runtime : this.runtimes.values()) {
                     computeSpecials(runtime);
@@ -1062,7 +1131,7 @@ public final class GhostEngine {
                     byte[][] neighbours = sources != null ? neighbourPlanes(runtime, slot.key, sources) : null;
                     slot.pendingPlanes = sources;
                     SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                            runtime.specialByPalette, world, border, unknownFaces, neighbours, remembered, this.layer,
+                            runtime.specialByPalette, runtime.hiddenByPalette, world, border, unknownFaces, neighbours, remembered, this.layer,
                             current, models, fluids, minecraft.getBlockColors(), jobOptions);
                     try {
                         executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));

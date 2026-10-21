@@ -1,9 +1,15 @@
 package org.lts.litematicaplus;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.storage.LevelResource;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -86,6 +92,10 @@ public final class Session {
         data.layer.clipMinZ = clip.minZ();
         data.layer.clipMaxZ = clip.maxZ();
         data.toolMode = ToolController.get().mode().name();
+        for (Block block : GhostEngine.get().hiddenBlocks()) {
+            data.hiddenBlocks.add(BuiltInRegistries.BLOCK.getKey(block).toString());
+        }
+        data.hiddenBlocks.sort(null);
         return data;
     }
 
@@ -97,6 +107,7 @@ public final class Session {
                 SelectionManager.get().restore(new SessionStore.AreaData());
                 GhostEngine.get().setLayer(LayerRange.ALL);
                 GhostEngine.get().setClip(LayerRange.Clip.NONE);
+                GhostEngine.get().setHiddenBlocks(Set.of());
                 return;
             }
             SessionStore.ScopeData data = SessionStore.get().scope(scope);
@@ -107,6 +118,7 @@ public final class Session {
                     data.layer.single, data.layer.min, data.layer.max));
             GhostEngine.get().setClip(new LayerRange.Clip(data.layer.clipEnabled, data.layer.clipX, data.layer.clipMinX,
                     data.layer.clipMaxX, data.layer.clipZ, data.layer.clipMinZ, data.layer.clipMaxZ));
+            GhostEngine.get().setHiddenBlocks(blocks(data.hiddenBlocks));
             ToolMode restored = parse(ToolMode.class, data.toolMode, ToolMode.AREA_SELECTION);
             ToolController.get().setMode(restored.changesWorld() ? ToolMode.AREA_SELECTION : restored);
         } finally {
@@ -114,6 +126,17 @@ public final class Session {
             dirty = false;
         }
         SyncmaticaClient.get().reconcile();
+    }
+
+    private static List<Block> blocks(List<String> ids) {
+        List<Block> blocks = new ArrayList<>();
+        for (String id : ids) {
+            Identifier parsed = Identifier.tryParse(id);
+            if (parsed != null) {
+                BuiltInRegistries.BLOCK.getOptional(parsed).ifPresent(blocks::add);
+            }
+        }
+        return blocks;
     }
 
     private static String currentScope(Minecraft minecraft) {

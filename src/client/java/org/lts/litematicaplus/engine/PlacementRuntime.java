@@ -30,6 +30,8 @@ public final class PlacementRuntime {
     long[] correctByPalette = new long[0];
     long[] restateByPalette = new long[0];
     boolean[] specialByPalette = new boolean[0];
+    boolean[] hiddenByPalette = new boolean[0];
+    boolean anyHidden;
     int generation;
     volatile int buildToken;
     boolean building;
@@ -54,6 +56,11 @@ public final class PlacementRuntime {
 
     public PlacementVolume volume() {
         return this.volume;
+    }
+
+    boolean hidden(int paletteIndex) {
+        return this.anyHidden && paletteIndex >= 0 && paletteIndex < this.hiddenByPalette.length
+                && this.hiddenByPalette[paletteIndex];
     }
 
     public Iterable<SectionSlot> slots() {

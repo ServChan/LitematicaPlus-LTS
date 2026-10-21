@@ -184,7 +184,7 @@ final class OverviewView extends TabView {
         if (x + this.font.width(text) + 12 > this.left + this.width - 8) {
             return x;
         }
-        return Ui.chip(graphics, this.font, x, y, text, count > 0L ? type.color() : Theme.TEXT_DIM,
+        return Ui.chip(graphics, this.font, x, y, text, count > 0L ? LitematicaPlusConfig.current().mismatchColor(type) : Theme.TEXT_DIM,
                 count > 0L ? type.textColor() : Theme.TEXT_DIM);
     }
 }

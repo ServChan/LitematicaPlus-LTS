@@ -5,6 +5,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.block.BlockStateModelSet;
 import net.minecraft.client.renderer.block.FluidStateModelSet;
 import net.minecraft.world.level.block.state.BlockState;
+import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.verify.SectionVerdict;
 import org.lts.litematicaplus.world.GhostSection;
 import org.lts.litematicaplus.world.LayerRange;
@@ -17,6 +18,7 @@ public record SectionJob(
         GhostSection section,
         PlacementVolume volume,
         boolean[] specialByPalette,
+        boolean[] hiddenByPalette,
         BlockState[] world,
         long[] border,
         int unknownFaces,
@@ -45,6 +47,21 @@ public record SectionJob(
             boolean showWrongBlock,
             boolean showWrongState,
             float fillAlpha,
-            float lineAlpha) {
+            float lineAlpha,
+            int missingColor,
+            int extraColor,
+            int wrongBlockColor,
+            int wrongStateColor) {
+
+        public int color(int category) {
+            MismatchType type = MismatchType.VALUES[category];
+            return switch (type) {
+                case MISSING -> this.missingColor;
+                case EXTRA -> this.extraColor;
+                case WRONG_BLOCK -> this.wrongBlockColor;
+                case WRONG_STATE -> this.wrongStateColor;
+                default -> type.color();
+            };
+        }
     }
 }

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -20,6 +21,7 @@ import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.gui.PlacementEditorScreen;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.tool.GhostRaycast;
 import org.lts.litematicaplus.tool.ToolController;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.LayerRange;
@@ -71,6 +73,8 @@ public final class Hotkeys {
         add("open_layers", InputConstants.KEY_F7, minecraft -> minecraft.gui.setScreen(HubScreen.layers(null)));
         add("toggle_clip", 0, Hotkeys::toggleClip);
         add("open_materials", 0, minecraft -> minecraft.gui.setScreen(HubScreen.materials(null)));
+        add("hide_ghost", 0, Hotkeys::hideGhost);
+        add("show_hidden_ghosts", 0, Hotkeys::showHiddenGhosts);
         toggle("toggle_hold", "easy_place_hold", config -> config.easyPlaceHold, (config, value) -> config.easyPlaceHold = value);
         toggle("toggle_guard", "excavation_guard", config -> config.excavationGuard,
                 (config, value) -> config.excavationGuard = value);
@@ -124,6 +128,28 @@ public final class Hotkeys {
         Session.markDirty();
         Notify.actionBar("litematicaplus.message.toggled", Component.translatable("litematicaplus.layers.clip_enabled"),
                 Component.translatable(!clip.enabled() ? "litematicaplus.state.on" : "litematicaplus.state.off"));
+    }
+
+    private static void hideGhost(Minecraft minecraft) {
+        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, ignored -> true);
+        if (hit == null) {
+            Notify.actionBar("litematicaplus.message.no_ghost_target");
+            return;
+        }
+        GhostEngine.get().setHidden(Set.of(hit.state().getBlock()), true);
+        Session.markDirty();
+        Notify.actionBar("litematicaplus.message.ghost_hidden", hit.state().getBlock().getName());
+    }
+
+    private static void showHiddenGhosts(Minecraft minecraft) {
+        int count = GhostEngine.get().hiddenBlocks().size();
+        if (count == 0) {
+            Notify.actionBar("litematicaplus.message.nothing_hidden");
+            return;
+        }
+        GhostEngine.get().setHiddenBlocks(Set.of());
+        Session.markDirty();
+        Notify.actionBar("litematicaplus.message.ghosts_shown", count);
     }
 
     private static void editPlacement(Minecraft minecraft) {

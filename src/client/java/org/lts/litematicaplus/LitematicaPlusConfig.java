@@ -12,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
@@ -19,8 +20,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.loader.api.FabricLoader;
 import org.lts.litematicaplus.util.AtomicFilePersistence;
 import org.lts.litematicaplus.util.Workers;
+import org.lts.litematicaplus.verify.MismatchType;
 
 public final class LitematicaPlusConfig {
+    public static final String DEFAULT_GHOST_COLOR = "#FFFFFF";
     private static final int CURRENT_CONFIG_VERSION = 5;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
@@ -75,6 +78,11 @@ public final class LitematicaPlusConfig {
     public float ghostAlpha = 0.65F;
     public float overlayFillAlpha = 0.22F;
     public float overlayLineAlpha = 0.9F;
+    public String ghostColor = DEFAULT_GHOST_COLOR;
+    public String missingColor = hex(MismatchType.MISSING.color());
+    public String extraColor = hex(MismatchType.EXTRA.color());
+    public String wrongBlockColor = hex(MismatchType.WRONG_BLOCK.color());
+    public String wrongStateColor = hex(MismatchType.WRONG_STATE.color());
     public int renderDistance = 320;
     public int workerThreads = 0;
     public int meshUploadsPerFrame = 24;
@@ -249,6 +257,47 @@ public final class LitematicaPlusConfig {
         return slot >= 0 && slot < 9 && (this.lockedHotbarSlots & 1 << slot) != 0;
     }
 
+    public int ghostRgb() {
+        return parseColor(this.ghostColor, 0xFFFFFF);
+    }
+
+    public int mismatchColor(MismatchType type) {
+        String value = switch (type) {
+            case MISSING -> this.missingColor;
+            case EXTRA -> this.extraColor;
+            case WRONG_BLOCK -> this.wrongBlockColor;
+            case WRONG_STATE -> this.wrongStateColor;
+            default -> null;
+        };
+        return 0xFF000000 | parseColor(value, type.color() & 0xFFFFFF);
+    }
+
+    public static String hex(int rgb) {
+        return String.format(Locale.ROOT, "#%06X", rgb & 0xFFFFFF);
+    }
+
+    public static int parseColor(String value, int fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String clean = value.strip();
+        if (clean.startsWith("#")) {
+            clean = clean.substring(1);
+        }
+        if (clean.length() == 3 && clean.matches("[0-9A-Fa-f]{3}")) {
+            clean = "" + clean.charAt(0) + clean.charAt(0) + clean.charAt(1) + clean.charAt(1) + clean.charAt(2)
+                    + clean.charAt(2);
+        }
+        if (!clean.matches("[0-9A-Fa-f]{6}")) {
+            return fallback;
+        }
+        return Integer.parseInt(clean, 16);
+    }
+
+    private static String normalizeColor(String value, int fallback) {
+        return hex(parseColor(value, fallback));
+    }
+
     public int resolvedWorkerThreads() {
         if (this.workerThreads > 0) {
             return this.workerThreads;
@@ -304,6 +353,11 @@ public final class LitematicaPlusConfig {
         config.ghostAlpha = (float) clamp(config.ghostAlpha, 0.2, 1.0);
         config.overlayFillAlpha = (float) clamp(config.overlayFillAlpha, 0.0, 1.0);
         config.overlayLineAlpha = (float) clamp(config.overlayLineAlpha, 0.0, 1.0);
+        config.ghostColor = normalizeColor(config.ghostColor, 0xFFFFFF);
+        config.missingColor = normalizeColor(config.missingColor, MismatchType.MISSING.color());
+        config.extraColor = normalizeColor(config.extraColor, MismatchType.EXTRA.color());
+        config.wrongBlockColor = normalizeColor(config.wrongBlockColor, MismatchType.WRONG_BLOCK.color());
+        config.wrongStateColor = normalizeColor(config.wrongStateColor, MismatchType.WRONG_STATE.color());
         config.renderDistance = clamp(config.renderDistance, 32, 2048);
         config.workerThreads = clamp(config.workerThreads, 0, 16);
         config.meshUploadsPerFrame = clamp(config.meshUploadsPerFrame, 1, 256);
@@ -346,7 +400,7 @@ public final class LitematicaPlusConfig {
         if (value == null) {
             return fallback;
         }
-        String clean = value.strip().toLowerCase(java.util.Locale.ROOT);
+        String clean = value.strip().toLowerCase(Locale.ROOT);
         if (clean.isEmpty() || !clean.matches("[a-z0-9_.-]+(:[a-z0-9_./-]+)?")) {
             return fallback;
         }

@@ -276,7 +276,9 @@ public final class GhostRenderer {
                 pass.setUniform("Sampler2", minecraft.gameRenderer.lightmap(),
                         RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
                 pass.setIndexBuffer(quadBuffer, quadType);
-                Vector4f color = new Vector4f(1.0F, 1.0F, 1.0F, config.ghostAlpha);
+                int tint = config.ghostRgb();
+                Vector4f color = new Vector4f((tint >> 16 & 0xFF) / 255.0F, (tint >> 8 & 0xFF) / 255.0F,
+                        (tint & 0xFF) / 255.0F, config.ghostAlpha);
                 boolean anchored = false;
                 int anchorX = 0;
                 int anchorY = 0;

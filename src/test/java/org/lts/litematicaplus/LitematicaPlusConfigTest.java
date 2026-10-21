@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.lts.litematicaplus.verify.MismatchType;
 
 class LitematicaPlusConfigTest {
     @Test
@@ -39,6 +40,26 @@ class LitematicaPlusConfigTest {
         assertEquals(LitematicaPlusConfig.PasteReplace.ALL, config.pasteReplace);
         assertEquals("minecraft:stick", config.toolItem);
         assertEquals("schematics", config.schematicsDirectory);
+    }
+
+    @Test
+    void colorsAreNormalizedOrFallBackToDefaults(@TempDir Path directory) throws IOException {
+        Path file = directory.resolve("config.json");
+        Files.writeString(file, """
+                {"ghostColor": " 80c0ff ", "missingColor": "#abc", "extraColor": "purple", "wrongBlockColor": null,
+                 "wrongStateColor": "#12345G"}
+                """);
+        LitematicaPlusConfig config = LitematicaPlusConfig.load(file);
+        assertEquals("#80C0FF", config.ghostColor);
+        assertEquals(0x80C0FF, config.ghostRgb());
+        assertEquals("#AABBCC", config.missingColor);
+        assertEquals(0xFFAABBCC, config.mismatchColor(MismatchType.MISSING));
+        assertEquals(LitematicaPlusConfig.hex(MismatchType.EXTRA.color()), config.extraColor);
+        assertEquals(MismatchType.WRONG_BLOCK.color(), config.mismatchColor(MismatchType.WRONG_BLOCK));
+        assertEquals(MismatchType.WRONG_STATE.color(), config.mismatchColor(MismatchType.WRONG_STATE));
+        assertEquals(MismatchType.CORRECT.color(), config.mismatchColor(MismatchType.CORRECT));
+        assertEquals(LitematicaPlusConfig.DEFAULT_GHOST_COLOR,
+                LitematicaPlusConfig.load(directory.resolve("absent.json")).ghostColor);
     }
 
     @Test

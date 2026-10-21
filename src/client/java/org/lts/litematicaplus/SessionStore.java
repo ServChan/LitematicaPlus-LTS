@@ -100,6 +100,7 @@ public final class SessionStore {
         public LayerData layer = new LayerData();
         public AreaData area = new AreaData();
         public String toolMode = "";
+        public List<String> hiddenBlocks = new ArrayList<>();
     }
 
     private static final class FileData {
@@ -288,6 +289,10 @@ public final class SessionStore {
         }
         scope.selectedPlacement = scope.selectedPlacement == null ? "" : scope.selectedPlacement;
         scope.toolMode = scope.toolMode == null ? "" : scope.toolMode;
+        if (scope.hiddenBlocks == null) {
+            scope.hiddenBlocks = new ArrayList<>();
+        }
+        scope.hiddenBlocks.removeIf(id -> id == null);
         if (scope.layer == null) {
             scope.layer = new LayerData();
         }
