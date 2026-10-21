@@ -56,7 +56,7 @@ final class SettingsView extends TabView {
         void build(int x, int y, int width);
     }
 
-    private record Line(Component header, Row row) {
+    private record Line(Component header, Row row, String search) {
     }
 
     private record Placed(int page, Line item, int x, int y, int width) {
@@ -67,6 +67,7 @@ final class SettingsView extends TabView {
 
     private static Category category = Category.RENDERING;
     private static String extension;
+    private static String query = "";
 
     private LitematicaPlusConfig working = LitematicaPlusConfig.currentCopy();
     private FlatButton saveButton;
@@ -91,6 +92,9 @@ final class SettingsView extends TabView {
     private boolean bindingsChanged;
     private Component status = Component.empty();
     private int statusColor = Theme.TEXT_DIM;
+    private EditBox searchBox;
+    private int searchCursor = -1;
+    private int matchCount;
 
     SettingsView(HubScreen screen) {
         super(screen);
@@ -98,7 +102,12 @@ final class SettingsView extends TabView {
 
     @Override
     Component summary() {
-        return tr("litematicaplus.settings.summary");
+        return searching() ? tr("litematicaplus.settings.search_count", this.matchCount)
+                : tr("litematicaplus.settings.summary");
+    }
+
+    private static boolean searching() {
+        return !query.isBlank();
     }
 
     @Override
@@ -112,16 +121,37 @@ final class SettingsView extends TabView {
             labelWidth = Math.max(labelWidth, this.font.width(tab.label()));
         }
         int listWidth = Math.min(Math.max(64, labelWidth + 20), Math.max(64, this.width * 30 / 100));
-        int pitch = Math.max(13, Math.min(Theme.CONTROL_HEIGHT + 2, (this.height + 2) / tabs.size()));
-        int tabY = this.top;
+        String previousQuery = query;
+        this.searchBox = field(this.left, this.top, listWidth, query, tr("litematicaplus.settings.search"), 48);
+        if (this.searchCursor >= 0) {
+            this.searchBox.setCursorPosition(Math.min(this.searchCursor, query.length()));
+            this.searchBox.setHighlightPos(this.searchBox.getCursorPosition());
+        }
+        this.searchBox.setResponder(value -> {
+            if (value.equals(previousQuery)) {
+                return;
+            }
+            query = value;
+            this.page = 0;
+            this.listening = null;
+            this.searchCursor = this.searchBox.getCursorPosition();
+            this.screen.rebuildNow(() -> this.searchBox);
+        });
+        hint(this.searchBox, "litematicaplus.settings.search_tip");
+        int listTop = this.top + Theme.CONTROL_HEIGHT + 6;
+        int listHeight = this.height - (listTop - this.top);
+        int pitch = Math.max(13, Math.min(Theme.CONTROL_HEIGHT + 2, (listHeight + 2) / tabs.size()));
+        int tabY = listTop;
         for (Tab tab : tabs) {
             FlatButton button = add(new FlatButton(this.left, tabY, listWidth, pitch - 2, tab.label(), FlatButton.Style.TAB,
                     pressed -> {
                         tab.select().run();
+                        query = "";
+                        this.searchCursor = -1;
                         this.page = 0;
                         this.listening = null;
                         this.screen.refresh();
-                    }).withState(tab.active()));
+                    }).withState(() -> !searching() && tab.active().getAsBoolean()));
             if (this.font.width(tab.label()) <= listWidth - 15) {
                 button.setTooltip(null);
             }
@@ -130,7 +160,14 @@ final class SettingsView extends TabView {
         this.optionsX = this.left + listWidth + 10;
         this.optionsWidth = this.left + this.width - this.optionsX;
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
-        List<Placed> placed = layout(rows(), this.optionsX, this.optionsWidth, this.top, bottomY - 14);
+        List<Line> lines = rows();
+        this.matchCount = 0;
+        for (Line line : lines) {
+            if (line.header() == null) {
+                this.matchCount++;
+            }
+        }
+        List<Placed> placed = layout(lines, this.optionsX, this.optionsWidth, this.top, bottomY - 14);
         this.pages = 1;
         for (Placed entry : placed) {
             this.pages = Math.max(this.pages, entry.page() + 1);
@@ -289,16 +326,42 @@ final class SettingsView extends TabView {
     }
 
     private static Line header(String key) {
-        return new Line(tr("litematicaplus.settings.section." + key), null);
+        Component title = tr("litematicaplus.settings.section." + key);
+        return new Line(title, null, title.getString());
     }
 
-    private static Line row(Row row) {
-        return new Line(null, row);
+    private static Line row(String key, Row row) {
+        return new Line(null, row, searchText(key));
+    }
+
+    private static Line row(Component label, Row row) {
+        return new Line(null, row, label.getString());
+    }
+
+    private static String searchText(String key) {
+        String option = "litematicaplus.option." + key;
+        String tip = option + ".tip";
+        Language language = Language.getInstance();
+        StringBuilder text = new StringBuilder(language.getOrDefault(option).replaceAll("%(\\d+\\$)?s", ""));
+        if (language.has(tip)) {
+            text.append(' ').append(language.getOrDefault(tip));
+        }
+        return text.append(' ').append(key.replace('_', ' ')).toString();
+    }
+
+    static boolean matches(String haystack, String needle) {
+        String lower = haystack.toLowerCase(Locale.ROOT);
+        for (String word : needle.toLowerCase(Locale.ROOT).trim().split("\\s+")) {
+            if (!word.isEmpty() && !lower.contains(word)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Line toggle(String key, Function<LitematicaPlusConfig, Boolean> getter,
             BiConsumer<LitematicaPlusConfig, Boolean> setter) {
-        return row((x, y, width) -> describe(add(FlatButton.toggle(x, y, width, tr("litematicaplus.option." + key),
+        return row(key, (x, y, width) -> describe(add(FlatButton.toggle(x, y, width, tr("litematicaplus.option." + key),
                 () -> getter.apply(this.working), button -> {
                     setter.accept(this.working, !getter.apply(this.working));
                     changed();
@@ -306,18 +369,74 @@ final class SettingsView extends TabView {
     }
 
     private List<Line> rows() {
-        List<Line> rows = new ArrayList<>();
+        if (searching()) {
+            return searchRows();
+        }
         if (extension != null) {
-            for (SettingsExtensions.Page entry : SettingsExtensions.pages()) {
-                if (entry.key().equals(extension)) {
-                    for (SettingsExtensions.Option option : entry.options().get()) {
-                        rows.add(row(extensionRow(option)));
-                    }
+            return extensionRows(extension);
+        }
+        return categoryRows(category);
+    }
+
+    private List<Line> extensionRows(String key) {
+        List<Line> rows = new ArrayList<>();
+        for (SettingsExtensions.Page entry : SettingsExtensions.pages()) {
+            if (entry.key().equals(key)) {
+                for (SettingsExtensions.Option option : entry.options().get()) {
+                    rows.add(row(optionKey(option), extensionRow(option)));
                 }
             }
-            return rows;
         }
-        switch (category) {
+        return rows;
+    }
+
+    private static String optionKey(SettingsExtensions.Option option) {
+        return switch (option) {
+            case SettingsExtensions.Toggle toggle -> toggle.key();
+            case SettingsExtensions.Number number -> number.key();
+        };
+    }
+
+    private List<Line> searchRows() {
+        List<Line> found = new ArrayList<>();
+        for (Category entry : Category.values()) {
+            collect(found, tr("litematicaplus.settings.category." + entry.key), categoryRows(entry));
+        }
+        for (SettingsExtensions.Page entry : SettingsExtensions.pages()) {
+            collect(found, tr("litematicaplus.settings.category." + entry.key()), extensionRows(entry.key()));
+        }
+        return found;
+    }
+
+    private static void collect(List<Line> found, Component categoryTitle, List<Line> rows) {
+        boolean categoryHit = matches(categoryTitle.getString(), query);
+        boolean sectionHit = false;
+        Component section = null;
+        boolean opened = false;
+        for (Line line : rows) {
+            if (line.header() != null) {
+                section = line.header();
+                sectionHit = matches(line.search(), query);
+                continue;
+            }
+            if (!categoryHit && !sectionHit && !matches(line.search(), query)) {
+                continue;
+            }
+            if (!opened) {
+                MutableComponent title = categoryTitle.copy();
+                if (section != null && !categoryHit) {
+                    title.append(" / ").append(section);
+                }
+                found.add(new Line(title, null, title.getString()));
+                opened = true;
+            }
+            found.add(line);
+        }
+    }
+
+    private List<Line> categoryRows(Category target) {
+        List<Line> rows = new ArrayList<>();
+        switch (target) {
             case RENDERING -> {
                 rows.add(header("schematic"));
                 rows.add(toggle("render_enabled", c -> c.renderEnabled, (c, v) -> c.renderEnabled = v));
@@ -328,6 +447,7 @@ final class SettingsView extends TabView {
                 rows.add(toggle("render_colliding", c -> c.renderCollidingBlocks, (c, v) -> c.renderCollidingBlocks = v));
                 rows.add(percent("ghost_alpha", () -> Math.round(this.working.ghostAlpha * 100.0F),
                         v -> this.working.ghostAlpha = v / 100.0F, 20));
+                rows.add(color("ghost_color", c -> c.ghostColor, (c, v) -> c.ghostColor = v));
                 rows.add(number("render_distance", () -> this.working.renderDistance,
                         v -> this.working.renderDistance = v, 32, 2048, 32));
                 rows.add(header("errors"));
@@ -337,6 +457,11 @@ final class SettingsView extends TabView {
                         v -> this.working.overlayFillAlpha = v / 100.0F, 0));
                 rows.add(percent("overlay_line_alpha", () -> Math.round(this.working.overlayLineAlpha * 100.0F),
                         v -> this.working.overlayLineAlpha = v / 100.0F, 0));
+                rows.add(color("missing_color", c -> c.missingColor, (c, v) -> c.missingColor = v));
+                rows.add(color("wrong_block_color", c -> c.wrongBlockColor, (c, v) -> c.wrongBlockColor = v));
+                rows.add(color("wrong_state_color", c -> c.wrongStateColor, (c, v) -> c.wrongStateColor = v));
+                rows.add(color("extra_color", c -> c.extraColor, (c, v) -> c.extraColor = v));
+                rows.add(row("colors_reset", this::colorsResetRow));
                 rows.add(toggle("inventory_highlight", c -> c.inventoryHighlight, (c, v) -> c.inventoryHighlight = v));
                 rows.add(header("frames"));
                 rows.add(toggle("placement_boxes", c -> c.renderPlacementBoxes, (c, v) -> c.renderPlacementBoxes = v));
@@ -355,7 +480,7 @@ final class SettingsView extends TabView {
             }
             case HUD -> {
                 rows.add(toggle("hud_enabled", c -> c.hudEnabled, (c, v) -> c.hudEnabled = v));
-                rows.add(row(this::hudPositionRow));
+                rows.add(row("hud_position", this::hudPositionRow));
                 rows.add(number("hud_material_lines", () -> this.working.hudMaterialLines,
                         v -> this.working.hudMaterialLines = v, 0, 16, 1));
                 rows.add(toggle("note_tuning_hud", c -> c.noteTuningHud, (c, v) -> c.noteTuningHud = v));
@@ -364,10 +489,10 @@ final class SettingsView extends TabView {
             case TOOLS -> {
                 rows.add(header("tool"));
                 rows.add(toggle("tool_enabled", c -> c.toolEnabled, (c, v) -> c.toolEnabled = v));
-                rows.add(row(this::toolItemRow));
+                rows.add(row("tool_item", this::toolItemRow));
                 rows.add(toggle("pick_block", c -> c.pickBlockEnabled, (c, v) -> c.pickBlockEnabled = v));
                 rows.add(header("paste"));
-                rows.add(row(this::pasteReplaceRow));
+                rows.add(row("paste_replace", this::pasteReplaceRow));
                 rows.add(number("paste_commands", () -> this.working.pasteCommandsPerTick,
                         v -> this.working.pasteCommandsPerTick = v, 1, 16, 1));
                 rows.add(toggle("paste_block_entities", c -> c.pasteBlockEntityData, (c, v) -> c.pasteBlockEntityData = v));
@@ -375,7 +500,7 @@ final class SettingsView extends TabView {
                 rows.add(header("schematics"));
                 rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
                 rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
-                rows.add(row(this::authorRow));
+                rows.add(row("default_author", this::authorRow));
                 rows.add(header("together"));
                 rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
                 rows.add(toggle("zone_hide_messages", c -> c.zoneHideMessages, (c, v) -> c.zoneHideMessages = v));
@@ -388,7 +513,7 @@ final class SettingsView extends TabView {
                 rows.add(header("basics"));
                 rows.add(toggle("easy_place", c -> c.easyPlaceEnabled, (c, v) -> c.easyPlaceEnabled = v));
                 rows.add(toggle("easy_place_hold", c -> c.easyPlaceHold, (c, v) -> c.easyPlaceHold = v));
-                rows.add(row(this::presetRow));
+                rows.add(row("easy_place_preset", this::presetRow));
                 rows.add(number("easy_place_delay", () -> this.working.easyPlaceDelayTicks,
                         v -> this.working.easyPlaceDelayTicks = v, 0, 20, 1));
                 rows.add(toggle("easy_place_jitter", c -> c.easyPlaceJitter, (c, v) -> c.easyPlaceJitter = v));
@@ -417,8 +542,9 @@ final class SettingsView extends TabView {
                 rows.add(toggle("easy_place_ignore_data", c -> c.easyPlaceIgnoreItemData,
                         (c, v) -> c.easyPlaceIgnoreItemData = v));
                 rows.add(toggle("easy_place_substitutes", c -> c.easyPlaceSubstitutes, (c, v) -> c.easyPlaceSubstitutes = v));
-                rows.add(row(this::substitutesRow));
-                rows.add(row(this::lockedSlotsRow));
+                rows.add(new Line(null, this::substitutesRow,
+                        searchText("substitutes_add") + " " + searchText("substitutes_clear")));
+                rows.add(row("locked_slots", this::lockedSlotsRow));
             }
             case BREAKING -> {
                 rows.add(header("guard"));
@@ -458,12 +584,13 @@ final class SettingsView extends TabView {
                             rows.add(header(group));
                             first = false;
                         }
-                        rows.add(row((x, y, width) -> hotkeyRow(entry, x, y, width)));
+                        rows.add(row(Component.translatable(entry.mapping().getName()),
+                                (x, y, width) -> hotkeyRow(entry, x, y, width)));
                     }
                 }
             }
             case PERFORMANCE -> {
-                rows.add(row((x, y, width) -> {
+                rows.add(row("worker_threads", (x, y, width) -> {
                     Stepper stepper = add(new Stepper(x, y, width, tr("litematicaplus.option.worker_threads"),
                             () -> this.working.workerThreads, v -> {
                                 this.working.workerThreads = v;
@@ -485,7 +612,8 @@ final class SettingsView extends TabView {
     private static String hotkeyGroup(String name) {
         return switch (name) {
             case "open_menu", "edit_placement", "open_layers", "open_materials" -> "menus";
-            case "tool_mode", "layer_mode", "layer_up", "layer_down", "toggle_clip", "take_materials" -> "actions";
+            case "tool_mode", "layer_mode", "layer_up", "layer_down", "toggle_clip", "take_materials", "hide_ghost",
+                    "show_hidden_ghosts" -> "actions";
             default -> name.startsWith("toggle_") ? "toggles" : "other";
         };
     }
@@ -511,7 +639,7 @@ final class SettingsView extends TabView {
     }
 
     private Line number(String key, IntSupplier getter, IntConsumer setter, int min, int max, int step) {
-        return row((x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
+        return row(key, (x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
                 value -> {
                     setter.accept(value);
                     changed();
@@ -519,11 +647,59 @@ final class SettingsView extends TabView {
     }
 
     private Line percent(String key, IntSupplier getter, IntConsumer setter, int min) {
-        return row((x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
+        return row(key, (x, y, width) -> describe(add(new Stepper(x, y, width, tr("litematicaplus.option." + key), getter,
                 value -> {
                     setter.accept(value);
                     changed();
                 }, min, 100, 5).format(value -> value + "%")), key));
+    }
+
+    private Line color(String key, Function<LitematicaPlusConfig, String> getter,
+            BiConsumer<LitematicaPlusConfig, String> setter) {
+        return row(key, (x, y, width) -> {
+            int fieldWidth = width >= 250 ? 52 : 0;
+            int stripWidth = fieldWidth == 0 ? width : width - fieldWidth - Theme.GAP;
+            IntSupplier current = () -> LitematicaPlusConfig.parseColor(getter.apply(this.working), 0xFFFFFF);
+            describe(add(new ColorStrip(x, y, stripWidth, tr("litematicaplus.option." + key), current, rgb -> {
+                setter.accept(this.working, LitematicaPlusConfig.hex(rgb));
+                changed();
+                this.screen.refresh();
+            })), key);
+            if (fieldWidth == 0) {
+                return;
+            }
+            EditBox box = field(x + stripWidth + Theme.GAP, y, fieldWidth, getter.apply(this.working).substring(1),
+                    tr("litematicaplus.option." + key), 7);
+            box.setTooltip(Tooltip.create(tr("litematicaplus.settings.color_field")));
+            box.setResponder(value -> {
+                int parsed = LitematicaPlusConfig.parseColor(value, -1);
+                box.setTextColor(parsed < 0 ? Theme.DANGER : Theme.TEXT);
+                if (parsed >= 0) {
+                    setter.accept(this.working, LitematicaPlusConfig.hex(parsed));
+                    changed();
+                }
+            });
+        });
+    }
+
+    private void colorsResetRow(int x, int y, int width) {
+        LitematicaPlusConfig defaults = new LitematicaPlusConfig();
+        boolean custom = !defaults.ghostColor.equals(this.working.ghostColor)
+                || !defaults.missingColor.equals(this.working.missingColor)
+                || !defaults.extraColor.equals(this.working.extraColor)
+                || !defaults.wrongBlockColor.equals(this.working.wrongBlockColor)
+                || !defaults.wrongStateColor.equals(this.working.wrongStateColor);
+        FlatButton reset = add(FlatButton.secondary(x, y, width, tr("litematicaplus.option.colors_reset"), button -> {
+            this.working.ghostColor = defaults.ghostColor;
+            this.working.missingColor = defaults.missingColor;
+            this.working.extraColor = defaults.extraColor;
+            this.working.wrongBlockColor = defaults.wrongBlockColor;
+            this.working.wrongStateColor = defaults.wrongStateColor;
+            changed();
+            this.screen.refresh();
+        }));
+        reset.active = custom;
+        describe(reset, "colors_reset");
     }
 
     private void presetRow(int x, int y, int width) {
@@ -619,7 +795,7 @@ final class SettingsView extends TabView {
     @Override
     boolean keyPressed(KeyEvent event) {
         if (this.listening == null) {
-            return false;
+            return searchKey(event);
         }
         if (event.key() == InputConstants.KEY_ESCAPE) {
             bind(InputConstants.UNKNOWN, 0);
@@ -634,6 +810,29 @@ final class SettingsView extends TabView {
         }
         bind(InputConstants.getKey(event), Hotkeys.modifiersOf(event));
         return true;
+    }
+
+    private boolean searchKey(KeyEvent event) {
+        if (this.searchBox == null) {
+            return false;
+        }
+        boolean focused = this.searchBox.isFocused();
+        if (event.key() == InputConstants.KEY_F && event.hasControlDown() && !focused
+                && !HubScreen.typing(this.screen.getFocused())) {
+            this.screen.setFocused(this.searchBox);
+            this.searchBox.moveCursorToEnd(false);
+            return true;
+        }
+        if (focused && event.key() == InputConstants.KEY_ESCAPE && searching()) {
+            this.searchBox.setValue("");
+            return true;
+        }
+        if (focused && (event.key() == InputConstants.KEY_DOWN || event.key() == InputConstants.KEY_RETURN)) {
+            this.searchBox.setFocused(false);
+            this.screen.setFocused(null);
+            return event.key() == InputConstants.KEY_RETURN;
+        }
+        return false;
     }
 
     @Override
@@ -747,6 +946,10 @@ final class SettingsView extends TabView {
             }
         }
         int bottomY = this.top + this.height - Theme.CONTROL_HEIGHT;
+        if (searching() && this.matchCount == 0) {
+            Ui.emptyState(graphics, this.font, this.optionsX, this.top, this.optionsWidth, bottomY - 16 - this.top,
+                    tr("litematicaplus.settings.search_empty", query.strip()), tr("litematicaplus.settings.search_empty_hint"));
+        }
         if (this.pages > 1) {
             graphics.centeredText(this.font, (this.page + 1) + " / " + this.pages, this.optionsX + 47, bottomY + 6,
                     Theme.TEXT_DIM);

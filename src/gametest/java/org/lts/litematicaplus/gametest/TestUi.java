@@ -18,11 +18,19 @@ final class TestUi {
     }
 
     static boolean hasLabel(ClientGameTestContext context, String label) {
-        return center(context, label) != null;
+        return center(context, label, false) != null;
     }
 
     static void clickLabel(ClientGameTestContext context, String label) {
-        int[] center = center(context, label);
+        click(context, label, false);
+    }
+
+    static void clickLastLabel(ClientGameTestContext context, String label) {
+        click(context, label, true);
+    }
+
+    private static void click(ClientGameTestContext context, String label, boolean last) {
+        int[] center = center(context, label, last);
         if (center == null) {
             String visible = context.computeOnClient(client -> {
                 StringBuilder names = new StringBuilder();
@@ -45,18 +53,22 @@ final class TestUi {
         context.waitTicks(3);
     }
 
-    private static int[] center(ClientGameTestContext context, String label) {
+    private static int[] center(ClientGameTestContext context, String label, boolean last) {
         return context.computeOnClient(client -> {
             if (client.gui.screen() == null) {
                 return null;
             }
+            int[] found = null;
             for (GuiEventListener child : client.gui.screen().children()) {
                 if (child instanceof AbstractWidget widget && widget.visible
                         && widget.getMessage().getString().equals(label)) {
-                    return new int[] {widget.getX() + widget.getWidth() / 2, widget.getY() + widget.getHeight() / 2};
+                    found = new int[] {widget.getX() + widget.getWidth() / 2, widget.getY() + widget.getHeight() / 2};
+                    if (!last) {
+                        return found;
+                    }
                 }
             }
-            return null;
+            return found;
         });
     }
 

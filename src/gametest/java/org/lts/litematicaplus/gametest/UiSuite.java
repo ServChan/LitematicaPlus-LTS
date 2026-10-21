@@ -72,7 +72,7 @@ final class UiSuite {
 
     private static void settings(ClientGameTestContext context, String prefix, List<String> problems) {
         for (String category : CATEGORIES) {
-            TestUi.clickLabel(context, TestUi.text("litematicaplus.settings.category." + category));
+            TestUi.clickLastLabel(context, TestUi.text("litematicaplus.settings.category." + category));
             context.waitTicks(3);
             for (int page = 1; page <= 6; page++) {
                 String name = prefix + "settings_" + category + "_" + page;
@@ -91,6 +91,25 @@ final class UiSuite {
         context.takeScreenshot(prefix + "sidebar_hint");
         TestUi.clickLabel(context, TestUi.text("litematicaplus.settings.category.rendering"));
         context.waitTicks(3);
+        search(context, prefix + "settings_search", "ghost", problems);
+        search(context, prefix + "settings_search_empty", "zzqx", problems);
+        search(context, prefix + "settings_search_cleared", "", problems);
+    }
+
+    private static void search(ClientGameTestContext context, String name, String text, List<String> problems) {
+        context.runOnClient(client -> {
+            for (GuiEventListener child : List.copyOf(client.gui.screen().children())) {
+                if (child instanceof net.minecraft.client.gui.components.EditBox box) {
+                    client.gui.screen().setFocused(box);
+                    box.setValue(text);
+                    return;
+                }
+            }
+            LitematicaPlusGameTest.require(false, "settings search field is missing");
+        });
+        context.waitTicks(3);
+        audit(context, name, problems);
+        context.takeScreenshot(name);
     }
 
     private static void hover(ClientGameTestContext context, String label) {
