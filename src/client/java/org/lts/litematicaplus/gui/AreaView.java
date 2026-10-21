@@ -36,6 +36,35 @@ final class AreaView extends TabView {
     private int cornerTop;
     private int saveTop;
     private int axiomTop;
+    private int coverageTicks;
+    private long missingChunks;
+    private long totalChunks;
+
+    @Override
+    void tick() {
+        if (--this.coverageTicks > 0) {
+            return;
+        }
+        this.coverageTicks = 20;
+        this.missingChunks = 0L;
+        this.totalChunks = 0L;
+        if (this.minecraft.level == null || this.minecraft.hasSingleplayerServer()) {
+            return;
+        }
+        it.unimi.dsi.fastutil.longs.LongSet seen = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (AreaBox box : SelectionManager.get().completeBoxes()) {
+            for (int chunkZ = box.minZ() >> 4; chunkZ <= box.maxZ() >> 4 && seen.size() < 65536; chunkZ++) {
+                for (int chunkX = box.minX() >> 4; chunkX <= box.maxX() >> 4 && seen.size() < 65536; chunkX++) {
+                    if (seen.add(net.minecraft.world.level.ChunkPos.pack(chunkX, chunkZ))) {
+                        this.totalChunks++;
+                        if (!this.minecraft.level.hasChunk(chunkX, chunkZ)) {
+                            this.missingChunks++;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     AreaView(HubScreen screen) {
         super(screen);
@@ -280,6 +309,9 @@ final class AreaView extends TabView {
                         if (result.unloadedChunks() > 0) {
                             finish(tr("litematicaplus.area.saved_partial", blocks, target.getFileName().toString(),
                                     result.unloadedChunks()), Theme.WARNING);
+                        } else if (result.voxyChunks() > 0) {
+                            finish(tr("litematicaplus.area.saved_voxy", blocks, target.getFileName().toString(),
+                                    result.voxyChunks()), Theme.SUCCESS);
                         } else {
                             finish(tr("litematicaplus.area.saved", blocks, target.getFileName().toString()), Theme.SUCCESS);
                         }
@@ -362,6 +394,13 @@ final class AreaView extends TabView {
         Ui.label(graphics, this.font, tr("litematicaplus.area.save_label"), this.detailX, this.saveTop);
         int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 1;
         int statusWidth = this.detailWidth - Math.min(110, this.detailWidth / 3) - 8;
-        Ui.wrapped(graphics, this.font, this.status, this.detailX, statusY, statusWidth, 2, this.statusColor, mouseX, mouseY);
+        if (this.status.getString().isEmpty() && this.missingChunks > 0L && !this.saving) {
+            boolean voxy = LitematicaPlusConfig.current().useWorldCache && org.lts.litematicaplus.world.WorldCache.available();
+            Ui.wrapped(graphics, this.font, tr(voxy ? "litematicaplus.area.unloaded_voxy" : "litematicaplus.area.unloaded_warning",
+                    this.missingChunks, this.totalChunks),
+                    this.detailX, statusY, statusWidth, 2, Theme.WARNING, mouseX, mouseY);
+        } else {
+            Ui.wrapped(graphics, this.font, this.status, this.detailX, statusY, statusWidth, 2, this.statusColor, mouseX, mouseY);
+        }
     }
 }
