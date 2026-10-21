@@ -247,7 +247,6 @@ public final class InfoHud {
         graphics.outline(x, y, WIDTH, height, Theme.BORDER);
         int textX = x + PADDING + 2;
         int cursor = y + PADDING;
-        Blueprint.marker(graphics, textX, cursor + 2, Theme.AMBER);
         graphics.text(font, text(TITLE, font, "litematicaplus.hud.title"), textX + 6, cursor, Theme.TEXT_DIM, false);
         if (tool) {
             ToolMode current = ToolController.get().mode();

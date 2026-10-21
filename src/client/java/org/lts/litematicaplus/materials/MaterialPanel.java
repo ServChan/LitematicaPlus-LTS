@@ -248,7 +248,6 @@ final class MaterialPanel {
             graphics.fill(this.x + 1, this.y + TITLE - 1, right - 1, this.y + TITLE, Theme.DIVIDER);
         }
         graphics.outline(this.x, this.y, this.width, shownHeight(), Theme.BORDER);
-        Blueprint.marker(graphics, this.x + 5, this.y + 6, Theme.AMBER);
         graphics.text(this.font, this.font.plainSubstrByWidth(this.title.getString(), this.width - 16 - TOGGLE),
                 this.x + 11, this.y + 4, Theme.TEXT_BRIGHT, false);
         boolean toggleHovered = overToggle(mouseX, mouseY) || this.collapsed && contains(mouseX, mouseY);

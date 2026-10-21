@@ -51,8 +51,6 @@ public final class HubScreen extends Screen {
     private int sidebarWidth = Theme.SIDEBAR_WIDTH;
     private List<GuiEventListener> previousChildren = List.of();
     private boolean refreshPending;
-    private final TextMemo headingText = new TextMemo();
-    private final TextMemo sheetText = new TextMemo();
 
     public HubScreen(Screen parent) {
         this(parent, lastTab);
@@ -108,6 +106,16 @@ public final class HubScreen extends Screen {
         int index = focused == null ? -1 : this.previousChildren.indexOf(focused);
         rebuildWidgets();
         refocus(focused, index);
+    }
+
+    void rebuildNow(java.util.function.Supplier<GuiEventListener> focus) {
+        this.refreshPending = false;
+        this.previousChildren = new ArrayList<>(children());
+        rebuildWidgets();
+        GuiEventListener target = focus.get();
+        if (target != null) {
+            setFocused(target);
+        }
     }
 
     private void refocus(GuiEventListener old, int index) {
@@ -176,8 +184,7 @@ public final class HubScreen extends Screen {
         int pitch = Math.max(11, Math.min(23, (this.height - y - 2) / Tab.values().length));
         for (Tab entry : Tab.values()) {
             FlatButton button = new FlatButton(0, y, this.sidebarWidth, pitch - 1, entry.title(), FlatButton.Style.TAB,
-                    pressed -> switchTab(entry)).withState(() -> this.tab == entry)
-                    .withIndex(String.format(java.util.Locale.ROOT, "%02d", entry.ordinal() + 1));
+                    pressed -> switchTab(entry)).withState(() -> this.tab == entry);
             if (entry == Tab.ADDONS) {
                 button.withWarning(Addons::needsAttention);
             }
@@ -249,26 +256,17 @@ public final class HubScreen extends Screen {
         if (clear) {
             graphics.fill(this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.width, Theme.HEADER_HEIGHT + 28,
                     Theme.HUD_BACKGROUND);
-        } else {
-            graphics.fill(0, 0, this.width, this.height, Theme.BACKGROUND);
         }
-        graphics.fill(0, 0, this.width, Theme.HEADER_HEIGHT, Theme.HEADER);
-        graphics.fill(0, Theme.HEADER_HEIGHT - 1, this.width, Theme.HEADER_HEIGHT, Theme.DIVIDER);
+        boolean inWorld = this.minecraft != null && this.minecraft.level != null;
         graphics.fill(0, Theme.HEADER_HEIGHT, this.sidebarWidth, this.height, clear ? Theme.HUD_BACKGROUND : Theme.SIDEBAR);
-        graphics.fill(this.sidebarWidth, Theme.HEADER_HEIGHT, this.sidebarWidth + 1, this.height, Theme.DIVIDER);
-        graphics.outline(10, 9, 11, 11, Theme.BORDER_STRONG);
-        graphics.fill(14, 13, 17, 16, Theme.AMBER);
-        String heading = this.headingText.stale(this.title) ? this.headingText.set(
-                this.title.getString().toUpperCase(java.util.Locale.ROOT)) : this.headingText.text();
-        graphics.text(this.font, heading, 27, 11, Theme.TEXT_BRIGHT, false);
-        String sheet = this.sheetText.stale(this.tab) ? this.sheetText.set(Component.translatable("litematicaplus.hub.sheet",
-                String.format(java.util.Locale.ROOT, "%02d", this.tab.ordinal() + 1),
-                String.format(java.util.Locale.ROOT, "%02d", Tab.values().length)).getString()) : this.sheetText.text();
-        int sheetX = 27 + this.font.width(heading) + 10;
-        graphics.fill(sheetX - 5, 9, sheetX - 4, 21, Theme.DIVIDER);
-        graphics.text(this.font, sheet, sheetX, 11, Theme.TEXT_DIM, false);
+        graphics.fill(this.sidebarWidth, Theme.HEADER_HEIGHT, this.sidebarWidth + 1, this.height, Theme.SEPARATOR_DARK);
+        graphics.fill(this.sidebarWidth + 1, Theme.HEADER_HEIGHT, this.sidebarWidth + 2, this.height, Theme.SEPARATOR_LIGHT);
+        graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                inWorld ? Screen.INWORLD_HEADER_SEPARATOR : Screen.HEADER_SEPARATOR, 0, Theme.HEADER_HEIGHT - 2, 0.0F, 0.0F,
+                this.width, 2, 32, 2);
+        graphics.text(this.font, this.title, 10, (Theme.HEADER_HEIGHT - 9) / 2, Theme.TEXT_BRIGHT, true);
         String scope = Session.scope();
-        int titleRight = sheetX + this.font.width(sheet) + 14;
+        int titleRight = 10 + this.font.width(this.title) + 14;
         if (SessionStore.get().readOnly()) {
             Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.error.session_read_only"),
                     titleRight, 11, this.width - titleRight - 12, 1, Theme.WARNING, mouseX, mouseY);
@@ -279,14 +277,12 @@ public final class HubScreen extends Screen {
             Ui.right(graphics, this.font, shown, this.width - 12, 11, Theme.TEXT_DIM);
         }
         int contentX = this.sidebarWidth + Theme.PADDING;
-        Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 8, 1.5F, Theme.TEXT_BRIGHT);
-        int ruleY = Theme.HEADER_HEIGHT + 23;
-        graphics.fill(contentX, ruleY, this.width - Theme.PADDING, ruleY + 1, Theme.DIVIDER);
-        graphics.fill(contentX, ruleY, contentX + Math.round(this.font.width(this.tab.title()) * 1.5F), ruleY + 1,
-                Theme.ACCENT_DARK);
+        Ui.heading(graphics, this.font, this.tab.title(), contentX, Theme.HEADER_HEIGHT + 9, 1.0F, Theme.TEXT_BRIGHT);
+        int ruleY = Theme.HEADER_HEIGHT + 22;
+        Blueprint.dashed(graphics, contentX, ruleY, this.width - Theme.PADDING - contentX, Theme.DIVIDER);
         if (this.view != null) {
             Component summary = this.view.summary();
-            int titleWidth = Math.round(this.font.width(this.tab.title()) * 1.5F);
+            int titleWidth = this.font.width(this.tab.title());
             int available = this.width - contentX - Theme.PADDING - titleWidth - 12;
             if (available > 40) {
                 String text = summary.getString();

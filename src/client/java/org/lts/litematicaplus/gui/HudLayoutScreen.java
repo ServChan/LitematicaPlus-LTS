@@ -169,7 +169,6 @@ public final class HudLayoutScreen extends Screen {
             int y = panelTop();
             graphics.fill(x, y, x + InfoHud.WIDTH, y + PLACEHOLDER_HEIGHT, Theme.HUD_BACKGROUND);
             graphics.outline(x, y, InfoHud.WIDTH, PLACEHOLDER_HEIGHT, Theme.BORDER);
-            Blueprint.marker(graphics, x + 8, y + 8, Theme.AMBER);
             graphics.text(this.font, Component.translatable("litematicaplus.hud.title"), x + 14, y + 6, Theme.TEXT_DIM, false);
             Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.hud_layout.placeholder"), x + 8, y + 20,
                     InfoHud.WIDTH - 16, 3, Theme.TEXT_DIM, mouseX, mouseY);

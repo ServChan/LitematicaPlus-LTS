@@ -3,10 +3,14 @@ package org.lts.litematicaplus.gui;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public final class InkField extends EditBox {
     private static final int INSET = 6;
+    private static final Identifier FIELD = Identifier.withDefaultNamespace("widget/text_field");
+    private static final Identifier FIELD_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/text_field_highlighted");
 
     private int outerX;
     private int outerY;
@@ -57,8 +61,7 @@ public final class InkField extends EditBox {
         int y = this.outerY;
         int width = this.outerWidth;
         int height = this.outerHeight;
-        graphics.fill(x, y, x + width, y + height, Theme.TRACK);
-        graphics.outline(x, y, width, height, focused ? Theme.FOCUS : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, focused || hovered ? FIELD_HIGHLIGHTED : FIELD, x, y, width, height);
         super.extractWidgetRenderState(graphics, mouseX, mouseY, delta);
     }
 }

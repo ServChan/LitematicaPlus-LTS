@@ -89,7 +89,7 @@ final class LayersView extends TabView {
             position.active = !layer.isAll();
             add(position);
         }
-        y += ROW + 16;
+        y += ROW + 14;
         this.clipTop = y;
         LayerRange.Clip clip = layer.clip();
         int usable = this.width - Theme.GAP * 2;
@@ -118,7 +118,7 @@ final class LayersView extends TabView {
         axisRow(y, true, clip);
         y += ROW;
         axisRow(y, false, clip);
-        y += ROW + 16;
+        y += ROW + 14;
         this.scopeTop = y;
         add(FlatButton.toggle(this.left, y, this.width, tr("litematicaplus.option.count_visible_only"),
                 () -> LitematicaPlusConfig.current().countVisibleOnly, button -> {

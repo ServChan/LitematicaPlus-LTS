@@ -75,11 +75,7 @@ public final class Ui {
     }
 
     public static void heading(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, float scale, int color) {
-        graphics.pose().pushMatrix();
-        graphics.pose().translate(x, y);
-        graphics.pose().scale(scale, scale);
-        graphics.text(font, text, 0, 0, color, false);
-        graphics.pose().popMatrix();
+        graphics.text(font, text, x, y, color, true);
     }
 
     public static void clipped(GuiGraphicsExtractor graphics, Font font, String text, int x, int y, int maxWidth, int color) {
@@ -112,7 +108,10 @@ public final class Ui {
 
     public static void slot(GuiGraphicsExtractor graphics, ItemStack stack, int x, int y) {
         graphics.fill(x, y, x + 18, y + 18, Theme.SLOT);
-        graphics.outline(x, y, 18, 18, Theme.SLOT_BORDER);
+        graphics.fill(x, y, x + 17, y + 1, Theme.SLOT_BORDER);
+        graphics.fill(x, y, x + 1, y + 17, Theme.SLOT_BORDER);
+        graphics.fill(x + 1, y + 17, x + 18, y + 18, 0xFFFFFFFF);
+        graphics.fill(x + 17, y + 1, x + 18, y + 18, 0xFFFFFFFF);
         graphics.fakeItem(stack, x + 1, y + 1);
     }
 
@@ -120,8 +119,7 @@ public final class Ui {
             Component title, Component hint) {
         panel(graphics, x, y, width, height);
         int centerY = y + height / 2;
-        heading(graphics, font, title, x + (width - Math.round(font.width(title) * 1.5F)) / 2, centerY - 22, 1.5F,
-                Theme.TEXT_BRIGHT);
+        heading(graphics, font, title, x + (width - font.width(title)) / 2, centerY - 16, 1.0F, Theme.TEXT_BRIGHT);
         int hintWidth = Math.min(width - 32, 320);
         graphics.textWithWordWrap(font, hint, x + (width - hintWidth) / 2, centerY, hintWidth, Theme.TEXT_DIM, false);
     }

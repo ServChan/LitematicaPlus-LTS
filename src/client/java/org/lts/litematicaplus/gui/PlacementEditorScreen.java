@@ -473,7 +473,6 @@ public final class PlacementEditorScreen extends Screen {
         graphics.fill(this.panelX, 0, this.panelX + 1, this.height, Theme.BORDER);
         int x = this.panelX + PANEL_PADDING;
         int inner = PANEL_WIDTH - PANEL_PADDING * 2;
-        Blueprint.marker(graphics, x, 8, Theme.AMBER);
         Ui.clipped(graphics, this.font, this.placement.name(), x + 6, 6, inner - 6, Theme.TEXT_BRIGHT);
         PlacementRuntime runtime = GhostEngine.get().runtime(this.placement.id());
         PlacementVolume volume = runtime == null ? null : runtime.volume();

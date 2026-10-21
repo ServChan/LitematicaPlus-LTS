@@ -10,9 +10,14 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.InputWithModifiers;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public final class FlatButton extends AbstractButton {
+    private static final Identifier BUTTON = Identifier.withDefaultNamespace("widget/button");
+    private static final Identifier BUTTON_DISABLED = Identifier.withDefaultNamespace("widget/button_disabled");
+    private static final Identifier BUTTON_HIGHLIGHTED = Identifier.withDefaultNamespace("widget/button_highlighted");
     public enum Style {
         PRIMARY,
         SECONDARY,
@@ -26,7 +31,6 @@ public final class FlatButton extends AbstractButton {
     private BooleanSupplier state = () -> false;
     private BooleanSupplier warning = () -> false;
     private boolean shiftHeld;
-    private String index;
     private Component hint;
     private final TextMemo label = new TextMemo();
     private final TextMemo fitted = new TextMemo();
@@ -105,62 +109,53 @@ public final class FlatButton extends AbstractButton {
         boolean on = this.state.getAsBoolean();
         int textY = y + (height - 8) / 2;
         switch (this.style) {
-            case PRIMARY -> {
-                graphics.fill(x, y, x + width, y + height, !this.active ? Theme.SURFACE
-                        : hovered ? Theme.ACCENT_HOVER : Theme.ACCENT_DARK);
-                if (!this.active) {
-                    graphics.outline(x, y, width, height, Theme.DIVIDER);
-                }
-                centered(graphics, font, x, width, textY, this.active ? Theme.ACCENT_TEXT : Theme.TEXT_DISABLED);
-            }
-            case DANGER -> {
-                graphics.fill(x, y, x + width, y + height, hovered ? Theme.DANGER_DARK : Theme.alpha(Theme.DANGER, 0x10));
-                graphics.outline(x, y, width, height, this.active ? Theme.DANGER : Theme.DIVIDER);
-                centered(graphics, font, x, width, textY, !this.active ? Theme.TEXT_DISABLED
-                        : hovered ? Theme.TEXT_BRIGHT : Theme.DANGER);
-            }
             case TAB -> {
                 if (on) {
-                    graphics.fill(x, y, x + width, y + height, Theme.SURFACE_SELECTED);
-                    graphics.fill(x, y, x + 2, y + height, Theme.ACCENT_DARK);
+                    graphics.fill(x, y, x + width, y + height, this.active && isFocused() ? Theme.FOCUS : Theme.BORDER_STRONG);
+                    graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0xFF000000);
                 } else if (hovered) {
                     graphics.fill(x, y, x + width, y + height, Theme.SURFACE_HOVER);
                 }
-                int textX = x + 9;
-                String title = label();
-                if (this.index != null && font.width(this.index) + 5 + font.width(title) <= x + width - textX - 6) {
-                    graphics.text(font, this.index, textX, textY, on ? Theme.AMBER : Theme.TEXT_DISABLED, false);
-                    textX += font.width(this.index) + 5;
-                }
+                int textX = x + 7;
                 graphics.text(font, fit(font, x + width - textX - 6), textX, textY,
-                        on ? Theme.TEXT_BRIGHT : hovered ? Theme.TEXT : Theme.TEXT_DIM, false);
+                        on || hovered ? Theme.TEXT_BRIGHT : Theme.TEXT, true);
             }
             case TOGGLE -> {
-                graphics.fill(x, y, x + width, y + height, hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
-                graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
-                int switchX = x + width - 28;
-                graphics.text(font, fit(font, switchX - x - 12), x + 8, textY,
-                        !this.active ? Theme.TEXT_DISABLED : on ? Theme.TEXT_BRIGHT : Theme.TEXT, false);
-                Blueprint.toggle(graphics, switchX, y + (height - 10) / 2, on, this.active);
+                int switchWidth = Math.min(44, Math.max(24, width - font.width(label()) - 14));
+                int switchX = x + width - switchWidth;
+                if (hovered) {
+                    graphics.fill(x, y, switchX - 2, y + height, Theme.alpha(0xFFFFFF, 0x14));
+                }
+                graphics.text(font, fit(font, switchX - x - 10), x + 4, textY,
+                        !this.active ? Theme.TEXT_DISABLED : Theme.TEXT_BRIGHT, true);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite(hovered), switchX, y, switchWidth, height);
+                Component state = Component.translatable(on ? "options.on" : "options.off");
+                graphics.text(font, state, switchX + (switchWidth - font.width(state)) / 2, textY,
+                        this.active ? Theme.TEXT_BRIGHT : Theme.TEXT_DIM, true);
             }
             default -> {
                 boolean marked = on && this.style == Style.SECONDARY;
-                graphics.fill(x, y, x + width, y + height, !this.active ? Theme.alpha(Theme.SURFACE, 0x60)
-                        : marked ? Theme.SURFACE_SELECTED : hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
-                graphics.outline(x, y, width, height, !this.active ? Theme.DIVIDER
-                        : marked ? Theme.ACCENT_DARK : hovered ? Theme.BORDER_STRONG : Theme.BORDER);
-                centered(graphics, font, x, width, textY, !this.active ? Theme.TEXT_DISABLED
-                        : this.warning.getAsBoolean() ? Theme.WARNING : marked || hovered ? Theme.TEXT_BRIGHT : Theme.TEXT);
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite(hovered || marked), x, y, width, height);
+                int color = !this.active ? Theme.TEXT_DIM
+                        : this.style == Style.DANGER ? Theme.DANGER
+                        : this.warning.getAsBoolean() ? Theme.WARNING : Theme.TEXT_BRIGHT;
+                centered(graphics, font, x, width, textY, color);
+                if (marked) {
+                    String shown = fit(font, width - 8);
+                    int lineX = x + (width - font.width(shown)) / 2;
+                    graphics.fill(lineX, textY + 9, lineX + font.width(shown), textY + 10, color);
+                }
             }
         }
-        if (isFocused()) {
-            graphics.outline(x - 1, y - 1, width + 2, height + 2, Theme.FOCUS);
-        }
+    }
+
+    private Identifier sprite(boolean highlighted) {
+        return !this.active ? BUTTON_DISABLED : highlighted ? BUTTON_HIGHLIGHTED : BUTTON;
     }
 
     private void centered(GuiGraphicsExtractor graphics, Font font, int x, int width, int y, int color) {
         String shown = fit(font, width - 8);
-        graphics.text(font, shown, x + (width - font.width(shown)) / 2, y, color, false);
+        graphics.text(font, shown, x + (width - font.width(shown)) / 2, y, color, true);
     }
 
     private String label() {
@@ -171,11 +166,6 @@ public final class FlatButton extends AbstractButton {
     private String fit(Font font, int width) {
         String text = label();
         return this.fitted.stale(text, width, 0L, 0L) ? this.fitted.set(shorten(font, text, width)) : this.fitted.text();
-    }
-
-    public FlatButton withIndex(String value) {
-        this.index = value;
-        return this;
     }
 
     private static String shorten(Font font, String label, int width) {
