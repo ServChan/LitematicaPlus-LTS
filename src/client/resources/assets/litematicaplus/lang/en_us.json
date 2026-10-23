@@ -730,6 +730,8 @@
   "litematicaplus.layers.clip_enabled.help": "Clip the schematic to the X and Z bounds below.",
   "litematicaplus.layers.fit_placement": "Fit placement",
   "litematicaplus.layers.fit_placement.help": "Take the X and Z bounds from the selected placement.",
+  "litematicaplus.layers.fit_selection": "Fit selection",
+  "litematicaplus.layers.fit_selection.help": "Take the X and Z bounds and a Y layer range from the tool's area selection.",
   "litematicaplus.layers.reset": "Reset",
   "litematicaplus.layers.reset.help": "Remove the X and Z limits.",
   "litematicaplus.layers.min": "%s from",

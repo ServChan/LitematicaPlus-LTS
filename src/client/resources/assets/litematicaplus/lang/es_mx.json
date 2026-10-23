@@ -730,6 +730,8 @@
   "litematicaplus.layers.clip_enabled.help": "Recorta el esquema a los límites X y Z de abajo.",
   "litematicaplus.layers.fit_placement": "Ajustar a la colocación",
   "litematicaplus.layers.fit_placement.help": "Toma los límites X y Z de la colocación elegida.",
+  "litematicaplus.layers.fit_selection": "Ajustar a la selección",
+  "litematicaplus.layers.fit_selection.help": "Toma los límites X y Z y un rango de capas en Y de la selección de área de la herramienta.",
   "litematicaplus.layers.reset": "Restablecer",
   "litematicaplus.layers.reset.help": "Quita los límites X y Z.",
   "litematicaplus.layers.min": "%s desde",

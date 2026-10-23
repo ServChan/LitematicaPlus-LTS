@@ -1,5 +1,7 @@
 package org.lts.litematicaplus.gui;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Tooltip;
@@ -13,7 +15,10 @@ import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.selection.AreaBox;
+import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.tool.ToolController;
+import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.world.LayerRange;
 import org.lts.litematicaplus.world.PlacementVolume;
 
@@ -92,10 +97,8 @@ final class LayersView extends TabView {
         y += ROW + 14;
         this.clipTop = y;
         LayerRange.Clip clip = layer.clip();
-        int usable = this.width - Theme.GAP * 2;
-        int masterWidth = usable * 44 / 100;
-        int fitWidth = usable * 32 / 100;
-        int resetWidth = usable - masterWidth - fitWidth;
+        int resetWidth = (this.width - Theme.GAP) / 3;
+        int masterWidth = this.width - Theme.GAP - resetWidth;
         add(FlatButton.toggle(this.left, y, masterWidth, tr("litematicaplus.layers.clip_enabled"),
                 () -> GhostEngine.get().clip().enabled(), button -> {
                     LayerRange.Clip current = GhostEngine.get().clip();
@@ -105,15 +108,21 @@ final class LayersView extends TabView {
                     }
                     applyClip(next);
                 }));
-        FlatButton fit = add(FlatButton.secondary(this.left + masterWidth + Theme.GAP, y, fitWidth,
-                tr("litematicaplus.layers.fit_placement"), button -> fitToPlacement()));
-        fit.active = selectedVolume() != null;
         add(FlatButton.secondary(this.left + this.width - resetWidth, y, resetWidth, tr("litematicaplus.layers.reset"),
                 button -> {
                     xZeroChosen = false;
                     zZeroChosen = false;
                     applyClip(LayerRange.Clip.NONE);
                 }));
+        y += ROW;
+        int fitWidth = (this.width - Theme.GAP) / 2;
+        FlatButton fit = add(FlatButton.secondary(this.left, y, fitWidth,
+                tr("litematicaplus.layers.fit_placement"), button -> fitToPlacement()));
+        fit.active = selectedVolume() != null;
+        FlatButton fitArea = add(FlatButton.secondary(this.left + fitWidth + Theme.GAP, y,
+                this.width - fitWidth - Theme.GAP, tr("litematicaplus.layers.fit_selection"),
+                button -> fitToSelection()));
+        fitArea.active = !completeBoxes().isEmpty();
         y += ROW;
         axisRow(y, true, clip);
         y += ROW;
@@ -228,6 +237,43 @@ final class LayersView extends TabView {
         zZeroChosen = volume.minZ() == 0 && volume.maxZ() == 0;
         zeroScope = Session.scope();
         applyClip(new LayerRange.Clip(true, true, volume.minX(), volume.maxX(), true, volume.minZ(), volume.maxZ()));
+    }
+
+    private void fitToSelection() {
+        List<AreaBox> boxes = completeBoxes();
+        if (boxes.isEmpty()) {
+            Notify.actionBar("litematicaplus.message.no_selection");
+            return;
+        }
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        for (AreaBox box : boxes) {
+            minX = Math.min(minX, box.minX());
+            minY = Math.min(minY, box.minY());
+            minZ = Math.min(minZ, box.minZ());
+            maxX = Math.max(maxX, box.maxX());
+            maxY = Math.max(maxY, box.maxY());
+            maxZ = Math.max(maxZ, box.maxZ());
+        }
+        xZeroChosen = minX == 0 && maxX == 0;
+        zZeroChosen = minZ == 0 && maxZ == 0;
+        zeroScope = Session.scope();
+        ToolController.get().applyLayer(new LayerRange(LayerRange.Mode.RANGE, Direction.Axis.Y, minY, minY, maxY));
+        applyClip(new LayerRange.Clip(true, true, minX, maxX, true, minZ, maxZ));
+    }
+
+    private static List<AreaBox> completeBoxes() {
+        List<AreaBox> boxes = new ArrayList<>();
+        for (AreaBox box : SelectionManager.get().boxes()) {
+            if (box.isComplete()) {
+                boxes.add(box);
+            }
+        }
+        return boxes;
     }
 
     private static PlacementVolume selectedVolume() {

@@ -730,6 +730,8 @@
   "litematicaplus.layers.clip_enabled.help": "Обрезать схему по координатам X и Z ниже.",
   "litematicaplus.layers.fit_placement": "По размещению",
   "litematicaplus.layers.fit_placement.help": "Взять границы X и Z по выбранному размещению.",
+  "litematicaplus.layers.fit_selection": "По выделению",
+  "litematicaplus.layers.fit_selection.help": "Взять границы X и Z и диапазон слоёв по высоте из рамки выделения инструмента.",
   "litematicaplus.layers.reset": "Сбросить",
   "litematicaplus.layers.reset.help": "Снять ограничение по X и Z.",
   "litematicaplus.layers.min": "%s от",
