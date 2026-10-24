@@ -1,5 +1,6 @@
 package org.lts.litematicaplus.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -12,6 +13,9 @@ import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -42,6 +46,7 @@ final class MaterialsView extends TabView {
 
     private static MaterialList.Sort sort = MaterialList.Sort.MISSING;
     private static boolean hideCompleted = true;
+    private static String query = "";
 
     private ListPanel<MaterialList.Entry> list;
     private List<MaterialList.Entry> entries = List.of();
@@ -57,6 +62,11 @@ final class MaterialsView extends TabView {
     private final Map<MaterialList.Entry, RowText> rowText = new IdentityHashMap<>();
     private final Map<Item, Set<Block>> blocksByItem = new IdentityHashMap<>();
     private FlatButton hideGhosts;
+    private EditBox searchBox;
+    private int headerY;
+    private int matchCount;
+    private int typeCount;
+    private final Map<Item, String> searchText = new IdentityHashMap<>();
     private final TextMemo[] headers = {new TextMemo(), new TextMemo(), new TextMemo()};
 
     MaterialsView(HubScreen screen) {
@@ -68,7 +78,8 @@ final class MaterialsView extends TabView {
         if (this.status != null) {
             return this.status;
         }
-        Component summary = tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        Component summary = searching() ? tr("litematicaplus.materials.search_count", this.matchCount, this.typeCount)
+                : tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
         int hidden = GhostEngine.get().hiddenBlocks().size();
         if (hidden > 0) {
             summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.hidden_summary", hidden));
@@ -84,6 +95,10 @@ final class MaterialsView extends TabView {
         }
         return summary.copy().append(" · ").append(tr(EnderChestMemory.known() ? "litematicaplus.materials.ender_counted"
                 : "litematicaplus.materials.ender_unknown"));
+    }
+
+    private static boolean searching() {
+        return !query.isBlank();
     }
 
     private void status(Component message) {
@@ -121,7 +136,18 @@ final class MaterialsView extends TabView {
                         this.screen.refresh();
                     }));
         }
-        int listTop = this.top + Theme.CONTROL_HEIGHT + 16;
+        int searchY = this.top + Theme.CONTROL_HEIGHT + 4;
+        this.searchBox = field(this.left, searchY, this.width, query, tr("litematicaplus.materials.search"), 64);
+        this.searchBox.setResponder(value -> {
+            if (!value.equals(query)) {
+                query = value;
+                recompute();
+                this.list.setScroll(0);
+            }
+        });
+        hint(this.searchBox, "litematicaplus.materials.search_tip");
+        this.headerY = searchY + Theme.CONTROL_HEIGHT + 5;
+        int listTop = searchY + Theme.CONTROL_HEIGHT + 16;
         this.columnWidth = Math.max(44, Math.min(110, this.width / 5));
         this.showStacks = this.width >= 400;
         this.list = add(new ListPanel<MaterialList.Entry>(this.left, listTop, this.width, this.top + this.height - listTop,
@@ -140,6 +166,7 @@ final class MaterialsView extends TabView {
             return;
         }
         PlacementRuntime runtime = GhostEngine.get().runtime(placement.id());
+        boolean ready = false;
         if (placement.loadState() == SchematicPlacement.LoadState.FAILED) {
             this.list.empty(tr("litematicaplus.state.failed_title"), tr("litematicaplus.state.failed_hint"));
         } else if (!placement.enabled()) {
@@ -147,6 +174,7 @@ final class MaterialsView extends TabView {
         } else if (runtime == null || runtime.volume() == null || runtime.pendingSections() > 0 && runtime.verifiedSections() == 0) {
             this.list.empty(tr("litematicaplus.state.loading_title"), tr("litematicaplus.state.loading_hint"));
         } else {
+            ready = true;
             this.list.empty(tr("litematicaplus.materials.empty_title"), tr("litematicaplus.materials.empty_hint"));
         }
         List<MaterialList.Entry> all = MaterialList.compute(runtime,
@@ -163,12 +191,27 @@ final class MaterialsView extends TabView {
         List<MaterialList.Entry> shown = new ArrayList<>();
         long missing = 0L;
         boolean packed = false;
+        boolean searching = searching();
+        int matched = 0;
+        int doneHidden = 0;
         for (MaterialList.Entry entry : all) {
             missing += entry.missing();
             packed |= entry.packed() > 0L;
+            if (searching && !matchesQuery(entry)) {
+                continue;
+            }
+            matched++;
             if (!hideCompleted || entry.missing() > 0L) {
                 shown.add(entry);
+            } else {
+                doneHidden++;
             }
+        }
+        this.matchCount = matched;
+        this.typeCount = all.size();
+        if (ready && searching && shown.isEmpty()) {
+            this.list.empty(tr("litematicaplus.materials.search_empty", query.strip()), tr(doneHidden > 0
+                    ? "litematicaplus.materials.search_done_hint" : "litematicaplus.materials.search_empty_hint"));
         }
         this.totalMissing = missing;
         this.anyPacked = packed;
@@ -188,6 +231,36 @@ final class MaterialsView extends TabView {
             this.list.select(index);
             this.list.setScroll(keep);
         }
+    }
+
+    private boolean matchesQuery(MaterialList.Entry entry) {
+        String text = this.searchText.computeIfAbsent(entry.item(), item -> InfoHud.stackOf(item).getHoverName().getString()
+                + " " + BuiltInRegistries.ITEM.getKey(item));
+        return SettingsView.matches(text, query);
+    }
+
+    @Override
+    boolean keyPressed(KeyEvent event) {
+        if (this.searchBox == null) {
+            return false;
+        }
+        boolean focused = this.searchBox.isFocused();
+        if (event.key() == InputConstants.KEY_F && event.hasControlDown() && !focused
+                && !HubScreen.typing(this.screen.getFocused())) {
+            this.screen.setFocused(this.searchBox);
+            this.searchBox.moveCursorToEnd(false);
+            return true;
+        }
+        if (focused && event.key() == InputConstants.KEY_ESCAPE && searching()) {
+            this.searchBox.setValue("");
+            return true;
+        }
+        if (focused && (event.key() == InputConstants.KEY_DOWN || event.key() == InputConstants.KEY_RETURN)) {
+            this.searchBox.setFocused(false);
+            this.screen.setFocused(this.list);
+            return true;
+        }
+        return false;
     }
 
     private boolean hidden(MaterialList.Entry entry) {
@@ -385,7 +458,7 @@ final class MaterialsView extends TabView {
                     tr("litematicaplus.placements.empty_title"), tr("litematicaplus.materials.no_placement_hint"));
             return;
         }
-        int headerY = this.top + Theme.CONTROL_HEIGHT + 5;
+        int headerY = this.headerY;
         int right = this.left + this.width - 7 - (this.list != null && this.list.items().size() * Theme.ROW_HEIGHT
                 > this.list.getHeight() ? 5 : 0);
         graphics.text(this.font, tr("litematicaplus.materials.column_item"), this.left + 27, headerY, Theme.ACCENT, false);
