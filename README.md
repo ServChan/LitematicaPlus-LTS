@@ -57,7 +57,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 ### Управление
 
-Клавиши назначаются в меню мода (Настройки → Клавиши) или в Options → Controls → Litematica Plus.
+Клавиши назначаются в меню мода (Настройки → Клавиши) или в Настройки → Управление → Litematica Plus.
 
 | Действие | Клавиша по умолчанию |
 |---|---|
