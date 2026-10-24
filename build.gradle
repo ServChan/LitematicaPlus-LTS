@@ -83,6 +83,8 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-message-api-v1:${fabricMessageApiVersion}"
     if (localJade.isFile()) {
         compileOnly files(localJade)
+    } else {
+        compileOnly("maven.modrinth:jade:${project.jade_version}") { transitive = false }
     }
 
     if (localModMenu.isFile()) {
