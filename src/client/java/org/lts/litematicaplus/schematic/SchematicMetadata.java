@@ -16,6 +16,7 @@ public final class SchematicMetadata {
     public int schematicVersion;
     public String format = "";
     public int unknownStates;
+    public EmbeddedPlacement placement;
 
     public SchematicMetadata copy() {
         SchematicMetadata copy = new SchematicMetadata();
@@ -34,6 +35,7 @@ public final class SchematicMetadata {
         copy.schematicVersion = this.schematicVersion;
         copy.format = this.format;
         copy.unknownStates = this.unknownStates;
+        copy.placement = this.placement;
         return copy;
     }
 }

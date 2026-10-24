@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +28,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.SessionStore;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.schematic.BlockStateNbt;
+import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.LitematicCodec;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
@@ -134,6 +136,40 @@ public final class PlacementManager {
         placement.setServerId(serverId);
         placement.setPendingShifts(List.copyOf(shifts));
         return add(placement);
+    }
+
+    public SchematicPlacement createEmbedded(Path file, EmbeddedPlacement saved) {
+        SchematicPlacement placement = new SchematicPlacement(UUID.randomUUID(), uniqueName(SchematicIo.baseName(file)),
+                relativize(file), new BlockPos(saved.x(), saved.y(), saved.z()));
+        placement.setRotation(saved.rotation());
+        placement.setMirror(saved.mirror());
+        placement.regionPlacements().putAll(saved.regions());
+        placement.disabledRegions().addAll(saved.disabledRegions());
+        placement.setGrid(saved.grid());
+        placement.setZonePlan(new ZonePlan(saved.zoneColumns(), saved.zoneRows(), saved.zoneFloors()));
+        for (Map.Entry<String, String> pair : saved.replacements().entrySet()) {
+            Block from = blockById(pair.getKey());
+            Block to = blockById(pair.getValue());
+            if (from != null && to != null && from != to) {
+                placement.replacements().put(from, to);
+            }
+        }
+        return add(placement);
+    }
+
+    public static EmbeddedPlacement embedded(SchematicPlacement placement, boolean workSettings, String dimension,
+            String world) {
+        Map<String, String> replacements = new LinkedHashMap<>();
+        if (workSettings) {
+            for (Map.Entry<Block, Block> pair : placement.replacements().entrySet()) {
+                replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
+                        BuiltInRegistries.BLOCK.getKey(pair.getValue()).toString());
+            }
+        }
+        ZonePlan zones = workSettings ? placement.zonePlan() : ZonePlan.NONE;
+        return new EmbeddedPlacement(placement.x(), placement.y(), placement.z(), placement.rotation(),
+                placement.mirror(), dimension, world, placement.regionPlacements(), placement.disabledRegions(),
+                placement.grid(), replacements, zones.columns(), zones.rows(), zones.floors());
     }
 
     private SchematicPlacement add(SchematicPlacement placement) {

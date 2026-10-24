@@ -1,10 +1,13 @@
 package org.lts.litematicaplus.gui;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.concurrent.RejectedExecutionException;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -13,6 +16,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import org.lts.litematicaplus.LitematicaPlusClient;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.compat.AxiomActions;
 import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.engine.GhostEngine;
@@ -22,7 +27,11 @@ import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.RegionPlacement;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.preview.PreviewService;
+import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
+import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.util.Notify;
+import org.lts.litematicaplus.util.Workers;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 final class PlacementsView extends TabView {
@@ -48,6 +57,7 @@ final class PlacementsView extends TabView {
     private final TextMemo regionOn = new TextMemo();
     private final TextMemo regionOff = new TextMemo();
     private Component notice;
+    private boolean embedding;
     private int noticeTicks;
 
     PlacementsView(HubScreen screen) {
@@ -211,6 +221,15 @@ final class PlacementsView extends TabView {
             FlatButton select = add(FlatButton.secondary(x + half + Theme.GAP, axiomY, this.detailWidth - half - Theme.GAP,
                     tr("litematicaplus.axiom.select_placement"), button -> notice(AxiomActions.selectPlacement(selected))));
             select.setTooltip(Tooltip.create(tr("litematicaplus.axiom.select_placement.tip")));
+            bottomY -= Theme.CONTROL_HEIGHT + 4;
+        }
+        if (schematic != null && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
+            boolean supported = SchematicIo.canEmbedPlacement(PlacementManager.resolve(selected.file()));
+            FlatButton embed = add(FlatButton.secondary(x, bottomY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
+                    tr("litematicaplus.placements.embed"), button -> embed(selected, button.shiftHeld())));
+            embed.setTooltip(Tooltip.create(tr(supported ? "litematicaplus.placements.embed.tip"
+                    : "litematicaplus.placements.embed.unsupported")));
+            embed.active = supported && !this.embedding;
             bottomY -= Theme.CONTROL_HEIGHT + 4;
         }
         if (hasRegions) {
@@ -482,6 +501,40 @@ final class PlacementsView extends TabView {
         if (selected.loadState() == SchematicPlacement.LoadState.FAILED && this.failTop > 0) {
             Ui.wrapped(graphics, this.font, tr("litematicaplus.placement.failed", selected.error()), this.detailX,
                     this.failTop, this.detailWidth, 2, Theme.DANGER, mouseX, mouseY);
+        }
+    }
+
+    private void embed(SchematicPlacement placement, boolean workSettings) {
+        if (this.embedding) {
+            return;
+        }
+        Path file = PlacementManager.resolve(placement.file());
+        EmbeddedPlacement saved = PlacementManager.embedded(placement, workSettings, Session.dimension(this.minecraft),
+                Session.world(this.minecraft));
+        this.embedding = true;
+        this.screen.refresh();
+        try {
+            Workers.save().execute(() -> {
+                Component message;
+                try {
+                    SchematicIo.embedPlacement(file, saved);
+                    message = tr(workSettings && saved.hasWorkSettings() ? "litematicaplus.placements.embedded_all"
+                            : "litematicaplus.placements.embedded", file.getFileName().toString());
+                } catch (IOException | RuntimeException exception) {
+                    LitematicaPlusClient.LOGGER.warn("Could not write the placement into {}", file, exception);
+                    message = tr("litematicaplus.placements.embed_failed", Notify.describe(exception));
+                }
+                Component result = message;
+                this.minecraft.execute(() -> {
+                    this.embedding = false;
+                    notice(result);
+                    this.screen.refresh();
+                });
+            });
+        } catch (RejectedExecutionException exception) {
+            this.embedding = false;
+            notice(tr("litematicaplus.placements.embed_failed", Notify.describe(exception)));
+            this.screen.refresh();
         }
     }
 

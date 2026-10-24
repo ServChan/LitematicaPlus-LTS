@@ -164,6 +164,7 @@ public final class SpongeCodec {
         metadata.totalBlocks = count;
         metadata.unknownStates = unresolved.count();
         metadata.format = "sponge";
+        metadata.placement = EmbeddedPlacement.readFrom(meta);
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
     }
 

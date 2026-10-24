@@ -133,6 +133,7 @@ public final class SchematicExport {
         metadata.putString("Name", source.name);
         metadata.putString("Author", source.author);
         metadata.putLong("Date", source.timeCreated);
+        EmbeddedPlacement.writeTo(metadata, source.placement);
         CompoundTag body = new CompoundTag();
         body.putInt("Version", 3);
         body.putInt("DataVersion", BlockStateNbt.currentDataVersion());

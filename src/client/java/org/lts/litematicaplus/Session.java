@@ -143,17 +143,23 @@ public final class Session {
         if (minecraft.level == null) {
             return "";
         }
-        String server;
+        return world(minecraft) + "|" + dimension(minecraft);
+    }
+
+    public static String world(Minecraft minecraft) {
         ServerData data = minecraft.getCurrentServer();
         if (data != null) {
-            server = data.ip;
-        } else if (minecraft.getSingleplayerServer() != null) {
-            Path root = minecraft.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
-            server = "singleplayer:" + (root.getFileName() == null ? "world" : root.getFileName().toString());
-        } else {
-            server = "local";
+            return data.ip;
         }
-        return server + "|" + minecraft.level.dimension().identifier();
+        if (minecraft.getSingleplayerServer() != null) {
+            Path root = minecraft.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+            return "singleplayer:" + (root.getFileName() == null ? "world" : root.getFileName().toString());
+        }
+        return "local";
+    }
+
+    public static String dimension(Minecraft minecraft) {
+        return minecraft.level == null ? "" : minecraft.level.dimension().identifier().toString();
     }
 
     private static <E extends Enum<E>> E parse(Class<E> type, String value, E fallback) {

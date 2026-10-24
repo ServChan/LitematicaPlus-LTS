@@ -20,10 +20,12 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusClient;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.preview.PreviewService;
+import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.SchematicExport;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
@@ -69,6 +71,8 @@ final class SchematicsView extends TabView {
 
     private ListPanel<Entry> list;
     private FlatButton placeButton;
+    private FlatButton placeSavedButton;
+    private int placeRowWidth;
     private FlatButton exportSponge;
     private FlatButton exportStructure;
     private FlatButton exportBlueprint;
@@ -184,7 +188,10 @@ final class SchematicsView extends TabView {
                 ? "litematicaplus.schematics.export_blueprint.tip_axiom" : "litematicaplus.schematics.export_blueprint.tip")));
         int placeY = exportY - Theme.CONTROL_HEIGHT - 4;
         int deleteWidth = Math.max(half / 2, Math.min(half, this.font.width(tr("litematicaplus.schematics.delete_confirm")) + 12));
-        this.placeButton = add(FlatButton.primary(this.detailX, placeY, this.detailWidth - deleteWidth - Theme.GAP,
+        this.placeRowWidth = this.detailWidth - deleteWidth - Theme.GAP;
+        this.placeSavedButton = add(FlatButton.primary(this.detailX, placeY, this.placeRowWidth,
+                tr("litematicaplus.schematics.place_saved"), button -> placeSaved()));
+        this.placeButton = add(FlatButton.primary(this.detailX, placeY, this.placeRowWidth,
                 tr("litematicaplus.schematics.place"), button -> place()));
         this.deleteButton = add(FlatButton.danger(this.detailX + this.detailWidth - deleteWidth, placeY, deleteWidth,
                 deleteLabel(), button -> delete()));
@@ -214,7 +221,23 @@ final class SchematicsView extends TabView {
 
     private void updateButtons() {
         if (this.placeButton != null) {
-            this.placeButton.active = this.selected != null && !this.selected.directory() && this.minecraft.player != null;
+            boolean placeable = this.selected != null && !this.selected.directory() && this.minecraft.player != null;
+            EmbeddedPlacement saved = savedPlacement();
+            this.placeButton.active = placeable;
+            this.placeSavedButton.active = placeable;
+            this.placeSavedButton.visible = saved != null;
+            if (saved != null) {
+                int savedWidth = (this.placeRowWidth - Theme.GAP) / 2;
+                this.placeSavedButton.setWidth(savedWidth);
+                this.placeSavedButton.setTooltip(Tooltip.create(savedTooltip(saved)));
+                this.placeButton.setX(this.detailX + savedWidth + Theme.GAP);
+                this.placeButton.setWidth(this.placeRowWidth - savedWidth - Theme.GAP);
+                this.placeButton.setMessage(tr("litematicaplus.schematics.place_here"));
+            } else {
+                this.placeButton.setX(this.detailX);
+                this.placeButton.setWidth(this.placeRowWidth);
+                this.placeButton.setMessage(tr("litematicaplus.schematics.place"));
+            }
         }
         boolean file = this.selected != null && !this.selected.directory() && !this.exporting;
         if (this.exportSponge != null) {
@@ -480,6 +503,7 @@ final class SchematicsView extends TabView {
         SchematicMetadata cached = METADATA.get(key);
         if (cached != null) {
             this.metadata = cached;
+            updateButtons();
             return;
         }
         try {
@@ -501,6 +525,7 @@ final class SchematicsView extends TabView {
                     if (this.selected == entry) {
                         this.metadata = result;
                         this.metadataError = message;
+                        updateButtons();
                     }
                 });
             });
@@ -519,9 +544,51 @@ final class SchematicsView extends TabView {
                 this.list.setScroll(0);
             }
             reload();
+        } else if (savedPlacement() != null) {
+            placeSaved();
         } else {
             place();
         }
+    }
+
+    private EmbeddedPlacement savedPlacement() {
+        return this.selected == null || this.selected.directory() || this.metadata == null ? null
+                : this.metadata.placement;
+    }
+
+    private Component savedTooltip(EmbeddedPlacement saved) {
+        Component text = tr("litematicaplus.schematics.place_saved.tip", saved.x(), saved.y(), saved.z(),
+                tr("litematicaplus.rotation." + saved.rotation().name().toLowerCase(Locale.ROOT)),
+                tr("litematicaplus.mirror." + saved.mirror().name().toLowerCase(Locale.ROOT)));
+        Component warning = savedWarning(saved);
+        return warning == null ? text : text.copy().append("\n").append(warning);
+    }
+
+    private Component savedWarning(EmbeddedPlacement saved) {
+        if (this.minecraft.level == null) {
+            return null;
+        }
+        if (!saved.matchesDimension(Session.dimension(this.minecraft))) {
+            return tr("litematicaplus.schematics.place_saved.other_dimension", saved.dimension());
+        }
+        if (!saved.matchesWorld(Session.world(this.minecraft))) {
+            return tr("litematicaplus.schematics.place_saved.other_world", saved.world());
+        }
+        return null;
+    }
+
+    private void placeSaved() {
+        EmbeddedPlacement saved = savedPlacement();
+        if (saved == null || this.minecraft.player == null) {
+            return;
+        }
+        SchematicPlacement placement = PlacementManager.get().createEmbedded(this.selected.path(), saved);
+        Component warning = savedWarning(saved);
+        if (warning != null) {
+            Notify.chat(warning);
+        }
+        Notify.actionBar("litematicaplus.message.placement_restored", placement.name(), saved.x(), saved.y(), saved.z());
+        this.minecraft.gui.setScreen(new PlacementEditorScreen(null, placement));
     }
 
     private void place() {
@@ -698,6 +765,15 @@ final class SchematicsView extends TabView {
             y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.data_version", Integer.toString(meta.dataVersion));
         }
         y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.file_size", this.selected.sizeText());
+        if (meta.placement != null) {
+            y = row(graphics, x, y, inner, limit, "litematicaplus.schematics.saved_place",
+                    meta.placement.x() + " " + meta.placement.y() + " " + meta.placement.z());
+            Component warning = savedWarning(meta.placement);
+            if (warning != null && y + 10 <= limit) {
+                Ui.clipped(graphics, this.font, warning.getString(), x, y, inner, Theme.WARNING);
+                y += 12;
+            }
+        }
         if (!meta.description.isBlank() && y + 12 < limit) {
             graphics.enableScissor(this.detailX + 1, y, this.detailX + this.detailWidth - 1, limit);
             graphics.textWithWordWrap(this.font, Component.literal(meta.description), x, y + 4, inner, Theme.TEXT_DIM, false);

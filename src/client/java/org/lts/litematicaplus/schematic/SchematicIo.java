@@ -119,7 +119,9 @@ public final class SchematicIo {
                     new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"),
                     new FieldSelector("Schematic", ShortTag.TYPE, "Width"),
                     new FieldSelector("Schematic", ShortTag.TYPE, "Height"),
-                    new FieldSelector("Schematic", ShortTag.TYPE, "Length"));
+                    new FieldSelector("Schematic", ShortTag.TYPE, "Length"),
+                    new FieldSelector(CompoundTag.TYPE, "Metadata"),
+                    new FieldSelector("Schematic", CompoundTag.TYPE, "Metadata"));
         };
         try {
             NbtIo.parseCompressed(path, visitor, NbtAccounter.create(NBT_QUOTA));
@@ -133,6 +135,9 @@ public final class SchematicIo {
         int y;
         int z;
         CompoundTag body = root.getCompound("Schematic").orElse(root);
+        if ("sponge".equals(metadata.format)) {
+            metadata.placement = EmbeddedPlacement.readFrom(body.getCompoundOrEmpty("Metadata"));
+        }
         if (body.contains("Width")) {
             x = body.getShortOr("Width", (short) 0) & 0xFFFF;
             y = body.getShortOr("Height", (short) 0) & 0xFFFF;
@@ -178,6 +183,37 @@ public final class SchematicIo {
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    public static boolean canEmbedPlacement(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return name.endsWith(LITEMATIC_EXTENSION) || name.endsWith(".schem");
+    }
+
+    public static void embedPlacement(Path path, EmbeddedPlacement placement) throws IOException {
+        if (!canEmbedPlacement(path)) {
+            throw new LocalizedException("litematicaplus.error.embed_format",
+                    "Only .litematic and .schem files can keep a placement: " + path.getFileName());
+        }
+        CompoundTag root;
+        try {
+            root = NbtIo.readCompressed(path, NbtAccounter.create(NBT_QUOTA));
+        } catch (RuntimeException exception) {
+            throw new LocalizedException("litematicaplus.error.unreadable", "Unreadable NBT in " + path.getFileName(), exception);
+        }
+        CompoundTag holder;
+        if (root.contains("Regions") && root.contains("Version")) {
+            holder = root;
+        } else if (SpongeCodec.matches(root)) {
+            holder = root.getCompound("Schematic").orElse(root);
+        } else {
+            throw new LocalizedException("litematicaplus.error.embed_format",
+                    "Only .litematic and .schem files can keep a placement: " + path.getFileName());
+        }
+        CompoundTag metadata = holder.getCompoundOrEmpty("Metadata");
+        EmbeddedPlacement.writeTo(metadata, placement);
+        holder.put("Metadata", metadata);
+        writeRoot(path, root);
     }
 
     public static Path export(Path source, SchematicExport.Format format) throws IOException {

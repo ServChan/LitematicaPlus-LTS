@@ -92,6 +92,7 @@ public final class LitematicCodec {
         metadata.enclosingX = size.getIntOr("x", 0);
         metadata.enclosingY = size.getIntOr("y", 0);
         metadata.enclosingZ = size.getIntOr("z", 0);
+        metadata.placement = EmbeddedPlacement.readFrom(tag);
         return metadata;
     }
 
@@ -106,6 +107,7 @@ public final class LitematicCodec {
         putCount(tag, "TotalBlocks", metadata.totalBlocks);
         putCount(tag, "TotalVolume", metadata.totalVolume);
         tag.put("EnclosingSize", vector(metadata.enclosingX, metadata.enclosingY, metadata.enclosingZ));
+        EmbeddedPlacement.writeTo(tag, metadata.placement);
         return tag;
     }
 

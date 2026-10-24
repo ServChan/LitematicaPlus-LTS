@@ -4,17 +4,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.compat.AxiomActions;
 import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.placement.PlacementManager;
+import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SchematicCapture;
@@ -24,6 +29,10 @@ import org.lts.litematicaplus.util.Workers;
 
 final class AreaView extends TabView {
     private static String fileName = "";
+    private static boolean embedPlacement;
+    private static String[] placeFields = {"", "", ""};
+    private static Rotation placeRotation = Rotation.NONE;
+    private static Mirror placeMirror = Mirror.NONE;
 
     private ListPanel<AreaBox> list;
     private FlatButton saveButton;
@@ -36,6 +45,7 @@ final class AreaView extends TabView {
     private int cornerTop;
     private int saveTop;
     private int axiomTop;
+    private int placeTop;
     private int coverageTicks;
     private long missingChunks;
     private long totalChunks;
@@ -123,8 +133,16 @@ final class AreaView extends TabView {
             this.cornerTop = 0;
         }
         this.saveTop = this.top + this.height - Theme.CONTROL_HEIGHT * 2 - 4 - 22;
+        this.placeTop = 0;
+        int above = this.saveTop;
+        int placeTop = this.saveTop - Theme.CONTROL_HEIGHT * 2 - 2 - 4 - 11;
+        if (placeTop >= cornersBottom + 2) {
+            this.placeTop = placeTop;
+            addPlacementRow(x, placeTop + 11);
+            above = placeTop;
+        }
         this.axiomTop = 0;
-        int axiomTop = this.saveTop - Theme.CONTROL_HEIGHT - 4 - 11;
+        int axiomTop = above - Theme.CONTROL_HEIGHT - 4 - 11;
         if (AxiomBridge.available() && axiomTop >= cornersBottom + 2) {
             this.axiomTop = axiomTop;
             addAxiomRow(x, axiomTop + 11);
@@ -140,6 +158,90 @@ final class AreaView extends TabView {
                 this.top + this.height - Theme.CONTROL_HEIGHT, saveWidth,
                 tr(this.overwriteArmed ? "litematicaplus.area.replace" : "litematicaplus.area.save"), button -> save()));
         updateSave();
+    }
+
+    private void addPlacementRow(int x, int y) {
+        if (embedPlacement && placeFields[0].isEmpty()) {
+            fillPlacementFromSelection();
+        }
+        int turnWidth = Math.max(48, this.detailWidth / 4);
+        int toggleWidth = this.detailWidth - (turnWidth + Theme.GAP) * 2;
+        int cell = (this.detailWidth - Theme.GAP * 2) / 3;
+        FlatButton toggle = add(FlatButton.toggle(x, y, toggleWidth, tr("litematicaplus.area.place_embed"),
+                () -> embedPlacement, button -> {
+                    embedPlacement = !embedPlacement;
+                    if (embedPlacement) {
+                        fillPlacementFromSelection();
+                    }
+                    this.screen.refresh();
+                }));
+        toggle.setTooltip(Tooltip.create(tr("litematicaplus.area.place_embed.tip")));
+        int fieldY = y + Theme.CONTROL_HEIGHT + 2;
+        for (int axis = 0; axis < 3; axis++) {
+            int index = axis;
+            int fieldWidth = axis == 2 ? this.detailWidth - (cell + Theme.GAP) * 2 : cell;
+            EditBox field = field(x + axis * (cell + Theme.GAP), fieldY, fieldWidth, placeFields[axis],
+                    Component.literal(axis == 0 ? "X" : axis == 1 ? "Y" : "Z"), 9);
+            field.setTooltip(Tooltip.create(tr("litematicaplus.area.place_coordinate.tip")));
+            field.setEditable(embedPlacement);
+            field.setResponder(value -> {
+                placeFields[index] = value;
+                parse(field);
+            });
+            if (embedPlacement) {
+                parse(field);
+            }
+        }
+        int turnX = x + toggleWidth + Theme.GAP;
+        FlatButton rotate = add(FlatButton.secondary(turnX, y, turnWidth,
+                tr("litematicaplus.rotation." + placeRotation.name().toLowerCase(Locale.ROOT)), button -> {
+                    placeRotation = placeRotation.getRotated(Rotation.CLOCKWISE_90);
+                    this.screen.refresh();
+                }));
+        rotate.active = embedPlacement;
+        int mirrorX = turnX + turnWidth + Theme.GAP;
+        FlatButton mirror = add(FlatButton.secondary(mirrorX, y, x + this.detailWidth - mirrorX,
+                tr("litematicaplus.mirror." + placeMirror.name().toLowerCase(Locale.ROOT)), button -> {
+                    Mirror[] values = Mirror.values();
+                    placeMirror = values[(placeMirror.ordinal() + 1) % values.length];
+                    this.screen.refresh();
+                }));
+        mirror.active = embedPlacement;
+    }
+
+    private static void fillPlacementFromSelection() {
+        List<AreaBox> boxes = SelectionManager.get().completeBoxes();
+        if (boxes.isEmpty()) {
+            return;
+        }
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        for (AreaBox box : boxes) {
+            minX = Math.min(minX, box.minX());
+            minY = Math.min(minY, box.minY());
+            minZ = Math.min(minZ, box.minZ());
+        }
+        placeFields = new String[] {Integer.toString(minX), Integer.toString(minY), Integer.toString(minZ)};
+    }
+
+    private EmbeddedPlacement placementToEmbed() {
+        if (!embedPlacement) {
+            return null;
+        }
+        int[] values = new int[3];
+        for (int axis = 0; axis < 3; axis++) {
+            try {
+                values[axis] = Integer.parseInt(placeFields[axis].strip());
+            } catch (NumberFormatException exception) {
+                return null;
+            }
+            if (values[axis] < -30000000 || values[axis] > 30000000) {
+                return null;
+            }
+        }
+        return EmbeddedPlacement.at(values[0], values[1], values[2], placeRotation, placeMirror,
+                Session.dimension(this.minecraft), Session.world(this.minecraft));
     }
 
     private void addAxiomRow(int x, int y) {
@@ -289,6 +391,11 @@ final class AreaView extends TabView {
             setStatus(tr("litematicaplus.area.error_exists", target.getFileName().toString()), Theme.WARNING);
             return;
         }
+        EmbeddedPlacement embedded = placementToEmbed();
+        if (embedPlacement && embedded == null) {
+            setStatus(tr("litematicaplus.area.place_invalid"), Theme.DANGER);
+            return;
+        }
         disarmOverwrite();
         this.saving = true;
         updateSave();
@@ -300,6 +407,7 @@ final class AreaView extends TabView {
                 finish(tr("litematicaplus.area.error_capture", Notify.describe(failure)), Theme.DANGER);
                 return;
             }
+            result.schematic().metadata().placement = embedded;
             try {
                 Workers.save().execute(() -> {
                     try {
@@ -367,7 +475,7 @@ final class AreaView extends TabView {
                     this.cornerTop + 12 + Theme.CONTROL_HEIGHT + 2);
         } else {
             int y = this.top + 2;
-            int limit = (this.axiomTop > 0 ? this.axiomTop : this.saveTop) - 14;
+            int limit = (this.axiomTop > 0 ? this.axiomTop : this.placeTop > 0 ? this.placeTop : this.saveTop) - 14;
             Component[] steps = {tr("litematicaplus.area.step1", LitematicaPlusConfig.current().toolItem),
                     tr("litematicaplus.area.step2"), tr("litematicaplus.area.step3")};
             int needed = 0;
@@ -390,6 +498,9 @@ final class AreaView extends TabView {
         }
         if (this.axiomTop > 0) {
             Ui.label(graphics, this.font, tr("litematicaplus.axiom.row_label"), this.detailX, this.axiomTop);
+        }
+        if (this.placeTop > 0) {
+            Ui.label(graphics, this.font, tr("litematicaplus.area.place_label"), this.detailX, this.placeTop);
         }
         Ui.label(graphics, this.font, tr("litematicaplus.area.save_label"), this.detailX, this.saveTop);
         int statusY = this.top + this.height - Theme.CONTROL_HEIGHT + 1;
