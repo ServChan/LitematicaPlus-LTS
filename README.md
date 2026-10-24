@@ -8,6 +8,8 @@
 
 Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes `.litematic` files.
 
+**Руководство пользователя с быстрым стартом:** [docs/USER_GUIDE_RU.md](docs/USER_GUIDE_RU.md) · **User guide with a quick start:** [docs/USER_GUIDE_EN.md](docs/USER_GUIDE_EN.md)
+
 ## Русский
 
 ### Что это
