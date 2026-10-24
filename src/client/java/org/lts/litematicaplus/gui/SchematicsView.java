@@ -229,7 +229,7 @@ final class SchematicsView extends TabView {
             if (saved != null) {
                 int savedWidth = (this.placeRowWidth - Theme.GAP) / 2;
                 this.placeSavedButton.setWidth(savedWidth);
-                this.placeSavedButton.setTooltip(Tooltip.create(savedTooltip(saved)));
+                this.placeSavedButton.withHint(savedTooltip(saved));
                 this.placeButton.setX(this.detailX + savedWidth + Theme.GAP);
                 this.placeButton.setWidth(this.placeRowWidth - savedWidth - Theme.GAP);
                 this.placeButton.setMessage(tr("litematicaplus.schematics.place_here"));
@@ -544,7 +544,7 @@ final class SchematicsView extends TabView {
                 this.list.setScroll(0);
             }
             reload();
-        } else if (savedPlacement() != null) {
+        } else if (savedPlacement() != null && savedWarning(savedPlacement()) == null) {
             placeSaved();
         } else {
             place();

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.lts.litematicaplus.TestBootstrap;
 import org.lts.litematicaplus.placement.PlacementGrid;
+import org.lts.litematicaplus.placement.PlacementTransform;
 import org.lts.litematicaplus.placement.RegionPlacement;
 
 class EmbeddedPlacementTest {
@@ -88,6 +89,8 @@ class EmbeddedPlacementTest {
         assertTrue(read.matchesDimension("minecraft:overworld"));
         assertTrue(read.matchesWorld("anything"));
         assertFalse(full().matchesDimension("minecraft:overworld"));
+        assertTrue(full().matchesWorld("Play.Example.net"));
+        assertFalse(full().matchesWorld("other.example.net"));
     }
 
     @Test
@@ -129,11 +132,44 @@ class EmbeddedPlacementTest {
         Path source = directory.resolve("source.litematic");
         SchematicIo.write(source, sample(full()));
         Path sponge = SchematicIo.export(source, SchematicExport.Format.SPONGE);
-        assertEquals(full(), SchematicIo.readMetadata(sponge).placement);
-        assertEquals(full(), SchematicIo.read(sponge).metadata().placement);
+        EmbeddedPlacement merged = full().mergedFrom(0, 0, 0);
+        assertEquals(full().x(), merged.x());
+        assertEquals(full().grid(), merged.grid());
+        assertEquals(full().replacements(), merged.replacements());
+        assertTrue(merged.regions().isEmpty());
+        assertEquals(merged, SchematicIo.readMetadata(sponge).placement);
+        assertEquals(merged, SchematicIo.read(sponge).metadata().placement);
         EmbeddedPlacement moved = EmbeddedPlacement.at(7, 8, 9, Rotation.COUNTERCLOCKWISE_90, Mirror.NONE, "", "");
         SchematicIo.embedPlacement(sponge, moved);
         assertEquals(moved, SchematicIo.readMetadata(sponge).placement);
+    }
+
+    @Test
+    void spongeExportMovesOriginToTheMergedCorner(@TempDir Path directory) throws IOException {
+        RegionBuilder region = new RegionBuilder("Offset", 2, 1, 3, 2, 1, 1);
+        region.set(0, 0, 0, Blocks.STONE.defaultBlockState());
+        region.set(1, 0, 0, Blocks.GLASS.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.placement = new EmbeddedPlacement(10, 64, 10, Rotation.CLOCKWISE_90, Mirror.NONE, "", "",
+                Map.of("Offset", new RegionPlacement(1, 0, 0, Rotation.NONE, Mirror.NONE)), Set.of("Missing"),
+                PlacementGrid.NONE, Map.of(), 1, 1, 1);
+        Path source = directory.resolve("offset.litematic");
+        SchematicIo.write(source, new Schematic(metadata, Map.of("Offset", region.build())));
+        Path sponge = SchematicIo.export(source, SchematicExport.Format.SPONGE);
+        Schematic exported = SchematicIo.read(sponge);
+        EmbeddedPlacement moved = exported.metadata().placement;
+        assertEquals(0, exported.minX());
+        assertEquals(0, exported.minY());
+        assertEquals(0, exported.minZ());
+        PlacementTransform before = new PlacementTransform(10, 64, 10, Rotation.CLOCKWISE_90, Mirror.NONE);
+        PlacementTransform after = new PlacementTransform(moved.x(), moved.y(), moved.z(), moved.rotation(), moved.mirror());
+        for (int localX = 2; localX <= 3; localX++) {
+            assertEquals(before.worldX(localX, 3), after.worldX(localX - 2, 0));
+            assertEquals(before.worldZ(localX, 3), after.worldZ(localX - 2, 0));
+        }
+        assertEquals(before.worldY(1), after.worldY(0));
+        assertTrue(moved.regions().isEmpty());
+        assertTrue(moved.disabledRegions().isEmpty());
     }
 
     @Test

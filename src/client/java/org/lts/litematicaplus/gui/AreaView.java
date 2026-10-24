@@ -31,6 +31,7 @@ final class AreaView extends TabView {
     private static String fileName = "";
     private static boolean embedPlacement;
     private static String[] placeFields = {"", "", ""};
+    private static boolean placeEdited;
     private static Rotation placeRotation = Rotation.NONE;
     private static Mirror placeMirror = Mirror.NONE;
 
@@ -161,7 +162,7 @@ final class AreaView extends TabView {
     }
 
     private void addPlacementRow(int x, int y) {
-        if (embedPlacement && placeFields[0].isEmpty()) {
+        if (embedPlacement && !placeEdited) {
             fillPlacementFromSelection();
         }
         int turnWidth = Math.max(48, this.detailWidth / 4);
@@ -171,6 +172,7 @@ final class AreaView extends TabView {
                 () -> embedPlacement, button -> {
                     embedPlacement = !embedPlacement;
                     if (embedPlacement) {
+                        placeEdited = false;
                         fillPlacementFromSelection();
                     }
                     this.screen.refresh();
@@ -185,7 +187,10 @@ final class AreaView extends TabView {
             field.setTooltip(Tooltip.create(tr("litematicaplus.area.place_coordinate.tip")));
             field.setEditable(embedPlacement);
             field.setResponder(value -> {
-                placeFields[index] = value;
+                if (!value.equals(placeFields[index])) {
+                    placeFields[index] = value;
+                    placeEdited = true;
+                }
                 parse(field);
             });
             if (embedPlacement) {
@@ -212,6 +217,7 @@ final class AreaView extends TabView {
     private static void fillPlacementFromSelection() {
         List<AreaBox> boxes = SelectionManager.get().completeBoxes();
         if (boxes.isEmpty()) {
+            placeFields = new String[] {"", "", ""};
             return;
         }
         int minX = Integer.MAX_VALUE;
@@ -228,6 +234,9 @@ final class AreaView extends TabView {
     private EmbeddedPlacement placementToEmbed() {
         if (!embedPlacement) {
             return null;
+        }
+        if (!placeEdited) {
+            fillPlacementFromSelection();
         }
         int[] values = new int[3];
         for (int axis = 0; axis < 3; axis++) {

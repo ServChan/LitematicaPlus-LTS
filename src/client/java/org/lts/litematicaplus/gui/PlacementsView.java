@@ -30,6 +30,7 @@ import org.lts.litematicaplus.preview.PreviewService;
 import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 import org.lts.litematicaplus.world.PlacementVolume;
@@ -224,11 +225,13 @@ final class PlacementsView extends TabView {
             bottomY -= Theme.CONTROL_HEIGHT + 4;
         }
         if (schematic != null && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
-            boolean supported = SchematicIo.canEmbedPlacement(PlacementManager.resolve(selected.file()));
+            Path file = PlacementManager.resolve(selected.file());
+            boolean shared = selected.serverId() != null || file.startsWith(SyncmaticaClient.cacheDirectory());
+            boolean supported = !shared && SchematicIo.canEmbedPlacement(file);
             FlatButton embed = add(FlatButton.secondary(x, bottomY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
                     tr("litematicaplus.placements.embed"), button -> embed(selected, button.shiftHeld())));
-            embed.setTooltip(Tooltip.create(tr(supported ? "litematicaplus.placements.embed.tip"
-                    : "litematicaplus.placements.embed.unsupported")));
+            embed.setTooltip(Tooltip.create(tr(shared ? "litematicaplus.placements.embed.shared" : supported
+                    ? "litematicaplus.placements.embed.tip" : "litematicaplus.placements.embed.unsupported")));
             embed.active = supported && !this.embedding;
             bottomY -= Theme.CONTROL_HEIGHT + 4;
         }
@@ -505,10 +508,10 @@ final class PlacementsView extends TabView {
     }
 
     private void embed(SchematicPlacement placement, boolean workSettings) {
-        if (this.embedding) {
+        Path file = PlacementManager.resolve(placement.file());
+        if (this.embedding || placement.serverId() != null || file.startsWith(SyncmaticaClient.cacheDirectory())) {
             return;
         }
-        Path file = PlacementManager.resolve(placement.file());
         EmbeddedPlacement saved = PlacementManager.embedded(placement, workSettings, Session.dimension(this.minecraft),
                 Session.world(this.minecraft));
         this.embedding = true;

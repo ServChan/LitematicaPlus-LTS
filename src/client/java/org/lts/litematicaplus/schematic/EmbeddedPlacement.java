@@ -13,6 +13,7 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.placement.PlacementGrid;
+import org.lts.litematicaplus.placement.PlacementTransform;
 import org.lts.litematicaplus.placement.RegionPlacement;
 
 public record EmbeddedPlacement(int x, int y, int z, Rotation rotation, Mirror mirror, String dimension, String world,
@@ -60,7 +61,14 @@ public record EmbeddedPlacement(int x, int y, int z, Rotation rotation, Mirror m
     }
 
     public boolean matchesWorld(String current) {
-        return this.world.isEmpty() || this.world.equals(current);
+        return this.world.isEmpty() || this.world.equalsIgnoreCase(current);
+    }
+
+    public EmbeddedPlacement mergedFrom(int minX, int minY, int minZ) {
+        PlacementTransform transform = new PlacementTransform(this.x, this.y, this.z, this.rotation, this.mirror);
+        return new EmbeddedPlacement(transform.worldX(minX, minZ), transform.worldY(minY), transform.worldZ(minX, minZ),
+                this.rotation, this.mirror, this.dimension, this.world, Map.of(), Set.of(), this.grid, this.replacements,
+                this.zoneColumns, this.zoneRows, this.zoneFloors);
     }
 
     public static EmbeddedPlacement readFrom(CompoundTag metadata) {
@@ -95,8 +103,8 @@ public record EmbeddedPlacement(int x, int y, int z, Rotation rotation, Mirror m
                 break;
             }
             CompoundTag region = regionsTag.getCompoundOrEmpty(name);
-            RegionPlacement value = new RegionPlacement(region.getIntOr("x", 0), region.getIntOr("y", 0),
-                    region.getIntOr("z", 0), rotation(region.getStringOr("Rotation", "")),
+            RegionPlacement value = new RegionPlacement(clamp(region.getIntOr("x", 0)), clamp(region.getIntOr("y", 0)),
+                    clamp(region.getIntOr("z", 0)), rotation(region.getStringOr("Rotation", "")),
                     mirror(region.getStringOr("Mirror", "")));
             if (!value.isIdentity()) {
                 regions.put(name, value);
