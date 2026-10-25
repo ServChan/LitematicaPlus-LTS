@@ -18,7 +18,10 @@ import java.util.stream.Stream;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.compat.AxiomBridge;
@@ -29,6 +32,7 @@ import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.SchematicExport;
 import org.lts.litematicaplus.schematic.SchematicIo;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
+import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
 import org.lts.litematicaplus.util.Workers;
 
@@ -72,6 +76,13 @@ final class SchematicsView extends TabView {
     private ListPanel<Entry> list;
     private FlatButton placeButton;
     private FlatButton placeSavedButton;
+    private FlatButton placeEditButton;
+    private boolean editingPlace;
+    private boolean placeSaving;
+    private String[] placeFields = {"", "", ""};
+    private Rotation placeRotation = Rotation.NONE;
+    private Mirror placeMirror = Mirror.NONE;
+    private Path reselect;
     private int placeRowWidth;
     private FlatButton exportSponge;
     private FlatButton exportStructure;
@@ -195,21 +206,28 @@ final class SchematicsView extends TabView {
                 tr("litematicaplus.schematics.place"), button -> place()));
         this.deleteButton = add(FlatButton.danger(this.detailX + this.detailWidth - deleteWidth, placeY, deleteWidth,
                 deleteLabel(), button -> delete()));
-        add(FlatButton.secondary(this.detailX, buttonY, half, tr("litematicaplus.schematics.open_folder"),
+        add(FlatButton.secondary(this.detailX, buttonY, third, tr("litematicaplus.schematics.open_folder"),
                 button -> openFolder()));
-        add(FlatButton.secondary(this.detailX + half + Theme.GAP, buttonY, this.detailWidth - half - Theme.GAP,
+        add(FlatButton.secondary(this.detailX + third + Theme.GAP, buttonY, third,
                 tr("litematicaplus.schematics.refresh"), button -> {
                     PreviewService.retryFailed();
                     reload();
                 }));
+        this.placeEditButton = add(FlatButton.secondary(this.detailX + (third + Theme.GAP) * 2, buttonY,
+                this.detailWidth - (third + Theme.GAP) * 2, tr("litematicaplus.schematics.edit_place"),
+                button -> openPlaceEditor()));
+        this.placeEditButton.withHint(tr("litematicaplus.schematics.edit_place.tip"));
         int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 3;
-        this.previewSide = previews ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
+        this.previewSide = previews && !this.editingPlace ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
         this.preview = null;
         if (this.previewSide >= 64) {
             this.preview = add(new PreviewWidget(this.detailX + 8, this.top + 8, this.detailWidth - 16, this.previewSide,
                     previewSource(this.selected), previewName(this.selected)));
         } else {
             this.previewSide = 0;
+        }
+        if (this.editingPlace) {
+            addPlaceEditor(panelHeight);
         }
         updateButtons();
         if (this.entries.isEmpty() && !this.loading) {
@@ -221,7 +239,8 @@ final class SchematicsView extends TabView {
 
     private void updateButtons() {
         if (this.placeButton != null) {
-            boolean placeable = this.selected != null && !this.selected.directory() && this.minecraft.player != null;
+            boolean placeable = this.selected != null && !this.selected.directory() && this.minecraft.player != null
+                    && !this.editingPlace;
             EmbeddedPlacement saved = savedPlacement();
             this.placeButton.active = placeable;
             this.placeSavedButton.active = placeable;
@@ -239,7 +258,10 @@ final class SchematicsView extends TabView {
                 this.placeButton.setMessage(tr("litematicaplus.schematics.place"));
             }
         }
-        boolean file = this.selected != null && !this.selected.directory() && !this.exporting;
+        boolean file = this.selected != null && !this.selected.directory() && !this.exporting && !this.editingPlace;
+        if (this.placeEditButton != null) {
+            this.placeEditButton.active = file && this.metadata != null && !this.placeSaving && !shared(this.selected);
+        }
         if (this.exportSponge != null) {
             this.exportSponge.active = file;
             this.exportStructure.active = file;
@@ -322,6 +344,7 @@ final class SchematicsView extends TabView {
                     this.loading = false;
                     this.entries = result;
                     applyFilter();
+                    reselect();
                     loadVolumes();
                 });
             });
@@ -485,7 +508,195 @@ final class SchematicsView extends TabView {
         return entry == null ? "" : entry.name();
     }
 
+    private void reselect() {
+        Path target = this.reselect;
+        this.reselect = null;
+        if (target == null || this.list == null) {
+            return;
+        }
+        for (Entry entry : this.list.items()) {
+            if (!entry.directory() && entry.path().equals(target)) {
+                select(entry);
+                this.list.selectItem(entry);
+                return;
+            }
+        }
+    }
+
+    private static boolean shared(Entry entry) {
+        return entry != null && entry.path().toAbsolutePath().normalize().startsWith(SyncmaticaClient.cacheDirectory());
+    }
+
+    private void openPlaceEditor() {
+        if (this.selected == null || this.selected.directory() || this.metadata == null || shared(this.selected)) {
+            return;
+        }
+        EmbeddedPlacement saved = this.metadata.placement;
+        if (saved != null) {
+            this.placeFields = new String[] {Integer.toString(saved.x()), Integer.toString(saved.y()),
+                    Integer.toString(saved.z())};
+            this.placeRotation = saved.rotation();
+            this.placeMirror = saved.mirror();
+        } else {
+            fillPlaceFromPlayer();
+            this.placeRotation = Rotation.NONE;
+            this.placeMirror = Mirror.NONE;
+        }
+        this.editingPlace = true;
+        this.screen.refresh();
+    }
+
+    private void fillPlaceFromPlayer() {
+        if (this.minecraft.player == null) {
+            this.placeFields = new String[] {"", "", ""};
+            return;
+        }
+        BlockPos pos = this.minecraft.player.blockPosition();
+        this.placeFields = new String[] {Integer.toString(pos.getX()), Integer.toString(pos.getY()),
+                Integer.toString(pos.getZ())};
+    }
+
+    private void closePlaceEditor() {
+        this.editingPlace = false;
+        this.screen.refresh();
+    }
+
+    private int placeEditorTop() {
+        return this.top + 8 + 13 + 11;
+    }
+
+    private void addPlaceEditor(int panelHeight) {
+        int x = this.detailX + 8;
+        int inner = this.detailWidth - 16;
+        int y = placeEditorTop();
+        int cell = (inner - Theme.GAP * 2) / 3;
+        for (int axis = 0; axis < 3; axis++) {
+            int index = axis;
+            int width = axis == 2 ? inner - (cell + Theme.GAP) * 2 : cell;
+            EditBox field = field(x + axis * (cell + Theme.GAP), y, width, this.placeFields[axis],
+                    Component.literal(axis == 0 ? "X" : axis == 1 ? "Y" : "Z"), 9);
+            field.setResponder(value -> {
+                this.placeFields[index] = value;
+                coordinate(field);
+            });
+            coordinate(field);
+        }
+        y += Theme.CONTROL_HEIGHT + 4;
+        FlatButton here = add(FlatButton.secondary(x, y, cell, tr("litematicaplus.schematics.place_editor.here"),
+                button -> {
+                    fillPlaceFromPlayer();
+                    this.screen.refresh();
+                }));
+        here.active = this.minecraft.player != null;
+        add(FlatButton.secondary(x + cell + Theme.GAP, y, cell,
+                tr("litematicaplus.rotation." + this.placeRotation.name().toLowerCase(Locale.ROOT)), button -> {
+                    this.placeRotation = this.placeRotation.getRotated(Rotation.CLOCKWISE_90);
+                    this.screen.refresh();
+                }));
+        add(FlatButton.secondary(x + (cell + Theme.GAP) * 2, y, inner - (cell + Theme.GAP) * 2,
+                tr("litematicaplus.mirror." + this.placeMirror.name().toLowerCase(Locale.ROOT)), button -> {
+                    Mirror[] values = Mirror.values();
+                    this.placeMirror = values[(this.placeMirror.ordinal() + 1) % values.length];
+                    this.screen.refresh();
+                }));
+        int buttonsY = this.top + panelHeight - Theme.CONTROL_HEIGHT - 8;
+        FlatButton save = add(FlatButton.primary(x, buttonsY, cell, tr("litematicaplus.schematics.place_editor.save"),
+                button -> savePlace(false)));
+        save.active = !this.placeSaving;
+        FlatButton remove = add(FlatButton.danger(x + cell + Theme.GAP, buttonsY, cell,
+                tr("litematicaplus.schematics.place_editor.remove"), button -> savePlace(true)));
+        remove.active = !this.placeSaving && this.metadata != null && this.metadata.placement != null;
+        add(FlatButton.secondary(x + (cell + Theme.GAP) * 2, buttonsY, inner - (cell + Theme.GAP) * 2,
+                tr("litematicaplus.schematics.place_editor.cancel"), button -> closePlaceEditor()));
+    }
+
+    private static Integer coordinate(EditBox field) {
+        try {
+            int value = Integer.parseInt(field.getValue().strip());
+            if (value < -30000000 || value > 30000000) {
+                throw new NumberFormatException();
+            }
+            field.setTextColor(Theme.TEXT);
+            return value;
+        } catch (NumberFormatException exception) {
+            field.setTextColor(Theme.DANGER);
+            return null;
+        }
+    }
+
+    private static Integer coordinate(String text) {
+        try {
+            int value = Integer.parseInt(text.strip());
+            return value < -30000000 || value > 30000000 ? null : value;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private void savePlace(boolean remove) {
+        Entry entry = this.selected;
+        if (entry == null || entry.directory() || this.placeSaving || shared(entry)) {
+            return;
+        }
+        EmbeddedPlacement saved = null;
+        if (!remove) {
+            Integer x = coordinate(this.placeFields[0]);
+            Integer y = coordinate(this.placeFields[1]);
+            Integer z = coordinate(this.placeFields[2]);
+            if (x == null || y == null || z == null) {
+                status(tr("litematicaplus.area.place_invalid"));
+                return;
+            }
+            boolean inWorld = this.minecraft.level != null;
+            String dimension = inWorld ? Session.dimension(this.minecraft) : "";
+            String world = inWorld ? Session.world(this.minecraft) : "";
+            EmbeddedPlacement current = this.metadata == null ? null : this.metadata.placement;
+            saved = current == null ? EmbeddedPlacement.at(x, y, z, this.placeRotation, this.placeMirror, dimension, world)
+                    : current.withPose(x, y, z, this.placeRotation, this.placeMirror, dimension, world);
+        }
+        EmbeddedPlacement written = saved;
+        Path file = entry.path();
+        this.placeSaving = true;
+        this.screen.refresh();
+        try {
+            Workers.save().execute(() -> {
+                Component message;
+                boolean done;
+                try {
+                    SchematicIo.embedPlacement(file, written);
+                    message = tr(written == null ? "litematicaplus.schematics.place_editor.removed"
+                            : "litematicaplus.schematics.place_editor.saved", entry.name());
+                    done = true;
+                } catch (IOException | RuntimeException exception) {
+                    LitematicaPlusClient.LOGGER.warn("Could not write the placement into {}", file, exception);
+                    message = tr("litematicaplus.placements.embed_failed", Notify.describe(exception));
+                    done = false;
+                }
+                Component result = message;
+                boolean success = done;
+                this.minecraft.execute(() -> {
+                    this.placeSaving = false;
+                    status(result);
+                    if (success) {
+                        this.editingPlace = false;
+                        this.reselect = file;
+                        reload();
+                    }
+                    this.screen.refresh();
+                });
+            });
+        } catch (RejectedExecutionException exception) {
+            this.placeSaving = false;
+            status(tr("litematicaplus.placements.embed_failed", Notify.describe(exception)));
+            this.screen.refresh();
+        }
+    }
+
     private void select(Entry entry) {
+        if (this.editingPlace && entry != this.selected) {
+            this.editingPlace = false;
+            this.screen.refresh();
+        }
         if (entry != this.deleteArmed) {
             disarmDelete();
         }
@@ -725,6 +936,10 @@ final class SchematicsView extends TabView {
             graphics.textWithWordWrap(this.font, tr("litematicaplus.schematics.pick_hint"), x, y, inner, Theme.TEXT_DIM, false);
             return;
         }
+        if (this.editingPlace) {
+            extractPlaceEditor(graphics, x, inner, panelHeight, mouseX, mouseY);
+            return;
+        }
         String title = this.metadata != null && !this.metadata.name.isBlank() ? this.metadata.name
                 : SchematicIo.baseName(this.selected.path());
         Ui.clipped(graphics, this.font, title, x, y, inner, Theme.TEXT_BRIGHT);
@@ -778,6 +993,26 @@ final class SchematicsView extends TabView {
             graphics.enableScissor(this.detailX + 1, y, this.detailX + this.detailWidth - 1, limit);
             graphics.textWithWordWrap(this.font, Component.literal(meta.description), x, y + 4, inner, Theme.TEXT_DIM, false);
             graphics.disableScissor();
+        }
+    }
+
+    private void extractPlaceEditor(GuiGraphicsExtractor graphics, int x, int inner, int panelHeight, int mouseX,
+            int mouseY) {
+        Ui.clipped(graphics, this.font, tr("litematicaplus.schematics.place_editor.title", this.selected.name()).getString(),
+                x, this.top + 8, inner, Theme.TEXT_BRIGHT);
+        Ui.label(graphics, this.font, tr("litematicaplus.schematics.place_editor.corner"), x, placeEditorTop() - 11);
+        int textTop = placeEditorTop() + (Theme.CONTROL_HEIGHT + 4) * 2 + 2;
+        int textBottom = this.top + panelHeight - Theme.CONTROL_HEIGHT - 12;
+        boolean inWorld = this.minecraft.level != null;
+        Component where = inWorld ? tr("litematicaplus.schematics.place_editor.where", Session.dimension(this.minecraft),
+                Session.world(this.minecraft)) : tr("litematicaplus.schematics.place_editor.anywhere");
+        EmbeddedPlacement current = this.metadata == null ? null : this.metadata.placement;
+        if (current != null && (!current.regions().isEmpty() || current.grid().active() || current.hasWorkSettings())) {
+            where = where.copy().append(" ").append(tr("litematicaplus.schematics.place_editor.keeps"));
+        }
+        int lines = Math.max(0, (textBottom - textTop) / 10);
+        if (lines > 0) {
+            Ui.wrapped(graphics, this.font, where, x, textTop, inner, lines, Theme.TEXT_DIM, mouseX, mouseY);
         }
     }
 

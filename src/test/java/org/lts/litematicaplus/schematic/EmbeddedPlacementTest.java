@@ -173,13 +173,84 @@ class EmbeddedPlacementTest {
     }
 
     @Test
-    void otherFormatsAreRefused(@TempDir Path directory) throws IOException {
+    void structureAndBlueprintExportsCarryPlacement(@TempDir Path directory) throws IOException {
+        Path source = directory.resolve("source.litematic");
+        SchematicIo.write(source, sample(full()));
+        EmbeddedPlacement merged = full().mergedFrom(0, 0, 0);
+        for (SchematicExport.Format format : new SchematicExport.Format[] {SchematicExport.Format.STRUCTURE,
+                SchematicExport.Format.BLUEPRINT}) {
+            Path exported = SchematicIo.export(source, format);
+            assertEquals(merged, SchematicIo.readMetadata(exported).placement, format.name());
+            assertEquals(merged, SchematicIo.read(exported).metadata().placement, format.name());
+        }
+    }
+
+    @Test
+    void blueprintExportFollowsTheCroppedCorner(@TempDir Path directory) throws IOException {
+        RegionBuilder region = new RegionBuilder("Main", 0, 0, 0, 3, 1, 1);
+        region.set(0, 0, 0, Blocks.STRUCTURE_VOID.defaultBlockState());
+        region.set(1, 0, 0, Blocks.STONE.defaultBlockState());
+        region.set(2, 0, 0, Blocks.GLASS.defaultBlockState());
+        SchematicMetadata metadata = new SchematicMetadata();
+        metadata.placement = EmbeddedPlacement.at(10, 64, 10, Rotation.CLOCKWISE_90, Mirror.NONE, "", "");
+        Path source = directory.resolve("cropped.litematic");
+        SchematicIo.write(source, new Schematic(metadata, Map.of("Main", region.build())));
+        Path blueprint = SchematicIo.export(source, SchematicExport.Format.BLUEPRINT);
+        Schematic exported = SchematicIo.read(blueprint);
+        assertEquals(2, exported.maxX() - exported.minX() + 1);
+        EmbeddedPlacement moved = exported.metadata().placement;
+        PlacementTransform before = new PlacementTransform(10, 64, 10, Rotation.CLOCKWISE_90, Mirror.NONE);
+        PlacementTransform after = new PlacementTransform(moved.x(), moved.y(), moved.z(), moved.rotation(), moved.mirror());
+        for (int localX = 1; localX <= 2; localX++) {
+            assertEquals(before.worldX(localX, 0), after.worldX(localX - 1, 0));
+            assertEquals(before.worldZ(localX, 0), after.worldZ(localX - 1, 0));
+        }
+    }
+
+    @Test
+    void everyFormatAcceptsAWrittenPlacement(@TempDir Path directory) throws IOException {
         Path source = directory.resolve("source.litematic");
         SchematicIo.write(source, sample(null));
         Path structure = SchematicIo.export(source, SchematicExport.Format.STRUCTURE);
-        assertFalse(SchematicIo.canEmbedPlacement(structure));
-        byte[] before = Files.readAllBytes(structure);
-        assertThrows(IOException.class, () -> SchematicIo.embedPlacement(structure, full()));
-        assertArrayEquals(before, Files.readAllBytes(structure));
+        Path blueprint = SchematicIo.export(source, SchematicExport.Format.BLUEPRINT);
+        Path legacy = directory.resolve("legacy.schematic");
+        CompoundTag mcedit = new CompoundTag();
+        mcedit.putShort("Width", (short) 2);
+        mcedit.putShort("Height", (short) 1);
+        mcedit.putShort("Length", (short) 1);
+        mcedit.putByteArray("Blocks", new byte[] {1, 0});
+        mcedit.putByteArray("Data", new byte[2]);
+        mcedit.putString("Materials", "Alpha");
+        NbtIo.writeCompressed(mcedit, legacy);
+        EmbeddedPlacement moved = EmbeddedPlacement.at(-5, 70, 12, Rotation.CLOCKWISE_180, Mirror.LEFT_RIGHT,
+                "minecraft:overworld", "singleplayer:Test");
+        for (Path file : new Path[] {structure, blueprint, legacy}) {
+            long blocks = SchematicIo.read(file).metadata().totalBlocks;
+            assertTrue(SchematicIo.canEmbedPlacement(file));
+            SchematicIo.embedPlacement(file, moved);
+            assertEquals(moved, SchematicIo.readMetadata(file).placement, file.getFileName().toString());
+            Schematic reread = SchematicIo.read(file);
+            assertEquals(moved, reread.metadata().placement, file.getFileName().toString());
+            assertEquals(blocks, reread.metadata().totalBlocks, file.getFileName().toString());
+            SchematicIo.embedPlacement(file, null);
+            assertNull(SchematicIo.readMetadata(file).placement, file.getFileName().toString());
+            assertFalse(Files.exists(file.resolveSibling(file.getFileName() + ".tmp")));
+        }
+        assertEquals(1L, SchematicIo.read(legacy).metadata().totalBlocks);
+    }
+
+    @Test
+    void filesThatAreNotSchematicsAreRefused(@TempDir Path directory) throws IOException {
+        Path text = directory.resolve("notes.txt");
+        Files.writeString(text, "hello");
+        assertFalse(SchematicIo.canEmbedPlacement(text));
+        assertThrows(IOException.class, () -> SchematicIo.embedPlacement(text, full()));
+        Path fake = directory.resolve("fake.nbt");
+        CompoundTag root = new CompoundTag();
+        root.putString("Something", "else");
+        NbtIo.writeCompressed(root, fake);
+        byte[] before = Files.readAllBytes(fake);
+        assertThrows(IOException.class, () -> SchematicIo.embedPlacement(fake, full()));
+        assertArrayEquals(before, Files.readAllBytes(fake));
     }
 }

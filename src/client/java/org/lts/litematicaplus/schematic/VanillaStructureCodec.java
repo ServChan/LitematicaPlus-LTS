@@ -79,6 +79,7 @@ public final class VanillaStructureCodec {
         metadata.totalBlocks = count;
         metadata.unknownStates = unresolved.count();
         metadata.format = "structure";
+        metadata.placement = EmbeddedPlacement.readFrom(root);
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
     }
 }

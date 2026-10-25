@@ -64,6 +64,12 @@ public record EmbeddedPlacement(int x, int y, int z, Rotation rotation, Mirror m
         return this.world.isEmpty() || this.world.equalsIgnoreCase(current);
     }
 
+    public EmbeddedPlacement withPose(int x, int y, int z, Rotation rotation, Mirror mirror, String dimension,
+            String world) {
+        return new EmbeddedPlacement(x, y, z, rotation, mirror, dimension, world, this.regions, this.disabledRegions,
+                this.grid, this.replacements, this.zoneColumns, this.zoneRows, this.zoneFloors);
+    }
+
     public EmbeddedPlacement mergedFrom(int minX, int minY, int minZ) {
         PlacementTransform transform = new PlacementTransform(this.x, this.y, this.z, this.rotation, this.mirror);
         return new EmbeddedPlacement(transform.worldX(minX, minZ), transform.worldY(minY), transform.worldZ(minX, minZ),

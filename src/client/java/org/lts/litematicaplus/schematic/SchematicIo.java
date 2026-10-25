@@ -112,9 +112,11 @@ public final class SchematicIo {
 
     private static void readDimensions(Path path, SchematicMetadata metadata) {
         CollectFields visitor = switch (metadata.format) {
-            case "structure" -> new CollectFields(new FieldSelector(ListTag.TYPE, "size"));
+            case "structure" -> new CollectFields(new FieldSelector(ListTag.TYPE, "size"),
+                    new FieldSelector(CompoundTag.TYPE, EmbeddedPlacement.CONTAINER_KEY));
             case "mcedit" -> new CollectFields(new FieldSelector(ShortTag.TYPE, "Width"),
-                    new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"));
+                    new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"),
+                    new FieldSelector(CompoundTag.TYPE, EmbeddedPlacement.CONTAINER_KEY));
             default -> new CollectFields(new FieldSelector(ShortTag.TYPE, "Width"),
                     new FieldSelector(ShortTag.TYPE, "Height"), new FieldSelector(ShortTag.TYPE, "Length"),
                     new FieldSelector("Schematic", ShortTag.TYPE, "Width"),
@@ -135,9 +137,8 @@ public final class SchematicIo {
         int y;
         int z;
         CompoundTag body = root.getCompound("Schematic").orElse(root);
-        if ("sponge".equals(metadata.format)) {
-            metadata.placement = EmbeddedPlacement.readFrom(body.getCompoundOrEmpty("Metadata"));
-        }
+        metadata.placement = EmbeddedPlacement.readFrom("sponge".equals(metadata.format)
+                ? body.getCompoundOrEmpty("Metadata") : root);
         if (body.contains("Width")) {
             x = body.getShortOr("Width", (short) 0) & 0xFFFF;
             y = body.getShortOr("Height", (short) 0) & 0xFFFF;
@@ -186,14 +187,17 @@ public final class SchematicIo {
     }
 
     public static boolean canEmbedPlacement(Path path) {
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.endsWith(LITEMATIC_EXTENSION) || name.endsWith(".schem");
+        return isSupported(path);
     }
 
     public static void embedPlacement(Path path, EmbeddedPlacement placement) throws IOException {
         if (!canEmbedPlacement(path)) {
             throw new LocalizedException("litematicaplus.error.embed_format",
-                    "Only .litematic and .schem files can keep a placement: " + path.getFileName());
+                    "Not a schematic file, the placement was not written: " + path.getFileName());
+        }
+        if (isBlueprint(path)) {
+            writeBytes(path, AxiomBlueprintCodec.withPlacement(Files.readAllBytes(path), placement));
+            return;
         }
         CompoundTag root;
         try {
@@ -201,19 +205,33 @@ public final class SchematicIo {
         } catch (RuntimeException exception) {
             throw new LocalizedException("litematicaplus.error.unreadable", "Unreadable NBT in " + path.getFileName(), exception);
         }
-        CompoundTag holder;
         if (root.contains("Regions") && root.contains("Version")) {
-            holder = root;
+            putIntoMetadata(root, placement);
+        } else if (McEditCodec.matches(root) || VanillaStructureCodec.matches(root)) {
+            EmbeddedPlacement.writeTo(root, placement);
         } else if (SpongeCodec.matches(root)) {
-            holder = root.getCompound("Schematic").orElse(root);
+            putIntoMetadata(root.getCompound("Schematic").orElse(root), placement);
         } else {
             throw new LocalizedException("litematicaplus.error.embed_format",
-                    "Only .litematic and .schem files can keep a placement: " + path.getFileName());
+                    "Not a schematic file, the placement was not written: " + path.getFileName());
         }
+        writeRoot(path, root);
+    }
+
+    private static void putIntoMetadata(CompoundTag holder, EmbeddedPlacement placement) {
         CompoundTag metadata = holder.getCompoundOrEmpty("Metadata");
         EmbeddedPlacement.writeTo(metadata, placement);
         holder.put("Metadata", metadata);
-        writeRoot(path, root);
+    }
+
+    private static void writeBytes(Path path, byte[] bytes) throws IOException {
+        Path temp = path.resolveSibling(path.getFileName() + ".tmp");
+        try {
+            Files.write(temp, bytes);
+            AtomicFilePersistence.replace(temp, path);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     public static Path export(Path source, SchematicExport.Format format) throws IOException {

@@ -116,6 +116,7 @@ public final class McEditCodec {
         metadata.totalBlocks = count;
         metadata.unknownStates = unresolved.count();
         metadata.format = "mcedit";
+        metadata.placement = EmbeddedPlacement.readFrom(root);
         return new Schematic(metadata, Map.of(fallbackName, builder.build()));
     }
 

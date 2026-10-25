@@ -41,7 +41,7 @@ public final class AxiomBlueprintCodec {
     private static final int THUMBNAIL_SIZE = 128;
 
     public record Header(int version, String name, String author, List<String> tags, int blockCount,
-            boolean containsAir) {
+            boolean containsAir, EmbeddedPlacement placement) {
     }
 
     private record Section(int x, int y, int z, PalettedContainer<BlockState> blocks) {
@@ -71,7 +71,32 @@ public final class AxiomBlueprintCodec {
             list.getString(i).ifPresent(tags::add);
         }
         return new Header(tag.getIntOr("Version", 0), tag.getStringOr("Name", ""), tag.getStringOr("Author", ""),
-                tags, tag.getIntOr("BlockCount", 0), tag.getBooleanOr("ContainsAir", false));
+                tags, tag.getIntOr("BlockCount", 0), tag.getBooleanOr("ContainsAir", false),
+                EmbeddedPlacement.readFrom(tag));
+    }
+
+    public static byte[] withPlacement(byte[] file, EmbeddedPlacement placement) throws IOException {
+        DataInputStream data = new DataInputStream(new ByteArrayInputStream(file));
+        if (data.readInt() != MAGIC) {
+            throw new LocalizedException("litematicaplus.error.not_schematic", "Not an Axiom blueprint");
+        }
+        int length = data.readInt();
+        if (length < 0 || length > HEADER_LIMIT) {
+            throw new LocalizedException("litematicaplus.error.corrupt", "Axiom blueprint header is " + length + " bytes");
+        }
+        CompoundTag header = NbtIo.read(new DataInputStream(new ByteArrayInputStream(data.readNBytes(length))));
+        byte[] rest = data.readAllBytes();
+        EmbeddedPlacement.writeTo(header, placement);
+        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+        NbtIo.write(header, new DataOutputStream(encoded));
+        ByteArrayOutputStream result = new ByteArrayOutputStream(file.length + 256);
+        DataOutputStream output = new DataOutputStream(result);
+        output.writeInt(MAGIC);
+        output.writeInt(encoded.size());
+        encoded.writeTo(output);
+        output.write(rest);
+        output.flush();
+        return result.toByteArray();
     }
 
     public static Schematic read(InputStream input, String fallbackName) throws IOException {
@@ -210,6 +235,7 @@ public final class AxiomBlueprintCodec {
         metadata.totalBlocks = count;
         metadata.unknownStates = unresolved.count();
         metadata.format = "axiom";
+        metadata.placement = header.placement();
         return new Schematic(metadata, Map.of(name, builder.build()));
     }
 
@@ -234,6 +260,9 @@ public final class AxiomBlueprintCodec {
         BlockState voidAir = Blocks.VOID_AIR.defaultBlockState();
         boolean containsAir = false;
         int blockCount = 0;
+        int writtenX = Integer.MAX_VALUE;
+        int writtenY = Integer.MAX_VALUE;
+        int writtenZ = Integer.MAX_VALUE;
         int[] cells = merged.cells();
         for (int y = 0; y < merged.sizeY(); y++) {
             for (int z = 0; z < merged.sizeZ(); z++) {
@@ -258,6 +287,9 @@ public final class AxiomBlueprintCodec {
                         sections.put(key, section);
                     }
                     section.set(x & 15, y & 15, z & 15, state);
+                    writtenX = Math.min(writtenX, x);
+                    writtenY = Math.min(writtenY, y);
+                    writtenZ = Math.min(writtenZ, z);
                 }
             }
         }
@@ -313,6 +345,10 @@ public final class AxiomBlueprintCodec {
         header.putBoolean("LockedThumbnail", false);
         header.putInt("BlockCount", blockCount);
         header.putBoolean("ContainsAir", containsAir);
+        EmbeddedPlacement placement = schematic.metadata().placement;
+        EmbeddedPlacement.writeTo(header, placement == null || writtenX == Integer.MAX_VALUE ? null
+                : placement.mergedFrom(schematic.minX() + writtenX, schematic.minY() + writtenY,
+                        schematic.minZ() + writtenZ));
         DataOutputStream data = new DataOutputStream(output);
         data.writeInt(MAGIC);
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();

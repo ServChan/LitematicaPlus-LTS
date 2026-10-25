@@ -133,8 +133,7 @@ public final class SchematicExport {
         metadata.putString("Name", source.name);
         metadata.putString("Author", source.author);
         metadata.putLong("Date", source.timeCreated);
-        EmbeddedPlacement.writeTo(metadata, source.placement == null ? null
-                : source.placement.mergedFrom(schematic.minX(), schematic.minY(), schematic.minZ()));
+        EmbeddedPlacement.writeTo(metadata, mergedPlacement(schematic));
         CompoundTag body = new CompoundTag();
         body.putInt("Version", 3);
         body.putInt("DataVersion", BlockStateNbt.currentDataVersion());
@@ -148,6 +147,11 @@ public final class SchematicExport {
         CompoundTag root = new CompoundTag();
         root.put("Schematic", body);
         return root;
+    }
+
+    static EmbeddedPlacement mergedPlacement(Schematic schematic) {
+        EmbeddedPlacement placement = schematic.metadata().placement;
+        return placement == null ? null : placement.mergedFrom(schematic.minX(), schematic.minY(), schematic.minZ());
     }
 
     public static CompoundTag structure(Schematic schematic) throws IOException {
@@ -217,6 +221,7 @@ public final class SchematicExport {
         if (!schematic.metadata().author.isBlank()) {
             root.putString("author", schematic.metadata().author);
         }
+        EmbeddedPlacement.writeTo(root, mergedPlacement(schematic));
         return root;
     }
 
