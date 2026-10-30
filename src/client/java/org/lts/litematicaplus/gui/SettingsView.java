@@ -3,6 +3,7 @@ package org.lts.litematicaplus.gui;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -28,6 +29,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.lts.litematicaplus.Hotkeys;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.tool.Substitutes;
 
@@ -929,8 +931,13 @@ final class SettingsView extends TabView {
             return;
         }
         try {
-            if (!Files.isDirectory(FabricLoader.getInstance().getGameDir().resolve(path))) {
+            Path resolved = FabricLoader.getInstance().getGameDir().resolve(path).toAbsolutePath().normalize();
+            if (!Files.isDirectory(resolved)) {
                 this.status = tr("litematicaplus.settings.folder_missing");
+                return;
+            }
+            if (!PlacementManager.validSchematicRoot(resolved)) {
+                this.status = tr("litematicaplus.settings.folder_overlaps");
                 return;
             }
         } catch (InvalidPathException exception) {

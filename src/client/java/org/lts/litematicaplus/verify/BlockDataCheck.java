@@ -1,6 +1,7 @@
 package org.lts.litematicaplus.verify;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2LongMap;
 import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.materials.ContainerMemory;
+import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class BlockDataCheck {
@@ -61,11 +63,20 @@ public final class BlockDataCheck {
         final PlacementVolume volume;
         final long[] keys;
         final Long2ObjectLinkedOpenHashMap<Problem> problems = new Long2ObjectLinkedOpenHashMap<>();
+        final Long2ObjectOpenHashMap<CompoundTag> upgraded = new Long2ObjectOpenHashMap<>();
         int cursor;
 
         Scan(PlacementVolume volume) {
             this.volume = volume;
             this.keys = volume.blockEntities().keySet().toLongArray();
+        }
+
+        CompoundTag tag(long key) {
+            CompoundTag raw = this.volume.blockEntities().get(key);
+            if (raw == null || this.volume.dataVersion() <= 0 || this.volume.dataVersion() >= BlockStateNbt.currentDataVersion()) {
+                return raw;
+            }
+            return this.upgraded.computeIfAbsent(key, ignored -> BlockStateNbt.fixBlockEntity(raw, this.volume.dataVersion()));
         }
     }
 
@@ -158,7 +169,7 @@ public final class BlockDataCheck {
             BlockPos pos = new BlockPos(x, y, z);
             if (engine.categoryAt(x, y, z) == MismatchType.CORRECT) {
                 BlockEntity live = level.getBlockEntity(pos);
-                kind = live == null ? null : compare(level, scan.volume, pos, scan.volume.blockEntities().get(key), live);
+                kind = live == null ? null : compare(level, scan, pos, scan.tag(key), live);
             }
             if (kind == null) {
                 changed |= scan.problems.remove(key) != null;
@@ -173,7 +184,7 @@ public final class BlockDataCheck {
         return changed;
     }
 
-    private static Kind compare(ClientLevel level, PlacementVolume volume, BlockPos pos, CompoundTag tag, BlockEntity live) {
+    private static Kind compare(ClientLevel level, Scan scan, BlockPos pos, CompoundTag tag, BlockEntity live) {
         RegistryOps<Tag> ops = level.registryAccess().createSerializationContext(NbtOps.INSTANCE);
         if (live instanceof SignBlockEntity sign) {
             return sameText(ops, tag, "front_text", sign.getText(SignTextSlot.FRONT))
@@ -193,7 +204,7 @@ public final class BlockDataCheck {
                     .map(expected -> expected.equals(pot.getDecorations()) ? null : Kind.POT).orElse(null);
         }
         if (live instanceof Container) {
-            return compareContainer(volume, pos, tag);
+            return compareContainer(scan, pos, tag);
         }
         return null;
     }
@@ -214,7 +225,7 @@ public final class BlockDataCheck {
         return true;
     }
 
-    private static Kind compareContainer(PlacementVolume volume, BlockPos pos, CompoundTag tag) {
+    private static Kind compareContainer(Scan scan, BlockPos pos, CompoundTag tag) {
         ContainerMemory.Stored stored = ContainerMemory.at(pos);
         if (stored == null) {
             return null;
@@ -222,7 +233,7 @@ public final class BlockDataCheck {
         Reference2LongOpenHashMap<Item> expected = new Reference2LongOpenHashMap<>();
         addItems(tag, expected);
         if (stored.pair() != null) {
-            CompoundTag other = volume.blockEntities().get(stored.pair().asLong());
+            CompoundTag other = scan.tag(stored.pair().asLong());
             if (other != null) {
                 addItems(other, expected);
             }

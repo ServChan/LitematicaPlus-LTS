@@ -1139,5 +1139,6 @@
   "litematicaplus.message.edit_undone": "Edición deshecha: %1$s %2$s %3$s (quedan: %4$s)",
   "litematicaplus.message.edit_undone_all": "Ediciones deshechas: %s",
   "litematicaplus.message.edit_reset": "Se borraron las ediciones del esquema: el espejo las mueve",
-  "litematicaplus.layers.auto_next": "Capa auto"
+  "litematicaplus.layers.auto_next": "Capa auto",
+  "litematicaplus.settings.folder_overlaps": "Esta carpeta se solapa con la carpeta schematics, así que no se puede añadir. Elige otra carpeta."
 }

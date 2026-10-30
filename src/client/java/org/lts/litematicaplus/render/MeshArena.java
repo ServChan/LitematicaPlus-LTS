@@ -91,9 +91,6 @@ public final class MeshArena {
         long limit = Math.min(MAX_PAGE, device.getDeviceInfo().limits().maxMemoryAllocationSize());
         long capacity = Math.max(Math.min(this.nextPage, limit), bytes);
         capacity -= capacity % this.vertexSize;
-        if (capacity < bytes) {
-            capacity += this.vertexSize;
-        }
         GpuBuffer buffer = device.createBuffer(() -> this.label, GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, capacity);
         this.nextPage = Math.min(MAX_PAGE, this.nextPage * 2L);
         Page page = new Page(this.nextId++, buffer, capacity);
@@ -108,26 +105,6 @@ public final class MeshArena {
             this.pages.remove(page);
             page.buffer.close();
         }
-    }
-
-    public int pages() {
-        return this.pages.size();
-    }
-
-    public long reservedBytes() {
-        long total = 0L;
-        for (Page page : this.pages) {
-            total += page.allocator.capacity();
-        }
-        return total;
-    }
-
-    public long usedBytes() {
-        long total = 0L;
-        for (Page page : this.pages) {
-            total += page.allocator.used();
-        }
-        return total;
     }
 
     public void close() {

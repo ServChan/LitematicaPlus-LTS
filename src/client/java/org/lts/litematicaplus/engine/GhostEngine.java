@@ -1172,12 +1172,18 @@ public final class GhostEngine {
                     BlockColors colors = minecraft.getBlockColors();
                     try {
                         executor.execute(() -> {
-                            BlockState[] world = loaded ? snapshot.world(this.worldPool) : null;
-                            long[] border = loaded ? snapshot.border() : null;
-                            SectionJob job = new SectionJob(key, generation, revision, section, volume, special, hidden,
-                                    world, border, unknownFaces, neighbours, remembered, layer, current, models, fluids,
-                                    colors, jobOptions);
-                            this.completed.add(new Completed(runtime, SectionMesher.run(job), world));
+                            BlockState[] world = null;
+                            try {
+                                world = loaded ? snapshot.world(this.worldPool) : null;
+                                long[] border = loaded ? snapshot.border() : null;
+                                SectionJob job = new SectionJob(key, generation, revision, section, volume, special, hidden,
+                                        world, border, unknownFaces, neighbours, remembered, layer, current, models, fluids,
+                                        colors, jobOptions);
+                                this.completed.add(new Completed(runtime, SectionMesher.run(job), world));
+                            } catch (Throwable failure) {
+                                this.completed.add(new Completed(runtime, MeshResult.failed(key, generation, revision, failure),
+                                        world));
+                            }
                         });
                     } catch (RejectedExecutionException exception) {
                         this.inFlight--;

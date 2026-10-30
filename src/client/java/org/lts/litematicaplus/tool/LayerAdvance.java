@@ -17,14 +17,16 @@ public final class LayerAdvance {
     private static final int LOOK_AHEAD = 32;
     private static int ticks;
     private static boolean checking;
-    private static LayerRange finished;
+    private static boolean enabled;
+    private static LayerRange armed;
 
     private LayerAdvance() {
     }
 
     public static void tick(Minecraft minecraft) {
         if (!LitematicaPlusConfig.current().autoLayerAdvance) {
-            finished = null;
+            enabled = false;
+            armed = null;
             return;
         }
         if (++ticks % CHECK_TICKS != 0 || checking || minecraft.player == null) {
@@ -35,9 +37,13 @@ public final class LayerAdvance {
         PlacementRuntime runtime = placement == null ? null : engine.runtime(placement.id());
         PlacementVolume volume = runtime == null ? null : runtime.volume();
         LayerRange layer = engine.layer();
-        if (volume == null || layer.isAll() || layer.mode() == LayerRange.Mode.ALL_ABOVE || layer.equals(finished)
+        if (volume == null || layer.isAll() || layer.mode() == LayerRange.Mode.ALL_ABOVE
                 || runtime.pendingSections() > 0 || engine.inFlight() > 0) {
             return;
+        }
+        if (!enabled) {
+            enabled = true;
+            armed = layer;
         }
         List<LayerRange> ranges = new ArrayList<>(LOOK_AHEAD + 1);
         for (int step = 0; step <= LOOK_AHEAD; step++) {
@@ -60,6 +66,11 @@ public final class LayerAdvance {
         };
     }
 
+    private static void moveTo(LayerRange next) {
+        armed = next;
+        ToolController.get().applyLayer(next);
+    }
+
     static int nextStep(long[] tallies, int steps) {
         if (tallies[1] > 0L && tallies[0] < tallies[1]) {
             return 0;
@@ -77,19 +88,23 @@ public final class LayerAdvance {
     private static void advance(LayerRange layer, long[] tallies, int top) {
         int step = nextStep(tallies, LOOK_AHEAD);
         if (step == 0) {
+            armed = layer;
+            return;
+        }
+        if (!layer.equals(armed)) {
             return;
         }
         int front = layer.mode() == LayerRange.Mode.RANGE ? layer.max() : layer.single();
         if (step > 0) {
             if (front + step <= top) {
-                ToolController.get().applyLayer(layer.shifted(step));
+                moveTo(layer.shifted(step));
                 return;
             }
         } else if (front + LOOK_AHEAD < top) {
-            ToolController.get().applyLayer(layer.shifted(LOOK_AHEAD));
+            moveTo(layer.shifted(LOOK_AHEAD));
             return;
         }
-        finished = layer;
+        armed = null;
         Notify.actionBar("litematicaplus.message.layers_done");
     }
 }

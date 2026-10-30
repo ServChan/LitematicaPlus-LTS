@@ -18,6 +18,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.RegionBuilder;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
@@ -127,7 +128,7 @@ public final class PlacementBake {
             int y = BlockPos.getY(entry.getLongKey());
             int z = BlockPos.getZ(entry.getLongKey());
             if (scope.contains(x, y, z) && volume.paletteIndexAt(x, y, z) >= 0) {
-                CompoundTag tag = entry.getValue().copy();
+                CompoundTag tag = BlockStateNbt.fixBlockEntity(entry.getValue(), volume.dataVersion()).copy();
                 tag.putInt("x", x - minX);
                 tag.putInt("y", y - minY);
                 tag.putInt("z", z - minZ);
@@ -147,7 +148,7 @@ public final class PlacementBake {
         SchematicMetadata metadata = new SchematicMetadata();
         metadata.name = name;
         metadata.author = author;
-        metadata.dataVersion = volume.dataVersion();
+        metadata.dataVersion = BlockStateNbt.currentDataVersion();
         long now = System.currentTimeMillis();
         metadata.timeCreated = now;
         metadata.timeModified = now;

@@ -1139,5 +1139,6 @@
   "litematicaplus.message.edit_undone": "Правка отменена: %1$s %2$s %3$s (осталось: %4$s)",
   "litematicaplus.message.edit_undone_all": "Отменено правок: %s",
   "litematicaplus.message.edit_reset": "Правки схемы сброшены: отражение меняет их положение",
-  "litematicaplus.layers.auto_next": "Автослой"
+  "litematicaplus.layers.auto_next": "Автослой",
+  "litematicaplus.settings.folder_overlaps": "Эта папка пересекается с папкой schematics, поэтому её нельзя добавить. Укажите другую папку."
 }

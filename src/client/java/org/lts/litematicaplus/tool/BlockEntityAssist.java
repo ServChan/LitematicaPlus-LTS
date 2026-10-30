@@ -27,6 +27,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.schematic.BlockStateNbt;
 
 public final class BlockEntityAssist {
     private static final int TIMEOUT_TICKS = 60;
@@ -57,7 +58,11 @@ public final class BlockEntityAssist {
 
     private static CompoundTag data(BlockPos pos) {
         PlacementRuntime runtime = GhostEngine.get().runtimeAt(pos.getX(), pos.getY(), pos.getZ());
-        return runtime == null || runtime.volume() == null ? null : runtime.volume().blockEntities().get(pos.asLong());
+        if (runtime == null || runtime.volume() == null) {
+            return null;
+        }
+        CompoundTag tag = runtime.volume().blockEntities().get(pos.asLong());
+        return tag == null ? null : BlockStateNbt.fixBlockEntity(tag, runtime.volume().dataVersion());
     }
 
     public static void afterPlace(Minecraft minecraft, BlockPos pos, BlockState target) {

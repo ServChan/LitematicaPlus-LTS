@@ -300,6 +300,12 @@ public final class SessionStore {
                 entry.editedCells = new LinkedHashMap<>();
             }
             entry.editedCells.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null);
+            if (entry.editedCells.size() > MAX_REMOVED_CELLS) {
+                Map<String, String> kept = new LinkedHashMap<>();
+                entry.editedCells.entrySet().stream().limit(MAX_REMOVED_CELLS)
+                        .forEach(pair -> kept.put(pair.getKey(), pair.getValue()));
+                entry.editedCells = kept;
+            }
         }
         scope.selectedPlacement = scope.selectedPlacement == null ? "" : scope.selectedPlacement;
         scope.toolMode = scope.toolMode == null ? "" : scope.toolMode;

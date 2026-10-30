@@ -36,8 +36,11 @@ public final class MeshResult {
     }
 
     static MeshResult failed(SectionJob job, Throwable failure) {
-        return new MeshResult(job.sectionKey(), job.generation(), job.revision(), null, new int[0],
-                null, 0, null, 0, null, 0, failure);
+        return failed(job.sectionKey(), job.generation(), job.revision(), failure);
+    }
+
+    public static MeshResult failed(long sectionKey, int generation, int revision, Throwable failure) {
+        return new MeshResult(sectionKey, generation, revision, null, new int[0], null, 0, null, 0, null, 0, failure);
     }
 
     public ByteBuffer ghostData() {

@@ -213,7 +213,8 @@ public final class SectionVerdict {
                     counts[unknown]++;
                 }
             }
-            return new SectionVerdict(shared(categories, counts), counts, sparse(NO_INTS), sparse(NO_INTS), false);
+            byte[] shared = counts[unknown] == 0 ? ALL_NONE : shared(categories, counts);
+            return new SectionVerdict(shared, counts, sparse(NO_INTS), sparse(NO_INTS), false);
         }
         StateComparator comparator = StateComparator.get();
         BlockState lastState = null;

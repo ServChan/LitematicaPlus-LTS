@@ -1139,5 +1139,6 @@
   "litematicaplus.message.edit_undone": "Edit undone: %1$s %2$s %3$s (left: %4$s)",
   "litematicaplus.message.edit_undone_all": "Edits undone: %s",
   "litematicaplus.message.edit_reset": "Schematic edits were cleared: mirroring moves them",
-  "litematicaplus.layers.auto_next": "Auto layer"
+  "litematicaplus.layers.auto_next": "Auto layer",
+  "litematicaplus.settings.folder_overlaps": "This folder overlaps the schematics folder, so it cannot be added. Choose another folder."
 }

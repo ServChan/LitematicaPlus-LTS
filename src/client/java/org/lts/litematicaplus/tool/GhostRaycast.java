@@ -39,6 +39,7 @@ public final class GhostRaycast {
         if (real != null && real.getType() != HitResult.Type.MISS) {
             reach = Math.min(reach, eye.distanceTo(real.getLocation()) + 0.01);
         }
+        net.minecraft.world.phys.AABB body = minecraft.player.getBoundingBox();
         int x = floor(eye.x);
         int y = floor(eye.y);
         int z = floor(eye.z);
@@ -54,7 +55,7 @@ public final class GhostRaycast {
         double travelled = 0.0;
         for (int guard = 0; guard < 256 && travelled <= reach; guard++) {
             MismatchType type = engine.categoryAt(x, y, z);
-            boolean wanted = anyCategory ? type != MismatchType.NONE
+            boolean wanted = anyCategory ? type != MismatchType.NONE && !body.intersects(x, y, z, x + 1.0, y + 1.0, z + 1.0)
                     : type == MismatchType.MISSING || type == MismatchType.WRONG_STATE || type == MismatchType.WRONG_BLOCK;
             if (wanted) {
                 BlockState state = engine.schematicStateAt(x, y, z);

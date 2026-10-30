@@ -70,14 +70,18 @@ public final class PlacementManager {
                 .toAbsolutePath().normalize();
     }
 
+    public static boolean validSchematicRoot(Path path) {
+        Path main = schematicsDirectory();
+        return !path.startsWith(main) && !main.startsWith(path);
+    }
+
     public static List<Path> extraSchematicRoots() {
         Path game = FabricLoader.getInstance().getGameDir();
-        Path main = schematicsDirectory();
         List<Path> roots = new ArrayList<>();
         for (String folder : LitematicaPlusConfig.current().extraSchematicFolders) {
             try {
                 Path path = game.resolve(folder).toAbsolutePath().normalize();
-                if (!path.startsWith(main) && !main.startsWith(path) && !roots.contains(path)) {
+                if (validSchematicRoot(path) && !roots.contains(path)) {
                     roots.add(path);
                 }
             } catch (InvalidPathException exception) {
@@ -228,9 +232,15 @@ public final class PlacementManager {
             List<SharedPlacement.RegionShift> shifts) {
         boolean geometry = placement.x() != x || placement.y() != y || placement.z() != z
                 || placement.rotation() != rotation || placement.mirror() != mirror;
+        int quarterTurns = (rotation.ordinal() - placement.rotation().ordinal() + 4) % 4;
+        boolean mirrored = placement.mirror() != mirror;
         placement.setOrigin(x, y, z);
         placement.setRotation(rotation);
         placement.setMirror(mirror);
+        turnCells(placement, quarterTurns);
+        if (mirrored) {
+            resetCells(placement);
+        }
         placement.setLocked(true);
         placement.setPendingShifts(List.copyOf(shifts));
         geometry |= resolveShifts(placement);
@@ -279,32 +289,36 @@ public final class PlacementManager {
         }
         int quarterTurns = (rotation.ordinal() - placement.rotation().ordinal() + 4) % 4;
         placement.setRotation(rotation);
-        if (!placement.editedCells().isEmpty()) {
-            Rotation turn = Rotation.values()[quarterTurns];
-            Map<Long, BlockState> turnedEdits = new LinkedHashMap<>();
-            placement.editedCells().forEach((cell, state) -> {
-                BlockPos offset = BlockPos.of(cell);
-                for (int i = 0; i < quarterTurns; i++) {
-                    offset = offset.rotate(Rotation.CLOCKWISE_90);
-                }
-                turnedEdits.put(offset.asLong(), state.rotate(turn));
-            });
-            placement.editedCells().clear();
-            placement.editedCells().putAll(turnedEdits);
-        }
-        if (!placement.removedCells().isEmpty()) {
-            List<Long> turned = new ArrayList<>(placement.removedCells().size());
-            for (long cell : placement.removedCells()) {
-                BlockPos offset = BlockPos.of(cell);
-                for (int i = 0; i < quarterTurns; i++) {
-                    offset = offset.rotate(Rotation.CLOCKWISE_90);
-                }
-                turned.add(offset.asLong());
-            }
-            placement.removedCells().clear();
-            placement.removedCells().addAll(turned);
-        }
+        turnCells(placement, quarterTurns);
         geometryChanged(placement);
+    }
+
+    private static long turned(long cell, int quarterTurns) {
+        BlockPos offset = BlockPos.of(cell);
+        for (int i = 0; i < quarterTurns; i++) {
+            offset = offset.rotate(Rotation.CLOCKWISE_90);
+        }
+        return offset.asLong();
+    }
+
+    private static void turnCells(SchematicPlacement placement, int quarterTurns) {
+        if (quarterTurns == 0) {
+            return;
+        }
+        Rotation turn = Rotation.values()[quarterTurns];
+        Map<Long, BlockState> edits = new LinkedHashMap<>();
+        placement.editedCells().forEach((cell, state) -> edits.put(turned(cell, quarterTurns), state.rotate(turn)));
+        placement.editedCells().clear();
+        placement.editedCells().putAll(edits);
+        placement.removedCells().replaceAll(cell -> turned(cell, quarterTurns));
+    }
+
+    private static void resetCells(SchematicPlacement placement) {
+        if (!placement.removedCells().isEmpty() || !placement.editedCells().isEmpty()) {
+            placement.removedCells().clear();
+            placement.editedCells().clear();
+            Notify.actionBar("litematicaplus.message.edit_reset");
+        }
     }
 
     public boolean removeCell(SchematicPlacement placement, BlockPos world) {
@@ -316,6 +330,7 @@ public final class PlacementManager {
             return false;
         }
         placement.removedCells().add(cell);
+        placement.editedCells().remove(cell);
         geometryChanged(placement);
         return true;
     }
@@ -375,11 +390,7 @@ public final class PlacementManager {
             return;
         }
         placement.setMirror(mirror);
-        placement.removedCells().clear();
-        if (!placement.editedCells().isEmpty()) {
-            placement.editedCells().clear();
-            Notify.actionBar("litematicaplus.message.edit_reset");
-        }
+        resetCells(placement);
         geometryChanged(placement);
     }
 
