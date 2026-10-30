@@ -23,6 +23,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.SessionStore;
@@ -67,6 +68,23 @@ public final class PlacementManager {
     public static Path schematicsDirectory() {
         return FabricLoader.getInstance().getGameDir().resolve(LitematicaPlusConfig.current().schematicsDirectory)
                 .toAbsolutePath().normalize();
+    }
+
+    public static List<Path> extraSchematicRoots() {
+        Path game = FabricLoader.getInstance().getGameDir();
+        Path main = schematicsDirectory();
+        List<Path> roots = new ArrayList<>();
+        for (String folder : LitematicaPlusConfig.current().extraSchematicFolders) {
+            try {
+                Path path = game.resolve(folder).toAbsolutePath().normalize();
+                if (!path.startsWith(main) && !main.startsWith(path) && !roots.contains(path)) {
+                    roots.add(path);
+                }
+            } catch (InvalidPathException exception) {
+                LitematicaPlusClient.LOGGER.warn("Skipping the schematics folder {}", folder);
+            }
+        }
+        return roots;
     }
 
     public static Path resolve(String file) {
@@ -259,8 +277,97 @@ public final class PlacementManager {
         if (placement.locked() || placement.rotation() == rotation) {
             return;
         }
+        int quarterTurns = (rotation.ordinal() - placement.rotation().ordinal() + 4) % 4;
         placement.setRotation(rotation);
+        if (!placement.editedCells().isEmpty()) {
+            Rotation turn = Rotation.values()[quarterTurns];
+            Map<Long, BlockState> turnedEdits = new LinkedHashMap<>();
+            placement.editedCells().forEach((cell, state) -> {
+                BlockPos offset = BlockPos.of(cell);
+                for (int i = 0; i < quarterTurns; i++) {
+                    offset = offset.rotate(Rotation.CLOCKWISE_90);
+                }
+                turnedEdits.put(offset.asLong(), state.rotate(turn));
+            });
+            placement.editedCells().clear();
+            placement.editedCells().putAll(turnedEdits);
+        }
+        if (!placement.removedCells().isEmpty()) {
+            List<Long> turned = new ArrayList<>(placement.removedCells().size());
+            for (long cell : placement.removedCells()) {
+                BlockPos offset = BlockPos.of(cell);
+                for (int i = 0; i < quarterTurns; i++) {
+                    offset = offset.rotate(Rotation.CLOCKWISE_90);
+                }
+                turned.add(offset.asLong());
+            }
+            placement.removedCells().clear();
+            placement.removedCells().addAll(turned);
+        }
         geometryChanged(placement);
+    }
+
+    public boolean removeCell(SchematicPlacement placement, BlockPos world) {
+        if (placement.locked()) {
+            return false;
+        }
+        long cell = world.subtract(placement.origin()).asLong();
+        if (placement.removedCells().contains(cell)) {
+            return false;
+        }
+        placement.removedCells().add(cell);
+        geometryChanged(placement);
+        return true;
+    }
+
+    public boolean editCell(SchematicPlacement placement, BlockPos world, BlockState state) {
+        if (placement.locked()) {
+            return false;
+        }
+        long cell = world.subtract(placement.origin()).asLong();
+        placement.removedCells().remove(Long.valueOf(cell));
+        placement.editedCells().remove(cell);
+        placement.editedCells().put(cell, state);
+        geometryChanged(placement);
+        return true;
+    }
+
+    public BlockPos undoLastEdit(SchematicPlacement placement) {
+        if (placement.locked() || placement.editedCells().isEmpty()) {
+            return null;
+        }
+        long cell = placement.editedCells().pollLastEntry().getKey();
+        geometryChanged(placement);
+        return BlockPos.of(cell).offset(placement.origin());
+    }
+
+    public int undoAllEdits(SchematicPlacement placement) {
+        int count = placement.editedCells().size();
+        if (placement.locked() || count == 0) {
+            return 0;
+        }
+        placement.editedCells().clear();
+        geometryChanged(placement);
+        return count;
+    }
+
+    public BlockPos restoreLastCell(SchematicPlacement placement) {
+        if (placement.locked() || placement.removedCells().isEmpty()) {
+            return null;
+        }
+        long cell = placement.removedCells().remove(placement.removedCells().size() - 1);
+        geometryChanged(placement);
+        return BlockPos.of(cell).offset(placement.origin());
+    }
+
+    public int restoreAllCells(SchematicPlacement placement) {
+        int count = placement.removedCells().size();
+        if (placement.locked() || count == 0) {
+            return 0;
+        }
+        placement.removedCells().clear();
+        geometryChanged(placement);
+        return count;
     }
 
     public void mirror(SchematicPlacement placement, Mirror mirror) {
@@ -268,6 +375,11 @@ public final class PlacementManager {
             return;
         }
         placement.setMirror(mirror);
+        placement.removedCells().clear();
+        if (!placement.editedCells().isEmpty()) {
+            placement.editedCells().clear();
+            Notify.actionBar("litematicaplus.message.edit_reset");
+        }
         geometryChanged(placement);
     }
 
@@ -583,6 +695,18 @@ public final class PlacementManager {
                     placement.replacements().put(from, to);
                 }
             }
+            if (entry.removedCells != null) {
+                placement.removedCells().addAll(entry.removedCells);
+            }
+            if (entry.editedCells != null) {
+                entry.editedCells.forEach((cell, text) -> {
+                    try {
+                        placement.editedCells().put(Long.parseLong(cell), BlockStateNbt.parse(text));
+                    } catch (RuntimeException exception) {
+                        LitematicaPlusClient.LOGGER.warn("Skipping edited block {} of placement {}", text, entry.name);
+                    }
+                });
+            }
             this.placements.add(placement);
             if (entry.id.equals(data.selectedPlacement)) {
                 this.selected = id;
@@ -639,6 +763,9 @@ public final class PlacementManager {
                 entry.replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
                         BuiltInRegistries.BLOCK.getKey(pair.getValue()).toString());
             }
+            entry.removedCells = new ArrayList<>(placement.removedCells());
+            placement.editedCells().forEach((cell, state) ->
+                    entry.editedCells.put(Long.toString(cell), BlockStateNbt.format(state)));
             data.placements.add(entry);
         }
         data.selectedPlacement = this.selected == null ? "" : this.selected.toString();

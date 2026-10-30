@@ -1,6 +1,8 @@
 package org.lts.litematicaplus.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,6 +14,7 @@ import java.util.function.IntSupplier;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -91,6 +94,7 @@ final class SettingsView extends TabView {
     private int pendingModifierKey = -1;
     private boolean bindingsChanged;
     private Component status = Component.empty();
+    private static String folderDraft = "";
     private int statusColor = Theme.TEXT_DIM;
     private EditBox searchBox;
     private int searchCursor = -1;
@@ -473,9 +477,11 @@ final class SettingsView extends TabView {
                 rows.add(toggle("loose_blocks", c -> c.looseBlocks, (c, v) -> c.looseBlocks = v));
                 rows.add(toggle("soil_interchangeable", c -> c.soilInterchangeable, (c, v) -> c.soilInterchangeable = v));
                 rows.add(toggle("trust_hidden", c -> c.trustHiddenBlocks, (c, v) -> c.trustHiddenBlocks = v));
+                rows.add(toggle("verify_block_data", c -> c.verifyBlockData, (c, v) -> c.verifyBlockData = v));
                 rows.add(toggle("material_swap", c -> c.materialSwap, (c, v) -> c.materialSwap = v));
                 rows.add(header("scope"));
                 rows.add(toggle("count_visible_only", c -> c.countVisibleOnly, (c, v) -> c.countVisibleOnly = v));
+                rows.add(toggle("auto_layer", c -> c.autoLayerAdvance, (c, v) -> c.autoLayerAdvance = v));
                 rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
             }
             case HUD -> {
@@ -501,6 +507,10 @@ final class SettingsView extends TabView {
                 rows.add(toggle("schematic_preview", c -> c.schematicPreview, (c, v) -> c.schematicPreview = v));
                 rows.add(toggle("preview_models", c -> c.previewModels, (c, v) -> c.previewModels = v));
                 rows.add(row("default_author", this::authorRow));
+                rows.add(row("schematic_folder_add", this::addFolderRow));
+                for (String folder : this.working.extraSchematicFolders) {
+                    rows.add(row("schematic_folder", (x, y, width) -> folderRow(folder, x, y, width)));
+                }
                 rows.add(header("together"));
                 rows.add(toggle("syncmatica", c -> c.syncmaticaEnabled, (c, v) -> c.syncmaticaEnabled = v));
                 rows.add(toggle("zone_hide_messages", c -> c.zoneHideMessages, (c, v) -> c.zoneHideMessages = v));
@@ -901,6 +911,50 @@ final class SettingsView extends TabView {
             this.working.defaultAuthor = value;
             changed();
         });
+    }
+
+    private void addFolderRow(int x, int y, int width) {
+        int buttonWidth = Math.min(90, width / 3);
+        EditBox box = field(x, y, width - buttonWidth - Theme.GAP, folderDraft,
+                tr("litematicaplus.option.schematic_folder_add"), 512);
+        describe(box, "schematic_folder_add");
+        box.setResponder(value -> folderDraft = value);
+        add(FlatButton.secondary(x + width - buttonWidth, y, buttonWidth, tr("litematicaplus.settings.folder_add"),
+                button -> addFolder()));
+    }
+
+    private void addFolder() {
+        String path = folderDraft.strip().replace("\"", "");
+        if (path.isEmpty()) {
+            return;
+        }
+        try {
+            if (!Files.isDirectory(FabricLoader.getInstance().getGameDir().resolve(path))) {
+                this.status = tr("litematicaplus.settings.folder_missing");
+                return;
+            }
+        } catch (InvalidPathException exception) {
+            this.status = tr("litematicaplus.settings.folder_missing");
+            return;
+        }
+        if (!this.working.extraSchematicFolders.contains(path)) {
+            this.working.extraSchematicFolders.add(path);
+        }
+        folderDraft = "";
+        changed();
+        this.screen.refresh();
+    }
+
+    private void folderRow(String folder, int x, int y, int width) {
+        int buttonWidth = Math.min(90, width / 3);
+        FlatButton label = add(FlatButton.secondary(x, y, width - buttonWidth - Theme.GAP, Component.literal(folder),
+                button -> { }));
+        label.setTooltip(Tooltip.create(Component.literal(folder)));
+        add(FlatButton.danger(x + width - buttonWidth, y, buttonWidth, tr("litematicaplus.settings.folder_remove"), button -> {
+            this.working.extraSchematicFolders.remove(folder);
+            changed();
+            this.screen.refresh();
+        }));
     }
 
     private void hudPositionRow(int x, int y, int width) {

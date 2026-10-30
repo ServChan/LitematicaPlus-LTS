@@ -28,6 +28,7 @@ import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SelectionManager;
 import org.lts.litematicaplus.tool.EntityAssist;
 import org.lts.litematicaplus.tool.InventoryHighlight;
+import org.lts.litematicaplus.verify.BlockDataCheck;
 import org.lts.litematicaplus.verify.MismatchType;
 import org.lts.litematicaplus.world.PlacementVolume;
 
@@ -128,6 +129,16 @@ public final class BoxRenderer {
             for (BlockPos pos : InventoryHighlight.positions()) {
                 box(LINES, FILLS, camera, pos.getX() - 0.03, pos.getY() - 0.03, pos.getZ() - 0.03, pos.getX() + 1.03,
                         pos.getY() + 1.03, pos.getZ() + 1.03, HIGHLIGHT_COLOR, 3.0F, fill);
+            }
+        }
+        if (visible && config.renderEnabled && config.renderOverlay && config.verifyBlockData) {
+            int color = MismatchType.WRONG_DATA.color();
+            for (BlockDataCheck.Problem problem : BlockDataCheck.visible()) {
+                BlockPos pos = problem.pos();
+                if (near(camera, pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ())) {
+                    box(LINES, FILLS, camera, pos.getX() - 0.02, pos.getY() - 0.02, pos.getZ() - 0.02, pos.getX() + 1.02,
+                            pos.getY() + 1.02, pos.getZ() + 1.02, color, 2.5F, color & 0x38FFFFFF);
+                }
             }
         }
         if (visible) {

@@ -21,6 +21,7 @@ import org.lts.litematicaplus.compat.AxiomBridge;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.schematic.SchematicTrim;
 import org.lts.litematicaplus.selection.AreaBox;
 import org.lts.litematicaplus.selection.SchematicCapture;
 import org.lts.litematicaplus.selection.SelectionManager;
@@ -149,7 +150,16 @@ final class AreaView extends TabView {
             addAxiomRow(x, axiomTop + 11);
         }
         int saveWidth = Math.min(110, this.detailWidth / 3);
-        EditBox file = field(x, this.saveTop + 11, this.detailWidth, fileName, tr("litematicaplus.area.file_name"), 80);
+        int trimWidth = Math.min(110, this.detailWidth / 3);
+        EditBox file = field(x, this.saveTop + 11, this.detailWidth - trimWidth - Theme.GAP, fileName,
+                tr("litematicaplus.area.file_name"), 80);
+        FlatButton trim = add(FlatButton.toggle(x + this.detailWidth - trimWidth, this.saveTop + 11, trimWidth,
+                tr("litematicaplus.area.trim"), () -> LitematicaPlusConfig.current().trimOnSave, button -> {
+                    LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+                    config.trimOnSave = !config.trimOnSave;
+                    LitematicaPlusConfig.save(config);
+                }));
+        trim.withHint(tr("litematicaplus.area.trim.tip"));
         file.setResponder(value -> {
             fileName = value;
             disarmOverwrite();
@@ -360,7 +370,7 @@ final class AreaView extends TabView {
         }
     }
 
-    private static String cleanName(String raw) {
+    static String cleanName(String raw) {
         String clean = raw.strip().replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
         if (clean.toLowerCase(java.util.Locale.ROOT).endsWith(SchematicIo.LITEMATIC_EXTENSION)) {
             clean = clean.substring(0, clean.length() - SchematicIo.LITEMATIC_EXTENSION.length());
@@ -417,10 +427,11 @@ final class AreaView extends TabView {
                 return;
             }
             result.schematic().metadata().placement = embedded;
+            boolean trim = LitematicaPlusConfig.current().trimOnSave;
             try {
                 Workers.save().execute(() -> {
                     try {
-                        SchematicIo.write(target, result.schematic());
+                        SchematicIo.write(target, trim ? SchematicTrim.trim(result.schematic()) : result.schematic());
                         long blocks = result.schematic().metadata().totalBlocks;
                         this.minecraft.execute(() -> PlacementManager.get().invalidate(target));
                         if (result.unloadedChunks() > 0) {

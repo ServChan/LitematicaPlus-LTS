@@ -235,6 +235,13 @@ final class PlacementsView extends TabView {
             embed.active = supported && !this.embedding;
             bottomY -= Theme.CONTROL_HEIGHT + 4;
         }
+        if (schematic != null && bottomY - y >= (Theme.CONTROL_HEIGHT + 4) * 2) {
+            FlatButton bake = add(FlatButton.secondary(x, bottomY - Theme.CONTROL_HEIGHT - 4, this.detailWidth,
+                    tr("litematicaplus.placements.save_as"),
+                    button -> this.minecraft.gui.setScreen(new SavePlacementScreen(this.screen, selected))));
+            bake.setTooltip(Tooltip.create(tr("litematicaplus.placements.save_as.tip")));
+            bottomY -= Theme.CONTROL_HEIGHT + 4;
+        }
         if (hasRegions) {
             if (bottomY - y - 16 >= INLINE_REGIONS_MIN_HEIGHT) {
                 this.regionsTop = y + 12;

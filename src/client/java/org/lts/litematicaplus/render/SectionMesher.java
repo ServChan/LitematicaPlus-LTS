@@ -36,6 +36,7 @@ public final class SectionMesher {
     private static final int SOUTH = 8;
     private static final int WEST = 16;
     private static final int EAST = 32;
+    private static final int FACE_CELLS = 6 * 16 * GreedyFaces.AREA;
     private static final int[] DX = {0, 0, 0, 0, -1, 1};
     private static final int[] DY = {-1, 1, 0, 0, 0, 0};
     private static final int[] DZ = {0, 0, -1, 1, 0, 0};
@@ -48,6 +49,11 @@ public final class SectionMesher {
     private final NativeWriter lines = new NativeWriter(1 << 14);
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
     private final IntArrayList specials = new IntArrayList();
+    private final int[] faceColors = new int[FACE_CELLS];
+    private final boolean[] faceUsed = new boolean[FACE_CELLS / GreedyFaces.AREA];
+    private float baseX;
+    private float baseY;
+    private float baseZ;
 
     private SectionMesher() {
     }
@@ -126,6 +132,9 @@ public final class SectionMesher {
                     && (live.world() != null || options.throughWalls())) {
                 this.fill.reset();
                 this.lines.reset();
+                this.baseX = (sectionX << 4) & GhostRenderer.ANCHOR_MASK;
+                this.baseY = (sectionY << 4) & GhostRenderer.ANCHOR_MASK;
+                this.baseZ = (sectionZ << 4) & GhostRenderer.ANCHOR_MASK;
                 buildOverlay(job, verdict, view, sectionX << 4, sectionY << 4, sectionZ << 4);
                 fillVertices = this.fill.size() / 16;
                 lineVertices = this.lines.size() / 24;
@@ -143,6 +152,8 @@ public final class SectionMesher {
             fillVertices = 0;
             lineVertices = 0;
             this.specials.clear();
+            java.util.Arrays.fill(this.faceColors, 0);
+            java.util.Arrays.fill(this.faceUsed, false);
             if (MESH_FAILURES.getAndIncrement() < 5) {
                 LitematicaPlusClient.LOGGER.error("Could not mesh a schematic section; it keeps its verdict without a mesh",
                         exception);
@@ -271,7 +282,7 @@ public final class SectionMesher {
             int rgb = options.color(category) & 0xFFFFFF;
             float fillAlpha = category == MISSING ? options.fillAlpha() * 0.45F : options.fillAlpha();
             if (fillAlpha > 0.004F) {
-                emitFill(x, y, z, exposed, abgr(rgb, fillAlpha));
+                collectFaces(x, y, z, exposed, abgr(rgb, fillAlpha));
             }
             if (options.lineAlpha() > 0.004F) {
                 int concave = 0;
@@ -291,6 +302,7 @@ public final class SectionMesher {
                 emitEdges(x, y, z, exposed, concave, abgr(rgb, options.lineAlpha()));
             }
         }
+        emitFaces();
     }
 
     private static byte[] withoutHidden(SectionJob job, byte[] categories) {
@@ -358,50 +370,96 @@ public final class SectionMesher {
         return a << 24 | (rgb & 0xFF) << 16 | rgb & 0xFF00 | rgb >> 16 & 0xFF;
     }
 
-    private void emitFill(int x, int y, int z, int exposed, int color) {
-        float x0 = x - EXPAND;
-        float y0 = y - EXPAND;
-        float z0 = z - EXPAND;
-        float x1 = x + 1 + EXPAND;
-        float y1 = y + 1 + EXPAND;
-        float z1 = z + 1 + EXPAND;
-        this.fill.ensure(6 * 4 * 16);
+    private void collectFaces(int x, int y, int z, int exposed, int color) {
         if ((exposed & DOWN) != 0) {
-            this.fill.positionColor(x0, y0, z0, color);
-            this.fill.positionColor(x1, y0, z0, color);
-            this.fill.positionColor(x1, y0, z1, color);
-            this.fill.positionColor(x0, y0, z1, color);
+            mark(0, y, x, z, color);
         }
         if ((exposed & UP) != 0) {
-            this.fill.positionColor(x0, y1, z0, color);
-            this.fill.positionColor(x0, y1, z1, color);
-            this.fill.positionColor(x1, y1, z1, color);
-            this.fill.positionColor(x1, y1, z0, color);
+            mark(1, y, x, z, color);
         }
         if ((exposed & NORTH) != 0) {
-            this.fill.positionColor(x0, y0, z0, color);
-            this.fill.positionColor(x0, y1, z0, color);
-            this.fill.positionColor(x1, y1, z0, color);
-            this.fill.positionColor(x1, y0, z0, color);
+            mark(2, z, x, y, color);
         }
         if ((exposed & SOUTH) != 0) {
-            this.fill.positionColor(x0, y0, z1, color);
-            this.fill.positionColor(x1, y0, z1, color);
-            this.fill.positionColor(x1, y1, z1, color);
-            this.fill.positionColor(x0, y1, z1, color);
+            mark(3, z, x, y, color);
         }
         if ((exposed & WEST) != 0) {
-            this.fill.positionColor(x0, y0, z0, color);
-            this.fill.positionColor(x0, y0, z1, color);
-            this.fill.positionColor(x0, y1, z1, color);
-            this.fill.positionColor(x0, y1, z0, color);
+            mark(4, x, z, y, color);
         }
         if ((exposed & EAST) != 0) {
-            this.fill.positionColor(x1, y0, z0, color);
-            this.fill.positionColor(x1, y1, z0, color);
-            this.fill.positionColor(x1, y1, z1, color);
-            this.fill.positionColor(x1, y0, z1, color);
+            mark(5, x, z, y, color);
         }
+    }
+
+    private void mark(int face, int plane, int a, int b, int color) {
+        int slice = face * 16 + plane;
+        this.faceUsed[slice] = true;
+        this.faceColors[slice * GreedyFaces.AREA + a + b * GreedyFaces.SIDE] = color;
+    }
+
+    private void emitFaces() {
+        for (int slice = 0; slice < this.faceUsed.length; slice++) {
+            if (!this.faceUsed[slice]) {
+                continue;
+            }
+            this.faceUsed[slice] = false;
+            int face = slice / 16;
+            int plane = slice % 16;
+            GreedyFaces.merge(this.faceColors, slice * GreedyFaces.AREA,
+                    (a, b, width, height, color) -> emitFace(face, plane, a, b, width, height, color));
+        }
+    }
+
+    private void emitFace(int face, int plane, int a, int b, int width, int height, int color) {
+        float a0 = a - EXPAND;
+        float a1 = a + width + EXPAND;
+        float b0 = b - EXPAND;
+        float b1 = b + height + EXPAND;
+        float low = plane - EXPAND;
+        float high = plane + 1 + EXPAND;
+        this.fill.ensure(4 * 16);
+        switch (face) {
+            case 0 -> {
+                vertex(a0, low, b0, color);
+                vertex(a1, low, b0, color);
+                vertex(a1, low, b1, color);
+                vertex(a0, low, b1, color);
+            }
+            case 1 -> {
+                vertex(a0, high, b0, color);
+                vertex(a0, high, b1, color);
+                vertex(a1, high, b1, color);
+                vertex(a1, high, b0, color);
+            }
+            case 2 -> {
+                vertex(a0, b0, low, color);
+                vertex(a0, b1, low, color);
+                vertex(a1, b1, low, color);
+                vertex(a1, b0, low, color);
+            }
+            case 3 -> {
+                vertex(a0, b0, high, color);
+                vertex(a1, b0, high, color);
+                vertex(a1, b1, high, color);
+                vertex(a0, b1, high, color);
+            }
+            case 4 -> {
+                vertex(low, b0, a0, color);
+                vertex(low, b0, a1, color);
+                vertex(low, b1, a1, color);
+                vertex(low, b1, a0, color);
+            }
+            default -> {
+                vertex(high, b0, a0, color);
+                vertex(high, b1, a0, color);
+                vertex(high, b1, a1, color);
+                vertex(high, b0, a1, color);
+            }
+        }
+    }
+
+    private void vertex(float x, float y, float z, int color) {
+        this.fill.positionColor(this.baseX + x, this.baseY + y, this.baseZ + z, color);
     }
 
     private void emitEdges(int x, int y, int z, int exposed, int concave, int color) {
@@ -435,9 +493,15 @@ public final class SectionMesher {
         byte nx = (byte) (bx > ax ? 127 : 0);
         byte ny = (byte) (by > ay ? 127 : 0);
         byte nz = (byte) (bz > az ? 127 : 0);
-        this.lines.lineVertex(ax, ay, az, color, nx, ny, nz, LINE_WIDTH);
-        this.lines.lineVertex(ax, ay, az, color, nx, ny, nz, LINE_WIDTH);
-        this.lines.lineVertex(bx, by, bz, color, nx, ny, nz, LINE_WIDTH);
-        this.lines.lineVertex(bx, by, bz, color, nx, ny, nz, LINE_WIDTH);
+        float startX = this.baseX + ax;
+        float startY = this.baseY + ay;
+        float startZ = this.baseZ + az;
+        float endX = this.baseX + bx;
+        float endY = this.baseY + by;
+        float endZ = this.baseZ + bz;
+        this.lines.lineVertex(startX, startY, startZ, color, nx, ny, nz, LINE_WIDTH);
+        this.lines.lineVertex(startX, startY, startZ, color, nx, ny, nz, LINE_WIDTH);
+        this.lines.lineVertex(endX, endY, endZ, color, nx, ny, nz, LINE_WIDTH);
+        this.lines.lineVertex(endX, endY, endZ, color, nx, ny, nz, LINE_WIDTH);
     }
 }

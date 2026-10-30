@@ -96,6 +96,11 @@ public final class LitematicaPlusGameTest implements FabricClientGameTest {
                 checkHealthy();
                 return;
             }
+            if (System.getProperty("litematicaplus.guideOnly") != null) {
+                GuideSuite.run(context, world);
+                checkHealthy();
+                return;
+            }
             if (System.getProperty("litematicaplus.uiOnly") != null) {
                 UiSuite.run(context, world);
                 checkHealthy();

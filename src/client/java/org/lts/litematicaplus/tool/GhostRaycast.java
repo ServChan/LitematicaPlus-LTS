@@ -21,6 +21,10 @@ public final class GhostRaycast {
     }
 
     public static Hit trace(Minecraft minecraft, Filter filter) {
+        return trace(minecraft, filter, 0.0, false);
+    }
+
+    public static Hit trace(Minecraft minecraft, Filter filter, double range, boolean anyCategory) {
         if (minecraft.player == null || minecraft.level == null) {
             return null;
         }
@@ -30,7 +34,7 @@ public final class GhostRaycast {
         }
         Vec3 eye = minecraft.player.getEyePosition(1.0F);
         Vec3 look = minecraft.player.getViewVector(1.0F);
-        double reach = minecraft.player.blockInteractionRange();
+        double reach = range > 0.0 ? range : minecraft.player.blockInteractionRange();
         HitResult real = minecraft.hitResult;
         if (real != null && real.getType() != HitResult.Type.MISS) {
             reach = Math.min(reach, eye.distanceTo(real.getLocation()) + 0.01);
@@ -50,7 +54,9 @@ public final class GhostRaycast {
         double travelled = 0.0;
         for (int guard = 0; guard < 256 && travelled <= reach; guard++) {
             MismatchType type = engine.categoryAt(x, y, z);
-            if (type == MismatchType.MISSING || type == MismatchType.WRONG_STATE || type == MismatchType.WRONG_BLOCK) {
+            boolean wanted = anyCategory ? type != MismatchType.NONE
+                    : type == MismatchType.MISSING || type == MismatchType.WRONG_STATE || type == MismatchType.WRONG_BLOCK;
+            if (wanted) {
                 BlockState state = engine.schematicStateAt(x, y, z);
                 if (state != null && !state.isAir()) {
                     Hit hit = new Hit(new BlockPos(x, y, z), state, type);

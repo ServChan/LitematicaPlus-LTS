@@ -6,7 +6,9 @@ public enum ToolMode {
     PASTE("paste"),
     FILL("fill"),
     REPLACE("replace"),
-    DELETE("delete");
+    DELETE("delete"),
+    ERASE("erase"),
+    EDIT("edit");
 
     private final String key;
 

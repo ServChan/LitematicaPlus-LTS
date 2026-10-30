@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.CakeBlock;
 import net.minecraft.world.level.block.CandleCakeBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.DragonEggBlock;
+import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.NoteBlock;
@@ -278,6 +279,10 @@ public final class EasyPlace {
 
     static boolean supported(ClientLevel level, BlockPos pos, BlockState target) {
         try {
+            if (target.getBlock() instanceof FallingBlock && pos.getY() > level.getMinY()
+                    && FallingBlock.isFree(level.getBlockState(pos.below()))) {
+                return false;
+            }
             return target.canSurvive(level, pos);
         } catch (RuntimeException exception) {
             return true;

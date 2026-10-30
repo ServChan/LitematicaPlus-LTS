@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
@@ -15,6 +16,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.function.Function;
+import java.util.function.ToIntFunction;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
@@ -53,6 +56,9 @@ public final class GhostRenderer {
     private static final Comparator<SectionSlot> NEAR_TO_FAR = (a, b) -> Float.compare(a.sortDistance, b.sortDistance);
     private static final Comparator<SpecialSlot> SPECIALS_NEAR_TO_FAR = (a, b) -> Float.compare(a.slot().sortDistance,
             b.slot().sortDistance);
+    private static final Comparator<SectionSlot> BY_FILL_PAGE = (a, b) -> compareRuns(a, b, a.fill(), b.fill());
+    private static final Comparator<SectionSlot> BY_LINE_PAGE = (a, b) -> compareRuns(a, b, a.lines(), b.lines());
+    private static final MultiDraw DRAWS = new MultiDraw();
     private static final List<SectionSlot> GHOSTS = new ArrayList<>();
     private static final List<SectionSlot> OVERLAYS = new ArrayList<>();
     private static final List<SpecialSlot> SPECIALS = new ArrayList<>();
@@ -78,6 +84,11 @@ public final class GhostRenderer {
     private static Object submitFailedModels;
 
     private record SpecialSlot(SectionSlot slot, BlockState[] palette, PlacementVolume volume) {
+    }
+
+    @FunctionalInterface
+    private interface AnchorUniform {
+        GpuBufferSlice write(int anchorX, int anchorY, int anchorZ);
     }
 
     private GhostRenderer() {
@@ -275,55 +286,28 @@ public final class GhostRenderer {
                 pass.setUniform("Sampler0", atlas.getTextureView(), atlas.getSampler());
                 pass.setUniform("Sampler2", minecraft.gameRenderer.lightmap(),
                         RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-                pass.setIndexBuffer(quadBuffer, quadType);
                 int tint = config.ghostRgb();
                 Vector4f color = new Vector4f((tint >> 16 & 0xFF) / 255.0F, (tint >> 8 & 0xFF) / 255.0F,
                         (tint & 0xFF) / 255.0F, config.ghostAlpha);
-                boolean anchored = false;
-                int anchorX = 0;
-                int anchorY = 0;
-                int anchorZ = 0;
-                for (SectionSlot slot : GHOSTS) {
-                    int slotX = slot.originX & ~ANCHOR_MASK;
-                    int slotY = slot.originY & ~ANCHOR_MASK;
-                    int slotZ = slot.originZ & ~ANCHOR_MASK;
-                    if (!anchored || slotX != anchorX || slotY != anchorY || slotZ != anchorZ) {
-                        anchored = true;
-                        anchorX = slotX;
-                        anchorY = slotY;
-                        anchorZ = slotZ;
-                        Vector3f offset = new Vector3f((float) (anchorX - cameraPos.x), (float) (anchorY - cameraPos.y),
-                                (float) (anchorZ - cameraPos.z));
-                        pass.setUniform("DynamicTransforms", dynamic.writeTransform(modelView, color, offset, IDENTITY));
-                    }
-                    pass.setVertexBuffer(0, slot.ghost().slice());
-                    pass.drawIndexed(slot.ghostIndices(), 1, 0, 0, 0);
-                }
+                drawRuns(pass, GHOSTS, SectionSlot::ghost, SectionSlot::ghostIndices, quadBuffer, quadType,
+                        (anchorX, anchorY, anchorZ) -> dynamic.writeTransform(modelView, color,
+                                new Vector3f((float) (anchorX - cameraPos.x), (float) (anchorY - cameraPos.y),
+                                        (float) (anchorZ - cameraPos.z)), IDENTITY));
             }
             if (!OVERLAYS.isEmpty()) {
                 boolean xray = config.overlayThroughWalls;
                 pass.setPipeline(RenderSystem.getCompiledPipeline(
                         xray ? GhostPipelines.OVERLAY_FILL_XRAY : GhostPipelines.OVERLAY_FILL));
-                pass.setIndexBuffer(quadBuffer, quadType);
-                for (SectionSlot slot : OVERLAYS) {
-                    if (slot.fill() == null) {
-                        continue;
-                    }
-                    pass.setUniform("DynamicTransforms", dynamic.writeTransform(translated(modelView, slot, cameraPos)));
-                    pass.setVertexBuffer(0, slot.fill().slice());
-                    pass.drawIndexed(slot.fillIndices(), 1, 0, 0, 0);
-                }
+                OVERLAYS.sort(BY_FILL_PAGE);
+                drawRuns(pass, OVERLAYS, SectionSlot::fill, SectionSlot::fillIndices, quadBuffer, quadType,
+                        (anchorX, anchorY, anchorZ) -> dynamic.writeTransform(anchored(modelView, anchorX, anchorY, anchorZ,
+                                cameraPos)));
                 pass.setPipeline(RenderSystem.getCompiledPipeline(
                         xray ? GhostPipelines.OVERLAY_LINES_XRAY : GhostPipelines.OVERLAY_LINES));
-                pass.setIndexBuffer(lineBuffer, lineType);
-                for (SectionSlot slot : OVERLAYS) {
-                    if (slot.lines() == null) {
-                        continue;
-                    }
-                    pass.setUniform("DynamicTransforms", dynamic.writeTransform(translated(modelView, slot, cameraPos)));
-                    pass.setVertexBuffer(0, slot.lines().slice());
-                    pass.drawIndexed(slot.lineIndices(), 1, 0, 0, 0);
-                }
+                OVERLAYS.sort(BY_LINE_PAGE);
+                drawRuns(pass, OVERLAYS, SectionSlot::lines, SectionSlot::lineIndices, lineBuffer, lineType,
+                        (anchorX, anchorY, anchorZ) -> dynamic.writeTransform(anchored(modelView, anchorX, anchorY, anchorZ,
+                                cameraPos)));
             }
             if (boxes) {
                 BoxRenderer.draw(pass, modelView, dynamic, quadBuffer, quadType, lineBuffer, lineType);
@@ -331,9 +315,59 @@ public final class GhostRenderer {
         }
     }
 
-    private static Matrix4f translated(Matrix4f modelView, SectionSlot slot, Vec3 cameraPos) {
-        return new Matrix4f(modelView).translate((float) (slot.originX - cameraPos.x),
-                (float) (slot.originY - cameraPos.y), (float) (slot.originZ - cameraPos.z));
+    private static void drawRuns(RenderPass pass, List<SectionSlot> slots, Function<SectionSlot, MeshArena.Slice> mesh,
+            ToIntFunction<SectionSlot> indices, GpuBuffer indexBuffer, IndexType indexType, AnchorUniform uniform) {
+        pass.setIndexBuffer(indexBuffer, indexType);
+        MeshArena.Page page = null;
+        boolean anchored = false;
+        int anchorX = 0;
+        int anchorY = 0;
+        int anchorZ = 0;
+        for (int i = 0; i < slots.size(); i++) {
+            SectionSlot slot = slots.get(i);
+            MeshArena.Slice slice = mesh.apply(slot);
+            if (slice == null) {
+                continue;
+            }
+            int slotX = slot.originX & ~ANCHOR_MASK;
+            int slotY = slot.originY & ~ANCHOR_MASK;
+            int slotZ = slot.originZ & ~ANCHOR_MASK;
+            boolean moved = !anchored || slotX != anchorX || slotY != anchorY || slotZ != anchorZ;
+            if (moved || slice.page != page) {
+                DRAWS.flush(pass);
+            }
+            if (moved) {
+                anchored = true;
+                anchorX = slotX;
+                anchorY = slotY;
+                anchorZ = slotZ;
+                pass.setUniform("DynamicTransforms", uniform.write(anchorX, anchorY, anchorZ));
+            }
+            if (slice.page != page) {
+                page = slice.page;
+                pass.setVertexBuffer(0, page.slice());
+            }
+            DRAWS.add(pass, indices.applyAsInt(slot), slice.baseVertex);
+        }
+        DRAWS.flush(pass);
+    }
+
+    private static Matrix4f anchored(Matrix4f modelView, int anchorX, int anchorY, int anchorZ, Vec3 cameraPos) {
+        return new Matrix4f(modelView).translate((float) (anchorX - cameraPos.x), (float) (anchorY - cameraPos.y),
+                (float) (anchorZ - cameraPos.z));
+    }
+
+    private static int compareRuns(SectionSlot a, SectionSlot b, MeshArena.Slice sliceA, MeshArena.Slice sliceB) {
+        int pageA = sliceA == null ? -1 : sliceA.page.id;
+        int pageB = sliceB == null ? -1 : sliceB.page.id;
+        if (pageA != pageB) {
+            return Integer.compare(pageA, pageB);
+        }
+        int result = Integer.compare(a.originX & ~ANCHOR_MASK, b.originX & ~ANCHOR_MASK);
+        if (result == 0) {
+            result = Integer.compare(a.originY & ~ANCHOR_MASK, b.originY & ~ANCHOR_MASK);
+        }
+        return result != 0 ? result : Integer.compare(a.originZ & ~ANCHOR_MASK, b.originZ & ~ANCHOR_MASK);
     }
 
     private static void collectSubmits(LevelRenderContext context) {

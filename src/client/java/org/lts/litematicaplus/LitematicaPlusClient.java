@@ -11,6 +11,8 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerHelper;
 import org.lts.litematicaplus.materials.ContainerMemory;
+import org.lts.litematicaplus.tool.LayerAdvance;
+import org.lts.litematicaplus.verify.BlockDataCheck;
 import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
@@ -61,6 +63,8 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         InfoHud.tick(minecraft);
         InventoryHighlight.tick(minecraft);
         ContainerMemory.tick(minecraft);
+        BlockDataCheck.tick(minecraft);
+        LayerAdvance.tick(minecraft);
         TopView.tick(minecraft);
         Hotkeys.tick(minecraft);
         SyncmaticaClient.get().tick();

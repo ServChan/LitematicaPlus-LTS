@@ -2,6 +2,7 @@ package org.lts.litematicaplus.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.io.UncheckedIOException;
@@ -102,6 +103,7 @@ public final class PlacementVolume {
         this.maxZ = highZ;
         long blocks = 0L;
         this.totalByPalette = new long[palette.length];
+        GhostSection.Interner interner = new GhostSection.Interner();
         for (Long2ObjectMap.Entry<GhostSection> entry : sections.long2ObjectEntrySet()) {
             GhostSection section = entry.getValue();
             section.recount(this.solid);
@@ -117,6 +119,7 @@ public final class PlacementVolume {
                     }
                 }
             }
+            interner.share(section);
         }
         this.totalByPalette[0] = 0L;
         this.totalBlocks = blocks;
@@ -141,6 +144,16 @@ public final class PlacementVolume {
 
     public static PlacementVolume build(Schematic schematic, PlacementLayout layout, Set<String> disabledRegions,
             Map<Block, Block> replacements) {
+        return build(schematic, layout, disabledRegions, replacements, null);
+    }
+
+    public static PlacementVolume build(Schematic schematic, PlacementLayout layout, Set<String> disabledRegions,
+            Map<Block, Block> replacements, LongSet excluded) {
+        return build(schematic, layout, disabledRegions, replacements, excluded, Map.of());
+    }
+
+    public static PlacementVolume build(Schematic schematic, PlacementLayout layout, Set<String> disabledRegions,
+            Map<Block, Block> replacements, LongSet excluded, Map<Long, BlockState> overrides) {
         PlacementTransform transform = layout.transform();
         List<BlockState> palette = new ArrayList<>();
         Reference2IntMap<BlockState> lookup = new Reference2IntOpenHashMap<>();
@@ -208,19 +221,44 @@ public final class PlacementVolume {
                     for (int r = 0; r < regions.size(); r++) {
                         SchematicRegion region = regions.get(r);
                         RegionMapping mapping = layout.mapping(region, shiftX, shiftY, shiftZ);
-                        fill(region, mapping, mappedPalettes.get(r), skipped.get(r), sections);
+                        fill(region, mapping, mappedPalettes.get(r), skipped.get(r), sections, excluded);
                         for (Long2ObjectMap.Entry<CompoundTag> entry : region.blockEntities().long2ObjectEntrySet()) {
                             int localX = region.minX() + SchematicRegion.localKeyX(entry.getLongKey());
                             int localY = region.minY() + SchematicRegion.localKeyY(entry.getLongKey());
                             int localZ = region.minZ() + SchematicRegion.localKeyZ(entry.getLongKey());
-                            blockEntities.put(BlockPos.asLong(mapping.worldX(localX, localZ), mapping.worldY(localY),
-                                    mapping.worldZ(localX, localZ)), entry.getValue());
+                            long worldKey = BlockPos.asLong(mapping.worldX(localX, localZ), mapping.worldY(localY),
+                                    mapping.worldZ(localX, localZ));
+                            if (excluded == null || !excluded.contains(worldKey)) {
+                                blockEntities.put(worldKey, entry.getValue());
+                            }
                         }
                         collectEntities(region, mapping, dataVersion, entities);
                         boxes.add(regionBox(region, mapping));
                     }
                 }
             }
+        }
+        for (Map.Entry<Long, BlockState> entry : overrides.entrySet()) {
+            BlockState state = entry.getValue();
+            int index = lookup.getInt(state);
+            if (index < 0) {
+                if (palette.size() >= MAX_PALETTE) {
+                    throw new UncheckedIOException(new LocalizedException("litematicaplus.error.too_many_states",
+                            "Placement uses more than " + MAX_PALETTE + " block states"));
+                }
+                index = palette.size();
+                palette.add(state);
+                lookup.put(state, index);
+            }
+            BlockPos pos = BlockPos.of(entry.getKey());
+            long key = SectionPos.asLong(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
+            GhostSection section = sections.get(key);
+            if (section == null) {
+                section = new GhostSection();
+                sections.put(key, section);
+            }
+            section.set(GhostSection.index(pos.getX(), pos.getY(), pos.getZ()), (short) index);
+            blockEntities.remove(entry.getKey().longValue());
         }
         if (boxes.isEmpty()) {
             boxes.add(new RegionBox("", transform.originX(), transform.originY(), transform.originZ(),
@@ -231,7 +269,8 @@ public final class PlacementVolume {
     }
 
     private static void fill(SchematicRegion region, RegionMapping mapping, short[] mapped, boolean[] skip,
-            Long2ObjectOpenHashMap<GhostSection> sections) {
+            Long2ObjectOpenHashMap<GhostSection> sections, LongSet excluded) {
+        boolean anyExcluded = excluded != null && !excluded.isEmpty();
         int baseX = region.minX();
         int baseY = region.minY();
         int baseZ = region.minZ();
@@ -252,6 +291,9 @@ public final class PlacementVolume {
                     }
                     int worldX = mapping.worldX(baseX + x, baseZ + z);
                     int worldZ = mapping.worldZ(baseX + x, baseZ + z);
+                    if (anyExcluded && excluded.contains(BlockPos.asLong(worldX, worldY, worldZ))) {
+                        continue;
+                    }
                     long key = SectionPos.asLong(worldX >> 4, worldY >> 4, worldZ >> 4);
                     if (key != lastKey) {
                         lastSection = sections.get(key);

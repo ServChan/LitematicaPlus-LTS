@@ -316,7 +316,7 @@ public final class SchematicCapture {
         return result;
     }
 
-    private static CompoundTag saved(Level level, Entity entity) {
+    public static CompoundTag saved(Level level, Entity entity) {
         try {
             TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, level.registryAccess());
             return entity.save(output) ? output.buildResult() : null;

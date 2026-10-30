@@ -1,12 +1,14 @@
 package org.lts.litematicaplus.world;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class GhostSection {
     public static final short OUTSIDE = -1;
     public static final int VOLUME = 4096;
 
-    private final short[] data = new short[VOLUME];
+    private short[] data = new short[VOLUME];
     private int solid;
     private int inside;
 
@@ -21,6 +23,30 @@ public final class GhostSection {
         Arrays.fill(section.data, (short) 0);
         section.inside = VOLUME;
         return section;
+    }
+
+    private record Content(short[] data, int hash) {
+        Content(short[] data) {
+            this(data, Arrays.hashCode(data));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Content content && content.hash == this.hash && Arrays.equals(content.data, this.data);
+        }
+
+        @Override
+        public int hashCode() {
+            return this.hash;
+        }
+    }
+
+    public static final class Interner {
+        private final Map<Content, short[]> known = new HashMap<>();
+
+        public void share(GhostSection section) {
+            section.data = this.known.computeIfAbsent(new Content(section.data), Content::data);
+        }
     }
 
     public static GhostSection sharedFullAir() {

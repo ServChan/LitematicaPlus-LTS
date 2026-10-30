@@ -20,7 +20,7 @@ public final class SectionVerdict {
     public static final int BORDER_LONGS = 48;
     private static final int[] NO_INTS = new int[0];
     private static final byte[] ALL_NONE = uniform(MismatchType.NONE);
-    private static final byte[] ALL_CORRECT = uniform(MismatchType.CORRECT);
+    private static final byte[][] UNIFORM = uniforms();
 
     private final byte[] categories;
     private final int[] counts;
@@ -59,6 +59,23 @@ public final class SectionVerdict {
             }
         }
         return new int[][]{indices, values};
+    }
+
+    private static byte[][] uniforms() {
+        byte[][] values = new byte[TYPES][];
+        for (MismatchType type : MismatchType.VALUES) {
+            values[type.ordinal()] = uniform(type);
+        }
+        return values;
+    }
+
+    private static byte[] shared(byte[] categories, int[] counts) {
+        for (int type = 0; type < TYPES; type++) {
+            if (counts[type] == GhostSection.VOLUME) {
+                return UNIFORM[type];
+            }
+        }
+        return categories;
     }
 
     private static byte[] uniform(MismatchType type) {
@@ -196,7 +213,7 @@ public final class SectionVerdict {
                     counts[unknown]++;
                 }
             }
-            return new SectionVerdict(categories, counts, sparse(NO_INTS), sparse(NO_INTS), false);
+            return new SectionVerdict(shared(categories, counts), counts, sparse(NO_INTS), sparse(NO_INTS), false);
         }
         StateComparator comparator = StateComparator.get();
         BlockState lastState = null;
@@ -229,15 +246,13 @@ public final class SectionVerdict {
                 restate[paletteIndex]++;
             }
         }
-        byte[] shared = categories;
+        byte[] shared = shared(categories, counts);
         int inside = 0;
         for (int value : counts) {
             inside += value;
         }
         if (counts[MismatchType.NONE.ordinal()] == inside && MismatchType.NONE.ordinal() == 0) {
             shared = ALL_NONE;
-        } else if (counts[MismatchType.CORRECT.ordinal()] == GhostSection.VOLUME) {
-            shared = ALL_CORRECT;
         }
         return new SectionVerdict(shared, counts, sparse(correct), sparse(restate), true);
     }

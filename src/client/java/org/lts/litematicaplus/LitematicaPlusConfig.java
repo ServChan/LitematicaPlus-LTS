@@ -95,6 +95,10 @@ public final class LitematicaPlusConfig {
     public boolean looseBlocks = false;
     public boolean soilInterchangeable = true;
     public boolean toolUseGuard = true;
+    public boolean verifyBlockData = true;
+    public boolean autoLayerAdvance = false;
+    public boolean trimOnSave = false;
+    public List<String> extraSchematicFolders = new ArrayList<>();
     public boolean hudEnabled = true;
     public int hudMaterialLines = 6;
     public boolean hudRightSide = false;
@@ -392,6 +396,7 @@ public final class LitematicaPlusConfig {
             config.toolItem = "minecraft:stick";
         }
         config.schematicsDirectory = normalizeDirectory(config.schematicsDirectory);
+        config.extraSchematicFolders = normalizeFolders(config.extraSchematicFolders);
         config.defaultAuthor = config.defaultAuthor == null ? "" : trim(config.defaultAuthor.strip(), 64);
         return config;
     }
@@ -405,6 +410,19 @@ public final class LitematicaPlusConfig {
             return fallback;
         }
         return clean.contains(":") ? clean : "minecraft:" + clean;
+    }
+
+    private static List<String> normalizeFolders(List<String> folders) {
+        List<String> clean = new ArrayList<>();
+        if (folders != null) {
+            for (String folder : folders) {
+                String value = folder == null ? "" : folder.strip();
+                if (!value.isEmpty() && value.length() <= 1024 && !clean.contains(value)) {
+                    clean.add(value);
+                }
+            }
+        }
+        return clean;
     }
 
     private static String normalizeDirectory(String value) {

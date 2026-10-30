@@ -243,6 +243,14 @@ On the **Schematics** tab:
 
 Block states from older game versions go through the vanilla DataFixer. Blocks this game version does not know are skipped (not pasted and not verified), and the mod says in chat how many there were.
 
+### Other schematic folders
+
+The `schematics` folder always works. To show schematics from somewhere else, open Settings → Tools, paste a full path into "Another schematics folder" and press Add. The folder appears at the root of the Schematics tab with all its subfolders. New schematics are still saved to `schematics`.
+
+### Comparing schematics
+
+Select a schematic, press Compare…, then pick a second schematic from the same folder. The mod shows how many blocks were added, removed, replaced or changed state, by block type. Schematics are lined up by their own coordinates. Save new blocks as schematic writes only the added and changed blocks to a separate file: place it to see in the world what changed. The limit is 32 million cells.
+
 ## Placements
 
 The **Placements** tab lists the schematics in the current world and dimension. The list is kept separately for every server (or singleplayer world folder) and dimension.
@@ -264,6 +272,10 @@ The **Placements** tab lists the schematics in the current world and dimension. 
 | Remove | Remove the placement (the file stays), with a second press |
 
 Rotation and mirroring turn around the placement's corner, so X/Y/Z are not necessarily the lowest corner of the visible build.
+
+### Save a placement as a new schematic
+
+Save as new schematic… writes the placement to a new file the way it stands in the world: with its rotation, mirror, sub-regions, grid, replacements and edits. You can keep only the current layer and bounds and trim empty space. The original file does not change. Cells outside the regions become structure void, so pasting the result does not overwrite the world there.
 
 ### Sub-regions
 
@@ -299,6 +311,10 @@ Press **F7** or open the **Layers** tab.
 | Reset | Removes the X/Z limits and keeps the layer mode |
 
 Ghosts, error highlights, easy place, pick block and Jade work only inside the layer and the bounds. With **Count only the visible part** on, progress, counters and the material list count only that part too, and paste places only that part. Bounds are kept per world.
+
+### Automatic next layer
+
+Turn on Auto layer on the Layers tab or bind a key. When every block of the layer is correct, the mod moves to the next unfinished layer and skips empty ones. It works in the single layer, range and this and below modes. Extra blocks do not hold it back, blocks in the wrong state do.
 
 ## Easy place
 
@@ -350,6 +366,10 @@ A state the world holds (a door kept open by redstone, for example) cannot be ch
 ### Schematic entities
 
 With **Place schematic entities**, item frames and glow item frames (with their item and rotation), paintings and armor stands (with armor) get a marker. Aim at the marker and use. Materials for entities are not part of the material list.
+
+### Sand, gravel and other falling blocks
+
+These are placed only on a support: while the space below is empty, easy place and the printer skip them and work on the block underneath.
 
 ### Functional blocks and containers
 
@@ -466,6 +486,10 @@ Verification rules (**Settings → Checking**):
 
 **100% complete** is the share of correct non-air blocks. Check extra blocks in air, container contents and entities separately. For a final check: all layers, no bounds, every category on.
 
+### Block data
+
+"Check block data" (on by default) compares what the block itself does not show: sign text on both sides, banner patterns, pot sherds and container contents. The client does not know what is inside a closed container, so a container is checked only if you opened it this session. Differences come first in the Verifier list and get an outline in the world, but they do not change the progress percentage.
+
 ## New schematic: saving a build
 
 1. Hold the stick, **Area** mode (`Ctrl` + scroll).
@@ -482,6 +506,17 @@ Details:
 - In singleplayer the full block entity data and entities are saved. On a server, what the client knows; armor stands, item frames and other entities are included there too.
 - On a server sections are copied in 5 ms portions, so a large area saves without freezing the game.
 - With Axiom: **Take Axiom selection** adds a box from the Axiom selection, **Select in Axiom** hands the boxes to Axiom, **Save Axiom clipboard** saves what you copied in Axiom to `.litematic` with container contents and entities.
+
+The Trim switch next to the file name removes empty space around the edges. Blocks keep their coordinates inside the schematic, and a saved spot moves with the corner.
+
+## Editing a schematic in the world
+
+Two tool modes change the schematic of a placement without touching the file or the world:
+
+- **Erase block**: left click removes a cell from the schematic, right click brings back the last one, Shift + right click brings back all of them.
+- **Edit schematic**: first pick a block with Alt + middle click. Left click writes it into the cell you aim at, Shift + left click accepts the block standing in the world. Right click undoes the last edit, Shift + right click undoes all of them.
+
+Edits are kept in the session with the placement. Rotating the placement turns them, mirroring clears them. To get a file with your edits, save the placement as a new schematic.
 
 ## Paste, fill, replace and delete
 

@@ -267,6 +267,10 @@ public final class ContainerMemory {
         return items;
     }
 
+    public static Stored at(BlockPos pos) {
+        return memory.get(pos.asLong());
+    }
+
     public static List<Box> boxes() {
         return LitematicaPlusConfig.current().containerMemory ? boxes : List.of();
     }

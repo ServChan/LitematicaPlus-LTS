@@ -84,6 +84,8 @@ final class SchematicsView extends TabView {
     private Mirror placeMirror = Mirror.NONE;
     private Path reselect;
     private int placeRowWidth;
+    private FlatButton materialsButton;
+    private FlatButton compareButton;
     private FlatButton exportSponge;
     private FlatButton exportStructure;
     private FlatButton exportBlueprint;
@@ -127,6 +129,10 @@ final class SchematicsView extends TabView {
             String inside = axiom.relativize(directory).toString().replace('\\', '/');
             return Component.literal("Axiom" + (inside.isEmpty() ? "" : "/" + inside));
         }
+        Path extra = extraRoot(directory);
+        if (extra != null) {
+            return Component.literal(directory.toString());
+        }
         String relative = directory.startsWith(root) ? root.relativize(directory).toString().replace('\\', '/') : "";
         return Component.literal(root.getFileName() + (relative.isEmpty() ? "" : "/" + relative));
     }
@@ -135,11 +141,20 @@ final class SchematicsView extends TabView {
         return AxiomBridge.installed() ? AxiomBridge.blueprintsDirectory() : null;
     }
 
+    private static Path extraRoot(Path directory) {
+        for (Path extra : PlacementManager.extraSchematicRoots()) {
+            if (directory.startsWith(extra)) {
+                return extra;
+            }
+        }
+        return null;
+    }
+
     private static Path directory() {
         Path root = PlacementManager.schematicsDirectory();
         Path axiom = axiomRoot();
         if (currentDirectory == null || !currentDirectory.startsWith(root)
-                && (axiom == null || !currentDirectory.startsWith(axiom))) {
+                && (axiom == null || !currentDirectory.startsWith(axiom)) && extraRoot(currentDirectory) == null) {
             currentDirectory = root;
         }
         return currentDirectory;
@@ -148,7 +163,7 @@ final class SchematicsView extends TabView {
     @Override
     void init() {
         boolean previews = PreviewService.enabled();
-        this.detailWidth = Math.max(130, Math.min(previews ? 270 : 230, this.width * (previews ? 46 : 42) / 100));
+        this.detailWidth = Math.max(150, Math.min(previews ? 400 : 340, this.width * (previews ? 52 : 48) / 100));
         int listWidth = this.width - this.detailWidth - Theme.GAP;
         this.detailX = this.left + listWidth + Theme.GAP;
         int sortWidth = 0;
@@ -197,7 +212,16 @@ final class SchematicsView extends TabView {
                 button -> export(SchematicExport.Format.BLUEPRINT)));
         this.exportBlueprint.setTooltip(Tooltip.create(tr(AxiomBridge.installed()
                 ? "litematicaplus.schematics.export_blueprint.tip_axiom" : "litematicaplus.schematics.export_blueprint.tip")));
-        int placeY = exportY - Theme.CONTROL_HEIGHT - 4;
+        int materialsY = exportY - Theme.CONTROL_HEIGHT - 4;
+        int materialsWidth = (this.detailWidth - Theme.GAP) / 2;
+        this.materialsButton = add(FlatButton.secondary(this.detailX, materialsY, materialsWidth,
+                tr("litematicaplus.schematics.materials"), button -> openMaterials()));
+        this.materialsButton.withHint(tr("litematicaplus.schematics.materials.tip"));
+        this.compareButton = add(FlatButton.secondary(this.detailX + materialsWidth + Theme.GAP, materialsY,
+                this.detailWidth - materialsWidth - Theme.GAP, tr("litematicaplus.schematics.compare"),
+                button -> openCompare()));
+        this.compareButton.withHint(tr("litematicaplus.schematics.compare.tip"));
+        int placeY = materialsY - Theme.CONTROL_HEIGHT - 4;
         int deleteWidth = Math.max(half / 2, Math.min(half, this.font.width(tr("litematicaplus.schematics.delete_confirm")) + 12));
         this.placeRowWidth = this.detailWidth - deleteWidth - Theme.GAP;
         this.placeSavedButton = add(FlatButton.primary(this.detailX, placeY, this.placeRowWidth,
@@ -217,7 +241,7 @@ final class SchematicsView extends TabView {
                 this.detailWidth - (third + Theme.GAP) * 2, tr("litematicaplus.schematics.edit_place"),
                 button -> openPlaceEditor()));
         this.placeEditButton.withHint(tr("litematicaplus.schematics.edit_place.tip"));
-        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 3;
+        int panelHeight = panelHeight();
         this.previewSide = previews && !this.editingPlace ? Math.min(this.detailWidth - 16, panelHeight - 60) : 0;
         this.preview = null;
         if (this.previewSide >= 64) {
@@ -234,6 +258,24 @@ final class SchematicsView extends TabView {
             reload();
         } else {
             applyFilter();
+        }
+    }
+
+    private int panelHeight() {
+        return this.height - (Theme.CONTROL_HEIGHT + 4) * 4;
+    }
+
+    private void openMaterials() {
+        if (this.selected == null || this.selected.directory()) {
+            return;
+        }
+        this.minecraft.gui.setScreen(new SchematicMaterialsScreen(this.screen,this.selected.path(),
+                SchematicIo.baseName(this.selected.path())));
+    }
+
+    private void openCompare() {
+        if (this.selected != null && !this.selected.directory()) {
+            this.minecraft.gui.setScreen(new SchematicCompareScreen(this.screen, this.selected.path()));
         }
     }
 
@@ -261,6 +303,10 @@ final class SchematicsView extends TabView {
         boolean file = this.selected != null && !this.selected.directory() && !this.exporting && !this.editingPlace;
         if (this.placeEditButton != null) {
             this.placeEditButton.active = file && this.metadata != null && !this.placeSaving && !shared(this.selected);
+        }
+        if (this.materialsButton != null) {
+            this.materialsButton.active = file;
+            this.compareButton.active = file;
         }
         if (this.exportSponge != null) {
             this.exportSponge.active = file;
@@ -357,14 +403,29 @@ final class SchematicsView extends TabView {
         List<Entry> result = new ArrayList<>();
         Path root = PlacementManager.schematicsDirectory();
         Path axiom = axiomRoot();
+        List<Path> extras = PlacementManager.extraSchematicRoots();
         try {
-            Files.createDirectories(directory);
+            if (extraRoot(directory) == null) {
+                Files.createDirectories(directory);
+            }
             if (!directory.equals(root)) {
-                result.add(new Entry(directory.equals(axiom) ? root : directory.getParent(), true, true, "..", 0L, 0L, ""));
-            } else if (axiom != null && !axiom.startsWith(root)) {
-                result.add(new Entry(axiom, true, false,
-                        Component.translatable("litematicaplus.schematics.axiom_folder").getString(), 0L,
-                        Files.isDirectory(axiom) ? Files.getLastModifiedTime(axiom).toMillis() : 0L, ""));
+                result.add(new Entry(directory.equals(axiom) || extras.contains(directory) ? root : directory.getParent(), true,
+                        true, "..", 0L, 0L, ""));
+            } else {
+                if (axiom != null && !axiom.startsWith(root)) {
+                    result.add(new Entry(axiom, true, false,
+                            Component.translatable("litematicaplus.schematics.axiom_folder").getString(), 0L,
+                            Files.isDirectory(axiom) ? Files.getLastModifiedTime(axiom).toMillis() : 0L, ""));
+                }
+                for (Path extra : extras) {
+                    if (Files.isDirectory(extra)) {
+                        result.add(new Entry(extra, true, false, Component.translatable("litematicaplus.schematics.extra_folder",
+                                extra.toString()).getString(), 0L, Files.getLastModifiedTime(extra).toMillis(), ""));
+                    }
+                }
+            }
+            if (!Files.isDirectory(directory)) {
+                return result;
             }
             List<Entry> found = new ArrayList<>();
             try (Stream<Path> stream = Files.list(directory)) {
@@ -920,7 +981,7 @@ final class SchematicsView extends TabView {
 
     @Override
     void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-        int panelHeight = this.height - (Theme.CONTROL_HEIGHT + 4) * 3;
+        int panelHeight = panelHeight();
         Ui.panel(graphics, this.detailX, this.top, this.detailWidth, panelHeight);
         int x = this.detailX + 8;
         int inner = this.detailWidth - 16;

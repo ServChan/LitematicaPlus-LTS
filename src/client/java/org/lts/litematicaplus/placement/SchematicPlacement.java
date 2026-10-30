@@ -10,6 +10,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import org.lts.litematicaplus.schematic.Schematic;
@@ -36,6 +37,8 @@ public final class SchematicPlacement {
     private UUID serverId;
     private final Set<String> disabledRegions = new LinkedHashSet<>();
     private final Map<Block, Block> replacements = new LinkedHashMap<>();
+    private final List<Long> removedCells = new java.util.ArrayList<>();
+    private final java.util.LinkedHashMap<Long, BlockState> editedCells = new java.util.LinkedHashMap<>();
     private final Map<String, RegionPlacement> regionPlacements = new LinkedHashMap<>();
     private PlacementGrid grid = PlacementGrid.NONE;
     private List<SharedPlacement.RegionShift> pendingShifts;
@@ -139,6 +142,14 @@ public final class SchematicPlacement {
 
     public Map<Block, Block> replacements() {
         return this.replacements;
+    }
+
+    public List<Long> removedCells() {
+        return this.removedCells;
+    }
+
+    public java.util.LinkedHashMap<Long, BlockState> editedCells() {
+        return this.editedCells;
     }
 
     public Map<String, RegionPlacement> regionPlacements() {

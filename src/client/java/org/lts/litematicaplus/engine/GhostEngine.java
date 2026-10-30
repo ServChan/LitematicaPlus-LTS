@@ -1,13 +1,10 @@
 package org.lts.litematicaplus.engine;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.block.BlockStateModelSet;
 import net.minecraft.client.renderer.block.FluidStateModelSet;
@@ -32,14 +30,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.Vec3;
 import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.render.MeshArena;
 import org.lts.litematicaplus.render.MeshResult;
 import org.lts.litematicaplus.render.SectionJob;
 import org.lts.litematicaplus.render.SectionMesher;
@@ -98,6 +94,12 @@ public final class GhostEngine {
     private final long[] heapKeys = new long[QUEUE_LIMIT];
     private final Long2ByteOpenHashMap sweepColumns = new Long2ByteOpenHashMap();
     private final ScopeTally.Scratch tallyScratch = new ScopeTally.Scratch();
+    private final MeshArena ghostArena = new MeshArena("LitematicaPlus ghost sections",
+            DefaultVertexFormat.BLOCK.getVertexSize(), 1L << 24);
+    private final MeshArena fillArena = new MeshArena("LitematicaPlus overlay fills",
+            DefaultVertexFormat.POSITION_COLOR.getVertexSize(), 1L << 22);
+    private final MeshArena lineArena = new MeshArena("LitematicaPlus overlay lines",
+            DefaultVertexFormat.POSITION_COLOR_NORMAL_LINE_WIDTH.getVertexSize(), 1L << 22);
 
     private GhostEngine() {
     }
@@ -218,6 +220,10 @@ public final class GhostEngine {
     }
 
     public record Mismatch(BlockPos pos, MismatchType type, BlockState expected, double distanceSquared) {
+    }
+
+    public static Mismatch dataMismatch(BlockPos pos, BlockState expected, Vec3 from) {
+        return new Mismatch(pos, MismatchType.WRONG_DATA, expected, pos.distToCenterSqr(from));
     }
 
     private record Candidate(SectionSlot slot, double distance) {
@@ -409,10 +415,22 @@ public final class GhostEngine {
     public void setLayer(LayerRange range) {
         LayerRange next = (range == null ? LayerRange.ALL : range).withClip(this.layer.clip());
         if (!next.equals(this.layer)) {
-            this.layer = next;
-            markEverythingDirty();
-            refreshScope();
+            applyLayer(next);
         }
+    }
+
+    private void applyLayer(LayerRange next) {
+        LayerRange before = this.layer;
+        this.layer = next;
+        for (PlacementRuntime runtime : this.runtimes.values()) {
+            for (SectionSlot slot : runtime.slots.values()) {
+                if (!before.agrees(next, slot.originX - 1, slot.originY - 1, slot.originZ - 1, slot.originX + 16,
+                        slot.originY + 16, slot.originZ + 16)) {
+                    markDirty(runtime, slot);
+                }
+            }
+        }
+        refreshScope();
     }
 
     public LayerRange.Clip clip() {
@@ -422,9 +440,7 @@ public final class GhostEngine {
     public void setClip(LayerRange.Clip clip) {
         LayerRange next = this.layer.withClip(clip);
         if (!next.equals(this.layer)) {
-            this.layer = next;
-            markEverythingDirty();
-            refreshScope();
+            applyLayer(next);
         }
     }
 
@@ -616,6 +632,15 @@ public final class GhostEngine {
             freeSlots(runtime);
             runtime.volume = null;
         }
+        if (this.runtimes.isEmpty()) {
+            closeArenas();
+        }
+    }
+
+    private void closeArenas() {
+        this.ghostArena.close();
+        this.fillArena.close();
+        this.lineArena.close();
     }
 
     public void clear() {
@@ -630,6 +655,7 @@ public final class GhostEngine {
         while ((entry = this.completed.poll()) != null) {
             entry.result().free();
         }
+        closeArenas();
         LodDepth.close();
     }
 
@@ -654,6 +680,13 @@ public final class GhostEngine {
         Set<String> disabled = new HashSet<>(placement.disabledRegions());
         Map<Block, Block> replacements = LitematicaPlusConfig.current().materialSwap
                 ? new HashMap<>(placement.replacements()) : Map.of();
+        it.unimi.dsi.fastutil.longs.LongSet excluded = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+        for (long offset : placement.removedCells()) {
+            excluded.add(BlockPos.of(offset).offset(placement.origin()).asLong());
+        }
+        Map<Long, BlockState> overrides = new HashMap<>();
+        placement.editedCells().forEach((offset, state) ->
+                overrides.put(BlockPos.of(offset).offset(placement.origin()).asLong(), state));
         PlacementRuntime target = runtime;
         Minecraft minecraft = Minecraft.getInstance();
         try {
@@ -662,7 +695,8 @@ public final class GhostEngine {
                     return;
                 }
                 try {
-                    PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled, replacements);
+                    PlacementVolume volume = PlacementVolume.build(schematic, transform, disabled, replacements, excluded,
+                            overrides);
                     minecraft.execute(() -> install(target, token, volume));
                 } catch (Throwable exception) {
                     LitematicaPlusClient.LOGGER.error("Could not build placement {}", placement.name(), exception);
@@ -1108,38 +1142,47 @@ public final class GhostEngine {
                         runtime.dirty.remove(slot.key);
                         continue;
                     }
-                    BlockState[] world = snapshot(current, SectionPos.x(slot.key), SectionPos.y(slot.key),
-                            SectionPos.z(slot.key));
-                    boolean inRange = this.selectedDistances[i] <= ghostRange;
-                    boolean ghost = inRange && (world != null || anywhere);
-                    slot.chunkLoaded = world != null;
-                    long[] border = world == null ? null : borders(current, SectionPos.x(slot.key),
+                    SectionSnapshot snapshot = SectionSnapshot.capture(current, SectionPos.x(slot.key),
                             SectionPos.y(slot.key), SectionPos.z(slot.key));
-                    slot.borderIncomplete = world != null && this.borderIncomplete;
-                    int unknownFaces = world == null ? 0 : this.unknownFaces;
+                    boolean loaded = snapshot != null;
+                    boolean inRange = this.selectedDistances[i] <= ghostRange;
+                    boolean ghost = inRange && (loaded || anywhere);
+                    slot.chunkLoaded = loaded;
+                    slot.borderIncomplete = loaded && snapshot.borderIncomplete();
+                    int unknownFaces = loaded ? snapshot.unknownFaces() : 0;
                     runtime.dirty.remove(slot.key);
                     slot.inFlight = true;
                     slot.pendingGhost = ghost;
                     slot.pendingRules = rules;
                     this.inFlight++;
                     this.jobsStarted++;
-                    SectionVerdict remembered = world == null && slot.verdict != null && slot.verdict.worldKnown()
+                    SectionVerdict remembered = !loaded && slot.verdict != null && slot.verdict.worldKnown()
                             && slot.verdictRules == rules ? slot.verdict : null;
                     SectionJob.Options jobOptions = ghost ? this.options
                             : inRange ? this.optionsOverlayOnly : this.optionsWithoutGhost;
                     SectionVerdict[] sources = jobOptions.overlay() ? new SectionVerdict[6] : null;
                     byte[][] neighbours = sources != null ? neighbourPlanes(runtime, slot.key, sources) : null;
                     slot.pendingPlanes = sources;
-                    SectionJob job = new SectionJob(slot.key, runtime.generation, slot.revision, section, volume,
-                            runtime.specialByPalette, runtime.hiddenByPalette, world, border, unknownFaces, neighbours, remembered, this.layer,
-                            current, models, fluids, minecraft.getBlockColors(), jobOptions);
+                    long key = slot.key;
+                    int generation = runtime.generation;
+                    int revision = slot.revision;
+                    boolean[] special = runtime.specialByPalette;
+                    boolean[] hidden = runtime.hiddenByPalette;
+                    LayerRange layer = this.layer;
+                    BlockColors colors = minecraft.getBlockColors();
                     try {
-                        executor.execute(() -> this.completed.add(new Completed(runtime, SectionMesher.run(job), world)));
+                        executor.execute(() -> {
+                            BlockState[] world = loaded ? snapshot.world(this.worldPool) : null;
+                            long[] border = loaded ? snapshot.border() : null;
+                            SectionJob job = new SectionJob(key, generation, revision, section, volume, special, hidden,
+                                    world, border, unknownFaces, neighbours, remembered, layer, current, models, fluids,
+                                    colors, jobOptions);
+                            this.completed.add(new Completed(runtime, SectionMesher.run(job), world));
+                        });
                     } catch (RejectedExecutionException exception) {
                         this.inFlight--;
                         slot.inFlight = false;
                         runtime.dirty.add(slot.key);
-                        release(world);
                         requeue(runtime, i, found);
                         return;
                     }
@@ -1404,87 +1447,6 @@ public final class GhostEngine {
         this.heapKeys[position] = key;
     }
 
-    private boolean borderIncomplete;
-    private int unknownFaces;
-
-    private LevelChunkSection neighbor(ClientLevel current, long[] bits, int face, int sectionX, int sectionY,
-            int sectionZ) {
-        LevelChunk chunk = current.getChunkSource().getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
-        if (chunk == null) {
-            SectionVerdict.closeBorderFace(bits, face);
-            this.borderIncomplete = true;
-            this.unknownFaces |= 1 << face;
-            return null;
-        }
-        if (sectionY < chunk.getMinSectionY()) {
-            SectionVerdict.closeBorderFace(bits, face);
-            return null;
-        }
-        if (sectionY > chunk.getMaxSectionY()) {
-            return null;
-        }
-        LevelChunkSection section = chunk.getSection(chunk.getSectionIndexFromSectionY(sectionY));
-        return section == null || section.hasOnlyAir() ? null : section;
-    }
-
-    private long[] borders(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
-        long[] bits = new long[SectionVerdict.BORDER_LONGS];
-        this.borderIncomplete = false;
-        this.unknownFaces = 0;
-        for (int face = 0; face < 6; face++) {
-            LevelChunkSection section = switch (face) {
-                case SectionVerdict.FACE_DOWN -> neighbor(current, bits, face, sectionX, sectionY - 1, sectionZ);
-                case SectionVerdict.FACE_UP -> neighbor(current, bits, face, sectionX, sectionY + 1, sectionZ);
-                case SectionVerdict.FACE_NORTH -> neighbor(current, bits, face, sectionX, sectionY, sectionZ - 1);
-                case SectionVerdict.FACE_SOUTH -> neighbor(current, bits, face, sectionX, sectionY, sectionZ + 1);
-                case SectionVerdict.FACE_WEST -> neighbor(current, bits, face, sectionX - 1, sectionY, sectionZ);
-                default -> neighbor(current, bits, face, sectionX + 1, sectionY, sectionZ);
-            };
-            if (section == null) {
-                continue;
-            }
-            int fixed = (face & 1) == 0 ? 15 : 0;
-            for (int b = 0; b < 16; b++) {
-                for (int a = 0; a < 16; a++) {
-                    BlockState state = face < 2 ? section.getBlockState(a, fixed, b)
-                            : face < 4 ? section.getBlockState(a, b, fixed) : section.getBlockState(fixed, b, a);
-                    SectionVerdict.markBorder(bits, face, a, b, state);
-                }
-            }
-        }
-        return bits;
-    }
-
-    private BlockState[] snapshot(ClientLevel current, int sectionX, int sectionY, int sectionZ) {
-        LevelChunk chunk = current.getChunkSource().getChunk(sectionX, sectionZ, ChunkStatus.FULL, false);
-        if (chunk == null) {
-            return null;
-        }
-        BlockState[] target = this.worldPool.poll();
-        if (target == null) {
-            target = new BlockState[GhostSection.VOLUME];
-        }
-        BlockState air = Blocks.AIR.defaultBlockState();
-        if (sectionY < chunk.getMinSectionY() || sectionY > chunk.getMaxSectionY()) {
-            Arrays.fill(target, air);
-            return target;
-        }
-        LevelChunkSection section = chunk.getSection(chunk.getSectionIndexFromSectionY(sectionY));
-        if (section == null || section.hasOnlyAir()) {
-            Arrays.fill(target, air);
-            return target;
-        }
-        int index = 0;
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    target[index++] = section.getBlockState(x, y, z);
-                }
-            }
-        }
-        return target;
-    }
-
     private void release(BlockState[] world) {
         if (world != null && this.worldPool.size() < 64) {
             this.worldPool.add(world);
@@ -1565,23 +1527,19 @@ public final class GhostEngine {
         refreshOverlayPlanes(runtime, slot, result.fillData() != null && result.fillVertices() >= 4
                 || result.lineData() != null && result.lineVertices() >= 4);
         slot.closeBuffers();
-        GpuDevice device = RenderSystem.getDevice();
         try {
             if (result.ghostData() != null && result.ghostVertices() >= 4) {
-                slot.ghost = device.createBuffer(() -> "LitematicaPlus ghost section", GpuBuffer.USAGE_VERTEX,
-                        result.ghostData());
+                slot.ghost = this.ghostArena.upload(result.ghostData(), result.ghostVertices());
                 slot.ghostIndices = result.ghostVertices() / 4 * 6;
                 this.maxGhostIndices = Math.max(this.maxGhostIndices, slot.ghostIndices);
             }
             if (result.fillData() != null && result.fillVertices() >= 4) {
-                slot.fill = device.createBuffer(() -> "LitematicaPlus overlay fill", GpuBuffer.USAGE_VERTEX,
-                        result.fillData());
+                slot.fill = this.fillArena.upload(result.fillData(), result.fillVertices());
                 slot.fillIndices = result.fillVertices() / 4 * 6;
                 this.maxFillIndices = Math.max(this.maxFillIndices, slot.fillIndices);
             }
             if (result.lineData() != null && result.lineVertices() >= 4) {
-                slot.lines = device.createBuffer(() -> "LitematicaPlus overlay lines", GpuBuffer.USAGE_VERTEX,
-                        result.lineData());
+                slot.lines = this.lineArena.upload(result.lineData(), result.lineVertices());
                 slot.lineIndices = result.lineVertices() / 4 * 6;
                 this.maxLineIndices = Math.max(this.maxLineIndices, slot.lineIndices);
             }

@@ -1,6 +1,6 @@
 package org.lts.litematicaplus.engine;
 
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import org.lts.litematicaplus.render.MeshArena;
 import org.lts.litematicaplus.verify.SectionVerdict;
 
 public final class SectionSlot {
@@ -17,11 +17,11 @@ public final class SectionSlot {
     boolean built;
     boolean chunkLoaded;
     boolean borderIncomplete;
-    GpuBuffer ghost;
+    MeshArena.Slice ghost;
     int ghostIndices;
-    GpuBuffer fill;
+    MeshArena.Slice fill;
     int fillIndices;
-    GpuBuffer lines;
+    MeshArena.Slice lines;
     int lineIndices;
     int[] specials = NO_SPECIALS;
     SectionVerdict verdict;
@@ -48,7 +48,7 @@ public final class SectionSlot {
         return this.chunkLoaded;
     }
 
-    public GpuBuffer ghost() {
+    public MeshArena.Slice ghost() {
         return this.ghost;
     }
 
@@ -56,7 +56,7 @@ public final class SectionSlot {
         return this.ghostIndices;
     }
 
-    public GpuBuffer fill() {
+    public MeshArena.Slice fill() {
         return this.fill;
     }
 
@@ -64,7 +64,7 @@ public final class SectionSlot {
         return this.fillIndices;
     }
 
-    public GpuBuffer lines() {
+    public MeshArena.Slice lines() {
         return this.lines;
     }
 
@@ -82,15 +82,15 @@ public final class SectionSlot {
 
     void closeBuffers() {
         if (this.ghost != null) {
-            this.ghost.close();
+            this.ghost.release();
             this.ghost = null;
         }
         if (this.fill != null) {
-            this.fill.close();
+            this.fill.release();
             this.fill = null;
         }
         if (this.lines != null) {
-            this.lines.close();
+            this.lines.release();
             this.lines = null;
         }
         this.ghostIndices = 0;

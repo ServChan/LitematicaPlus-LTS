@@ -7,7 +7,8 @@ public enum MismatchType {
     WRONG_BLOCK(0xFFFF4444, "wrong_block"),
     WRONG_STATE(0xFFFFA62B, "wrong_state"),
     CORRECT(0xFF55FF55, "correct"),
-    UNKNOWN(0xFF8FA7BF, "unknown");
+    UNKNOWN(0xFF8FA7BF, "unknown"),
+    WRONG_DATA(0xFFB98CFF, "wrong_data");
 
     public static final MismatchType[] VALUES = values();
 

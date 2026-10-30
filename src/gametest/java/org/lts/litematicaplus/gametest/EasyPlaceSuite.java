@@ -203,7 +203,8 @@ final class EasyPlaceSuite {
 
         strayBlockCheck(context, world);
         interactBehindGhost(context, world);
-        supportUnderSnow(context, world);
+        supportUnder(context, world, net.minecraft.world.level.block.Blocks.SNOW, "10c_support_under_snow");
+        supportUnder(context, world, net.minecraft.world.level.block.Blocks.SAND, "10d_support_under_sand");
         survivalBreakWrong(context, world);
         lockedSlotKeepsTool(context, world);
         utilityBlocksNearBuild(context, world);
@@ -285,12 +286,13 @@ final class EasyPlaceSuite {
         LitematicaPlusGameTest.require(stillEmpty, "a click on a crafting table must open it, not place the ghost in front");
     }
 
-    private static void supportUnderSnow(ClientGameTestContext context, TestSingleplayerContext world) {
+    private static void supportUnder(ClientGameTestContext context, TestSingleplayerContext world,
+            net.minecraft.world.level.block.Block top, String shot) {
         BlockPos support = BASE.offset(-12, 0, 0);
         BlockPos snow = support.above();
         RegionBuilder builder = new RegionBuilder("Snow", 0, 0, 0, 1, 2, 1);
         builder.set(0, 0, 0, net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
-        builder.set(0, 1, 0, net.minecraft.world.level.block.Blocks.SNOW.defaultBlockState());
+        builder.set(0, 1, 0, top.defaultBlockState());
         SchematicMetadata metadata = new SchematicMetadata();
         metadata.name = "Snow";
         Schematic schematic = new Schematic(metadata, Map.of("Snow", builder.build()));
@@ -333,16 +335,15 @@ final class EasyPlaceSuite {
             context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
             for (int wait = 0; wait < 20 && !layered; wait++) {
                 context.waitTicks(2);
-                layered = world.getServer().computeOnServer(server -> server.overworld().getBlockState(snow)
-                        .is(net.minecraft.world.level.block.Blocks.SNOW));
+                layered = world.getServer().computeOnServer(server -> server.overworld().getBlockState(snow).is(top));
             }
         }
-        context.takeScreenshot("10c_support_under_snow");
+        context.takeScreenshot(shot);
         context.runOnClient(client -> PlacementManager.get().remove(placement));
         world.getServer().runCommand("fill " + (support.getX() - 1) + " " + support.getY() + " " + (support.getZ() - 1)
                 + " " + (support.getX() + 1) + " " + (support.getY() + 1) + " " + (support.getZ() + 1) + " minecraft:air");
-        LitematicaPlusGameTest.require(dirt, "easy place should reach the enclosed support block under a snow ghost");
-        LitematicaPlusGameTest.require(layered, "the snow layer should go on once its support is placed");
+        LitematicaPlusGameTest.require(dirt, "easy place should reach the enclosed support block under a " + shot);
+        LitematicaPlusGameTest.require(layered, "the top block should go on once its support is placed: " + shot);
     }
 
     private static void survivalBreakWrong(ClientGameTestContext context, TestSingleplayerContext world) {

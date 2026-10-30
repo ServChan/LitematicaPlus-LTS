@@ -75,7 +75,7 @@ class EasyPlaceOrientationTest {
     @Test
     void toolModesCycleInBothDirections() {
         assertEquals(ToolMode.PLACEMENT, ToolMode.AREA_SELECTION.cycle(true));
-        assertEquals(ToolMode.DELETE, ToolMode.AREA_SELECTION.cycle(false));
-        assertEquals(ToolMode.AREA_SELECTION, ToolMode.DELETE.cycle(true));
+        assertEquals(ToolMode.EDIT, ToolMode.AREA_SELECTION.cycle(false));
+        assertEquals(ToolMode.AREA_SELECTION, ToolMode.EDIT.cycle(true));
     }
 }

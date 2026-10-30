@@ -144,8 +144,89 @@ public final class ToolController {
             case PLACEMENT -> movePlacement(minecraft);
             case PASTE -> pasteClick(minecraft);
             case FILL, REPLACE, DELETE -> areaClick(minecraft);
+            case ERASE -> eraseBlock(minecraft);
+            case EDIT -> editBlock(minecraft);
         }
         return true;
+    }
+
+    private void editBlock(Minecraft minecraft) {
+        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, ignored -> true, TARGET_RANGE, true);
+        BlockPos pos = hit != null ? hit.pos() : minecraft.player.pick(TARGET_RANGE, 1.0F, false) instanceof BlockHitResult block
+                && block.getType() == HitResult.Type.BLOCK ? block.getBlockPos() : null;
+        PlacementRuntime runtime = pos == null ? null : GhostEngine.get().runtimeAt(pos.getX(), pos.getY(), pos.getZ());
+        if (runtime == null) {
+            Notify.actionBar("litematicaplus.message.erase_none");
+            return;
+        }
+        boolean adopt = minecraft.hasShiftDown();
+        BlockState state = adopt ? minecraft.level.getBlockState(pos) : this.fillState;
+        if (state == null) {
+            Notify.actionBar("litematicaplus.message.edit_no_block");
+            return;
+        }
+        SchematicPlacement placement = runtime.placement();
+        if (placement.locked()) {
+            Notify.actionBar("litematicaplus.message.placement_locked");
+            return;
+        }
+        if (PlacementManager.get().editCell(placement, pos, state)) {
+            Notify.actionBar("litematicaplus.message.edit_done", state.getBlock().getName(), placement.editedCells().size());
+        }
+    }
+
+    private void undoEdit(Minecraft minecraft) {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        if (placement == null || placement.editedCells().isEmpty()) {
+            Notify.actionBar("litematicaplus.message.edit_nothing");
+            return;
+        }
+        if (minecraft.hasShiftDown()) {
+            Notify.actionBar("litematicaplus.message.edit_undone_all", PlacementManager.get().undoAllEdits(placement));
+            return;
+        }
+        BlockPos pos = PlacementManager.get().undoLastEdit(placement);
+        if (pos != null) {
+            Notify.actionBar("litematicaplus.message.edit_undone", pos.getX(), pos.getY(), pos.getZ(),
+                    placement.editedCells().size());
+        }
+    }
+
+    private void eraseBlock(Minecraft minecraft) {
+        GhostRaycast.Hit hit = GhostRaycast.trace(minecraft, ignored -> true, TARGET_RANGE, true);
+        PlacementRuntime runtime = hit == null ? null
+                : GhostEngine.get().runtimeAt(hit.pos().getX(), hit.pos().getY(), hit.pos().getZ());
+        if (runtime == null) {
+            Notify.actionBar("litematicaplus.message.erase_none");
+            return;
+        }
+        SchematicPlacement placement = runtime.placement();
+        if (placement.locked()) {
+            Notify.actionBar("litematicaplus.message.placement_locked");
+            return;
+        }
+        if (PlacementManager.get().removeCell(placement, hit.pos())) {
+            Notify.actionBar("litematicaplus.message.erase_done", hit.state().getBlock().getName(),
+                    placement.removedCells().size());
+        }
+    }
+
+    private void restoreBlocks(Minecraft minecraft) {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        if (placement == null || placement.removedCells().isEmpty()) {
+            Notify.actionBar("litematicaplus.message.erase_nothing");
+            return;
+        }
+        if (minecraft.hasShiftDown()) {
+            int count = PlacementManager.get().restoreAllCells(placement);
+            Notify.actionBar("litematicaplus.message.erase_restored_all", count);
+            return;
+        }
+        BlockPos pos = PlacementManager.get().restoreLastCell(placement);
+        if (pos != null) {
+            Notify.actionBar("litematicaplus.message.erase_restored", pos.getX(), pos.getY(), pos.getZ(),
+                    placement.removedCells().size());
+        }
     }
 
     private void pasteClick(Minecraft minecraft) {
@@ -253,6 +334,8 @@ public final class ToolController {
         switch (this.mode) {
             case AREA_SELECTION -> setCorner(minecraft, false);
             case PLACEMENT -> rotatePlacement();
+            case ERASE -> restoreBlocks(minecraft);
+            case EDIT -> undoEdit(minecraft);
             case PASTE, FILL, REPLACE, DELETE -> {
                 disarm();
                 PasteController.cancel();
@@ -263,7 +346,8 @@ public final class ToolController {
 
     public boolean onPick(Minecraft minecraft) {
         if (holdingTool(minecraft)) {
-            if (minecraft.hasAltDown() && (this.mode == ToolMode.FILL || this.mode == ToolMode.REPLACE)) {
+            if (minecraft.hasAltDown() && (this.mode == ToolMode.FILL || this.mode == ToolMode.REPLACE
+                    || this.mode == ToolMode.EDIT)) {
                 pickFillBlock(minecraft, this.mode == ToolMode.REPLACE && minecraft.hasShiftDown());
             } else {
                 cycleMode(!minecraft.hasShiftDown());
@@ -318,7 +402,7 @@ public final class ToolController {
         if (this.mode == ToolMode.AREA_SELECTION || this.mode.editsArea()) {
             boolean sneaking = minecraft.player.isShiftKeyDown();
             SelectionManager.get().nudge(true, !sneaking, direction, step);
-        } else {
+        } else if (this.mode != ToolMode.ERASE && this.mode != ToolMode.EDIT) {
             SchematicPlacement placement = PlacementManager.get().selected();
             if (placement == null) {
                 Notify.actionBar("litematicaplus.message.no_placement");

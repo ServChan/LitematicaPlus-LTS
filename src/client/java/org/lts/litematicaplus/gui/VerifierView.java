@@ -1,6 +1,7 @@
 package org.lts.litematicaplus.gui;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -18,6 +19,7 @@ import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.render.BoxRenderer;
+import org.lts.litematicaplus.verify.BlockDataCheck;
 import org.lts.litematicaplus.verify.MismatchType;
 
 final class VerifierView extends TabView {
@@ -115,6 +117,7 @@ final class VerifierView extends TabView {
             signature.add(runtime.verifiedSections());
             signature.add(runtime.knownSections());
             signature.add(runtime.scopePending());
+            signature.add(BlockDataCheck.problems(runtime).size());
             for (MismatchType type : MismatchType.VALUES) {
                 signature.add(runtime.fullCount(type));
             }
@@ -151,8 +154,8 @@ final class VerifierView extends TabView {
             this.list.empty(tr("litematicaplus.verifier.empty_title"), tr("litematicaplus.verifier.empty_hint"));
         }
         GhostEngine.Mismatch previous = this.list.selectedItem();
-        this.mismatches = GhostEngine.get().nearestMismatches(GhostEngine.get().runtime(placement.id()),
-                this.minecraft.player.position(), LIMIT, enabled);
+        this.mismatches = withData(runtime, GhostEngine.get().nearestMismatches(runtime, this.minecraft.player.position(),
+                LIMIT, enabled));
         this.list.setItems(this.mismatches);
         if (previous != null) {
             int index = -1;
@@ -166,6 +169,20 @@ final class VerifierView extends TabView {
             this.list.select(index);
             this.list.setScroll(keep);
         }
+    }
+
+    private List<GhostEngine.Mismatch> withData(PlacementRuntime runtime, List<GhostEngine.Mismatch> found) {
+        List<BlockDataCheck.Problem> problems = BlockDataCheck.problems(runtime);
+        if (problems.isEmpty()) {
+            return found;
+        }
+        List<GhostEngine.Mismatch> merged = new ArrayList<>(problems.size() + found.size());
+        for (BlockDataCheck.Problem problem : problems) {
+            merged.add(GhostEngine.dataMismatch(problem.pos(), problem.expected(), this.minecraft.player.position()));
+        }
+        merged.sort(Comparator.comparingDouble(GhostEngine.Mismatch::distanceSquared));
+        merged.addAll(found);
+        return merged;
     }
 
     @Override
@@ -206,6 +223,10 @@ final class VerifierView extends TabView {
 
     private static String describe(GhostEngine.Mismatch mismatch, BlockState found) {
         String expected = mismatch.expected().getBlock().getName().getString();
+        if (mismatch.type() == MismatchType.WRONG_DATA) {
+            BlockDataCheck.Problem problem = BlockDataCheck.at(mismatch.pos());
+            return problem == null ? expected : expected + " " + problem.kind().label().getString();
+        }
         if (mismatch.type() == MismatchType.MISSING || found == null) {
             return expected;
         }

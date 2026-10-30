@@ -215,7 +215,7 @@ public final class InfoHud {
             lines++;
         }
         ToolMode toolMode = ToolController.get().mode();
-        boolean fillLine = tool && (toolMode == ToolMode.FILL || toolMode == ToolMode.REPLACE);
+        boolean fillLine = tool && (toolMode == ToolMode.FILL || toolMode == ToolMode.REPLACE || toolMode == ToolMode.EDIT);
         if (fillLine) {
             lines++;
         }

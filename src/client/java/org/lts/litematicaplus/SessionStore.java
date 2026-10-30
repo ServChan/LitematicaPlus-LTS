@@ -20,6 +20,7 @@ public final class SessionStore {
     static final int SCHEMA_VERSION = 1;
     private static final int MAX_SCOPES = 512;
     private static final int MAX_PLACEMENTS = 256;
+    private static final int MAX_REMOVED_CELLS = 100_000;
     private static final int MAX_BOXES = 256;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final SessionStore INSTANCE = new SessionStore(
@@ -39,6 +40,8 @@ public final class SessionStore {
         public String serverId = "";
         public List<String> disabledRegions = new ArrayList<>();
         public Map<String, String> replacements = new LinkedHashMap<>();
+        public List<Long> removedCells = new ArrayList<>();
+        public Map<String, String> editedCells = new LinkedHashMap<>();
         public Map<String, RegionData> regions = new LinkedHashMap<>();
         public GridData grid = new GridData();
         public int zoneColumns = 1;
@@ -286,6 +289,17 @@ public final class SessionStore {
                 entry.replacements = new LinkedHashMap<>();
             }
             entry.replacements.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null);
+            if (entry.removedCells == null) {
+                entry.removedCells = new ArrayList<>();
+            }
+            entry.removedCells.removeIf(cell -> cell == null);
+            if (entry.removedCells.size() > MAX_REMOVED_CELLS) {
+                entry.removedCells = new ArrayList<>(entry.removedCells.subList(0, MAX_REMOVED_CELLS));
+            }
+            if (entry.editedCells == null) {
+                entry.editedCells = new LinkedHashMap<>();
+            }
+            entry.editedCells.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null);
         }
         scope.selectedPlacement = scope.selectedPlacement == null ? "" : scope.selectedPlacement;
         scope.toolMode = scope.toolMode == null ? "" : scope.toolMode;

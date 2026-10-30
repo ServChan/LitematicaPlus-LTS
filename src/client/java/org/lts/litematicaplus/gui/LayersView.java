@@ -129,12 +129,20 @@ final class LayersView extends TabView {
         axisRow(y, false, clip);
         y += ROW + 14;
         this.scopeTop = y;
-        add(FlatButton.toggle(this.left, y, this.width, tr("litematicaplus.option.count_visible_only"),
+        int scopeWidth = (this.width - Theme.GAP) * 3 / 5;
+        add(FlatButton.toggle(this.left, y, scopeWidth, tr("litematicaplus.option.count_visible_only"),
                 () -> LitematicaPlusConfig.current().countVisibleOnly, button -> {
                     LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
                     config.countVisibleOnly = !config.countVisibleOnly;
                     LitematicaPlusConfig.save(config);
                 }));
+        FlatButton auto = add(FlatButton.toggle(this.left + scopeWidth + Theme.GAP, y, this.width - scopeWidth - Theme.GAP,
+                tr("litematicaplus.layers.auto_next"), () -> LitematicaPlusConfig.current().autoLayerAdvance, button -> {
+                    LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+                    config.autoLayerAdvance = !config.autoLayerAdvance;
+                    LitematicaPlusConfig.save(config);
+                }));
+        auto.withHint(tr("litematicaplus.option.auto_layer.tip"));
         this.footerTop = y + ROW + 4;
     }
 

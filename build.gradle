@@ -291,6 +291,12 @@ if (providers.gradleProperty("uiOnly").isPresent()) {
     }
 }
 
+if (providers.gradleProperty("guideOnly").isPresent()) {
+    tasks.named("runClientGameTest") {
+        systemProperty "litematicaplus.guideOnly", "true"
+    }
+}
+
 if (providers.gradleProperty("printerOnly").isPresent()) {
     tasks.named("runClientGameTest") {
         systemProperty "litematicaplus.printerOnly", "true"

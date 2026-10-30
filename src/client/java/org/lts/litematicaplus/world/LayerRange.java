@@ -160,6 +160,11 @@ public record LayerRange(Mode mode, Direction.Axis axis, int single, int min, in
         return containsValue(low) && containsValue(high);
     }
 
+    public boolean agrees(LayerRange other, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+        return !intersects(minX, minY, minZ, maxX, maxY, maxZ) && !other.intersects(minX, minY, minZ, maxX, maxY, maxZ)
+                || encloses(minX, minY, minZ, maxX, maxY, maxZ) && other.encloses(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
     public LayerRange withMode(Mode newMode) {
         return new LayerRange(newMode, this.axis, this.single, this.min, this.max, this.clip);
     }
