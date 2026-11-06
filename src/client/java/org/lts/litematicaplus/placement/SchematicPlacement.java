@@ -9,6 +9,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Mirror;
@@ -37,6 +38,7 @@ public final class SchematicPlacement {
     private UUID serverId;
     private final Set<String> disabledRegions = new LinkedHashSet<>();
     private final Map<Block, Block> replacements = new LinkedHashMap<>();
+    private final Map<Item, Long> collected = new LinkedHashMap<>();
     private final List<Long> removedCells = new java.util.ArrayList<>();
     private final java.util.LinkedHashMap<Long, BlockState> editedCells = new java.util.LinkedHashMap<>();
     private final Map<String, RegionPlacement> regionPlacements = new LinkedHashMap<>();
@@ -142,6 +144,10 @@ public final class SchematicPlacement {
 
     public Map<Block, Block> replacements() {
         return this.replacements;
+    }
+
+    public Map<Item, Long> collected() {
+        return this.collected;
     }
 
     public List<Long> removedCells() {

@@ -140,6 +140,9 @@ public final class InfoHud {
             if (entry.missing() <= 0L) {
                 break;
             }
+            if (entry.marked()) {
+                continue;
+            }
             ItemStack stack = stackOf(entry.item());
             String count = entry.missing() + " / " + entry.haveText();
             int nameWidth = WIDTH - PADDING * 2 - 14 - font.width(count) - 6;

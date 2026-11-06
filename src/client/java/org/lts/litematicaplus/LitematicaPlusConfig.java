@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -141,6 +142,12 @@ public final class LitematicaPlusConfig {
     public boolean materialHelper = true;
     public boolean materialPanel = true;
     public boolean materialPanelCollapsed = false;
+    public boolean rawSmelting = false;
+    public boolean rawUseStock = true;
+    public boolean rawScopeAll = false;
+    public List<String> rawForced = new ArrayList<>();
+    public Map<String, Integer> rawChoices = new HashMap<>();
+    public Map<String, Long> customMaterials = new LinkedHashMap<>();
     public boolean materialExactTake = true;
     public boolean materialTooltips = true;
     public boolean materialHelperFollowsRender = true;
@@ -397,6 +404,36 @@ public final class LitematicaPlusConfig {
         }
         config.schematicsDirectory = normalizeDirectory(config.schematicsDirectory);
         config.extraSchematicFolders = normalizeFolders(config.extraSchematicFolders);
+        List<String> forced = new ArrayList<>();
+        if (config.rawForced != null) {
+            for (String id : config.rawForced) {
+                String clean = normalizeId(id, "");
+                if (!clean.isEmpty() && !forced.contains(clean) && forced.size() < 1024) {
+                    forced.add(clean);
+                }
+            }
+        }
+        config.rawForced = forced;
+        Map<String, Integer> choices = new HashMap<>();
+        if (config.rawChoices != null) {
+            config.rawChoices.forEach((id, index) -> {
+                String clean = normalizeId(id, "");
+                if (!clean.isEmpty() && index != null && index >= 0 && index < 256 && choices.size() < 1024) {
+                    choices.put(clean, index);
+                }
+            });
+        }
+        config.rawChoices = choices;
+        Map<String, Long> custom = new LinkedHashMap<>();
+        if (config.customMaterials != null) {
+            config.customMaterials.forEach((id, count) -> {
+                String clean = normalizeId(id, "");
+                if (!clean.isEmpty() && count != null && count > 0L && custom.size() < 512) {
+                    custom.put(clean, Math.min(count, 1_000_000_000_000L));
+                }
+            });
+        }
+        config.customMaterials = custom;
         config.defaultAuthor = config.defaultAuthor == null ? "" : trim(config.defaultAuthor.strip(), 64);
         return config;
     }

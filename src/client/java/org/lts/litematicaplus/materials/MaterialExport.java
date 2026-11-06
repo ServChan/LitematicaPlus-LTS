@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -40,13 +41,29 @@ public final class MaterialExport {
 
     public record Labels(String sheetSummary, String sheetNeeded, String sheetAll, String schematic, String exportedAt,
             String itemTypes, String total, String missing, String toGather, String stacks, String shulkers,
-            String[] columns) {
+            String[] columns, String collected, String everything, String sheetRaw, String sheetSteps, String rawTotal,
+            String[] rawColumns, String[] stepColumns) {
+        public Labels(String sheetSummary, String sheetNeeded, String sheetAll, String schematic, String exportedAt,
+                String itemTypes, String total, String missing, String toGather, String stacks, String shulkers,
+                String[] columns) {
+            this(sheetSummary, sheetNeeded, sheetAll, schematic, exportedAt, itemTypes, total, missing, toGather, stacks,
+                    shulkers, columns, "Collected by hand", "all", "Raw materials", "Crafting", "Raw materials to get",
+                    new String[] {"Item", "ID", "Needed", "From stock", "To get", "Stacks"},
+                    new String[] {"Item", "ID", "Needed", "From stock", "Crafts", "Made", "Left over", "Recipe"});
+        }
+
         public static Labels capture() {
             return new Labels(text("sheet_summary"), text("sheet_needed"), text("sheet_all"), text("schematic"),
                     text("exported_at"), text("item_types"), text("total"), text("missing"), text("to_gather"),
                     text("stacks"), text("shulkers"), new String[] {text("column.item"), text("column.id"),
                         text("column.total"), text("column.missing"), text("column.available"), text("column.to_gather"),
-                        text("column.stacks"), text("column.shulkers"), text("column.stack_size")});
+                        text("column.stacks"), text("column.shulkers"), text("column.stack_size")},
+                    text("column.collected"), text("collected_all"), text("sheet_raw"), text("sheet_steps"),
+                    text("raw_total"), new String[] {text("column.item"), text("column.id"), text("raw.column.need"),
+                        text("raw.column.stock"), text("raw.column.to_get"), text("column.stacks")},
+                    new String[] {text("column.item"), text("column.id"), text("raw.column.need"),
+                        text("raw.column.stock"), text("raw.column.crafts"), text("raw.column.made"),
+                        text("raw.column.leftover"), text("raw.column.recipe")});
         }
 
         private static String text(String key) {
@@ -120,7 +137,7 @@ public final class MaterialExport {
 
     static XlsxWriter workbook(MaterialReport report, Labels labels) {
         XlsxWriter workbook = new XlsxWriter();
-        workbook.sheet(labels.sheetSummary()).widths(34, 26)
+        XlsxWriter.Sheet summary = workbook.sheet(labels.sheetSummary()).widths(34, 26)
                 .title(report.title())
                 .blank()
                 .row(labels.schematic(), report.title())
@@ -131,26 +148,71 @@ public final class MaterialExport {
                 .row(labels.toGather(), report.toGather())
                 .row(labels.stacks(), report.stacks())
                 .row(labels.shulkers(), report.shulkerBoxes());
-        table(workbook.sheet(labels.sheetNeeded()), report.needed(), labels);
-        table(workbook.sheet(labels.sheetAll()), report.rows(), labels);
+        MaterialReport.RawSection raw = report.raw();
+        if (raw != null) {
+            long toGet = 0L;
+            for (MaterialReport.RawRow row : raw.raw()) {
+                toGet += row.toGet();
+            }
+            summary.row(labels.rawTotal(), toGet);
+        }
+        table(workbook.sheet(labels.sheetNeeded()), report.needed(), labels, report.anyCollected());
+        table(workbook.sheet(labels.sheetAll()), report.rows(), labels, report.anyCollected());
+        if (raw != null) {
+            XlsxWriter.Sheet rawSheet = workbook.sheet(labels.sheetRaw()).widths(32, 34, 12, 14, 12, 10)
+                    .header(labels.rawColumns());
+            for (MaterialReport.RawRow row : raw.raw()) {
+                rawSheet.row(row.name(), row.id(), row.need(), row.fromStock(), row.toGet(), row.stacks());
+            }
+            XlsxWriter.Sheet stepSheet = workbook.sheet(labels.sheetSteps()).widths(32, 34, 12, 14, 10, 10, 12, 60)
+                    .header(labels.stepColumns());
+            for (MaterialReport.StepRow row : raw.steps()) {
+                stepSheet.row(row.name(), row.id(), row.demand(), row.fromStock(), row.crafts(), row.produced(),
+                        row.leftover(), row.recipe());
+            }
+        }
         return workbook;
     }
 
-    private static void table(XlsxWriter.Sheet sheet, List<MaterialReport.Row> rows, Labels labels) {
-        sheet.widths(32, 34, 11, 11, 14, 12, 10, 16, 12).header(labels.columns());
+    private static String[] columns(Labels labels, boolean collected) {
+        if (!collected) {
+            return labels.columns();
+        }
+        String[] columns = Arrays.copyOf(labels.columns(), labels.columns().length + 1);
+        columns[columns.length - 1] = labels.collected();
+        return columns;
+    }
+
+    private static String collected(MaterialReport.Row row, Labels labels) {
+        return row.marked() ? labels.everything() : Long.toString(Math.max(0L, row.collected()));
+    }
+
+    private static void table(XlsxWriter.Sheet sheet, List<MaterialReport.Row> rows, Labels labels, boolean withCollected) {
+        sheet.widths(32, 34, 11, 11, 14, 12, 10, 16, 12, 16).header(columns(labels, withCollected));
         for (MaterialReport.Row row : rows) {
-            sheet.row(row.name(), row.id(), row.total(), row.missing(), row.available(), row.toGather(), row.stacks(),
-                    row.shulkerBoxes(), row.stackSize());
+            if (withCollected) {
+                sheet.row(row.name(), row.id(), row.total(), row.missing(), row.available(), row.toGather(), row.stacks(),
+                        row.shulkerBoxes(), row.stackSize(), row.marked() ? labels.everything() : row.collected());
+            } else {
+                sheet.row(row.name(), row.id(), row.total(), row.missing(), row.available(), row.toGather(), row.stacks(),
+                        row.shulkerBoxes(), row.stackSize());
+            }
         }
     }
 
     static String csv(MaterialReport report, Labels labels) {
         StringBuilder out = new StringBuilder("\uFEFF");
-        csvLine(out, labels.columns());
+        boolean withCollected = report.anyCollected();
+        csvLine(out, columns(labels, withCollected));
         for (MaterialReport.Row row : report.rows()) {
-            csvLine(out, row.name(), row.id(), Long.toString(row.total()), Long.toString(row.missing()),
-                    Long.toString(row.available()), Long.toString(row.toGather()), Long.toString(row.stacks()),
-                    decimal(row.shulkerBoxes()), Integer.toString(row.stackSize()));
+            String[] values = {row.name(), row.id(), Long.toString(row.total()), Long.toString(row.missing()),
+                Long.toString(row.available()), Long.toString(row.toGather()), Long.toString(row.stacks()),
+                decimal(row.shulkerBoxes()), Integer.toString(row.stackSize())};
+            if (withCollected) {
+                values = Arrays.copyOf(values, values.length + 1);
+                values[values.length - 1] = collected(row, labels);
+            }
+            csvLine(out, values);
         }
         return out.toString();
     }
@@ -181,22 +243,50 @@ public final class MaterialExport {
         out.append("- ").append(labels.missing()).append(": ").append(report.missing()).append('\n');
         out.append("- ").append(labels.toGather()).append(": ").append(report.toGather()).append('\n');
         out.append("- ").append(labels.stacks()).append(": ").append(report.stacks()).append('\n');
-        out.append("- ").append(labels.shulkers()).append(": ").append(report.shulkerBoxes()).append("\n\n|");
-        for (String column : labels.columns()) {
-            out.append(' ').append(cell(column)).append(" |");
-        }
-        out.append("\n|");
-        for (int i = 0; i < labels.columns().length; i++) {
-            out.append(i < 2 ? " --- |" : " ---: |");
-        }
-        out.append('\n');
+        out.append("- ").append(labels.shulkers()).append(": ").append(report.shulkerBoxes()).append("\n\n");
+        boolean withCollected = report.anyCollected();
+        header(out, columns(labels, withCollected));
         for (MaterialReport.Row row : report.rows()) {
             out.append("| ").append(cell(row.name())).append(" | `").append(row.id()).append("` | ").append(row.total())
                     .append(" | ").append(row.missing()).append(" | ").append(row.available()).append(" | ")
                     .append(row.toGather()).append(" | ").append(row.stacks()).append(" | ")
-                    .append(decimal(row.shulkerBoxes())).append(" | ").append(row.stackSize()).append(" |\n");
+                    .append(decimal(row.shulkerBoxes())).append(" | ").append(row.stackSize());
+            if (withCollected) {
+                out.append(" | ").append(cell(collected(row, labels)));
+            }
+            out.append(" |\n");
+        }
+        MaterialReport.RawSection raw = report.raw();
+        if (raw != null) {
+            out.append("\n## ").append(cell(labels.sheetRaw())).append("\n\n");
+            header(out, labels.rawColumns());
+            for (MaterialReport.RawRow row : raw.raw()) {
+                out.append("| ").append(cell(row.name())).append(" | `").append(row.id()).append("` | ").append(row.need())
+                        .append(" | ").append(row.fromStock()).append(" | ").append(row.toGet()).append(" | ")
+                        .append(row.stacks()).append(" |\n");
+            }
+            out.append("\n## ").append(cell(labels.sheetSteps())).append("\n\n");
+            header(out, labels.stepColumns());
+            for (MaterialReport.StepRow row : raw.steps()) {
+                out.append("| ").append(cell(row.name())).append(" | `").append(row.id()).append("` | ").append(row.demand())
+                        .append(" | ").append(row.fromStock()).append(" | ").append(row.crafts()).append(" | ")
+                        .append(row.produced()).append(" | ").append(row.leftover()).append(" | ").append(cell(row.recipe()))
+                        .append(" |\n");
+            }
         }
         return out.toString();
+    }
+
+    private static void header(StringBuilder out, String[] columns) {
+        out.append('|');
+        for (String column : columns) {
+            out.append(' ').append(cell(column)).append(" |");
+        }
+        out.append("\n|");
+        for (int i = 0; i < columns.length; i++) {
+            out.append(i < 2 ? " --- |" : " ---: |");
+        }
+        out.append('\n');
     }
 
     private static String cell(String value) {
@@ -228,9 +318,42 @@ public final class MaterialExport {
             item.addProperty("stacks", row.stacks());
             item.addProperty("shulkerBoxes", row.shulkerBoxes());
             item.addProperty("stackSize", row.stackSize());
+            if (row.marked()) {
+                item.addProperty("markedCollected", true);
+            } else if (row.collected() > 0L) {
+                item.addProperty("collected", row.collected());
+            }
             items.add(item);
         }
         root.add("items", items);
+        MaterialReport.RawSection raw = report.raw();
+        if (raw != null) {
+            JsonArray rawItems = new JsonArray();
+            for (MaterialReport.RawRow row : raw.raw()) {
+                JsonObject item = new JsonObject();
+                item.addProperty("id", row.id());
+                item.addProperty("name", row.name());
+                item.addProperty("need", row.need());
+                item.addProperty("fromStock", row.fromStock());
+                item.addProperty("toGet", row.toGet());
+                rawItems.add(item);
+            }
+            JsonArray steps = new JsonArray();
+            for (MaterialReport.StepRow row : raw.steps()) {
+                JsonObject step = new JsonObject();
+                step.addProperty("id", row.id());
+                step.addProperty("name", row.name());
+                step.addProperty("need", row.demand());
+                step.addProperty("fromStock", row.fromStock());
+                step.addProperty("crafts", row.crafts());
+                step.addProperty("made", row.produced());
+                step.addProperty("leftover", row.leftover());
+                step.addProperty("recipe", row.recipe());
+                steps.add(step);
+            }
+            root.add("raw", rawItems);
+            root.add("crafting", steps);
+        }
         return new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(root);
     }
 }

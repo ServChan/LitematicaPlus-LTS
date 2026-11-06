@@ -22,6 +22,7 @@ public final class SessionStore {
     private static final int MAX_PLACEMENTS = 256;
     private static final int MAX_REMOVED_CELLS = 100_000;
     private static final int MAX_BOXES = 256;
+    private static final int MAX_COLLECTED = 4096;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final SessionStore INSTANCE = new SessionStore(
             FabricLoader.getInstance().getConfigDir().resolve("litematica-plus-session.json"));
@@ -40,6 +41,7 @@ public final class SessionStore {
         public String serverId = "";
         public List<String> disabledRegions = new ArrayList<>();
         public Map<String, String> replacements = new LinkedHashMap<>();
+        public Map<String, Long> collected = new LinkedHashMap<>();
         public List<Long> removedCells = new ArrayList<>();
         public Map<String, String> editedCells = new LinkedHashMap<>();
         public Map<String, RegionData> regions = new LinkedHashMap<>();
@@ -289,6 +291,16 @@ public final class SessionStore {
                 entry.replacements = new LinkedHashMap<>();
             }
             entry.replacements.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null);
+            if (entry.collected == null) {
+                entry.collected = new LinkedHashMap<>();
+            }
+            entry.collected.entrySet().removeIf(pair -> pair.getKey() == null || pair.getValue() == null
+                    || pair.getValue() == 0L || pair.getValue() < -1L);
+            if (entry.collected.size() > MAX_COLLECTED) {
+                Map<String, Long> kept = new LinkedHashMap<>();
+                entry.collected.entrySet().stream().limit(MAX_COLLECTED).forEach(pair -> kept.put(pair.getKey(), pair.getValue()));
+                entry.collected = kept;
+            }
             if (entry.removedCells == null) {
                 entry.removedCells = new ArrayList<>();
             }

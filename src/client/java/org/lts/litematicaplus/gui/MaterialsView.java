@@ -32,12 +32,14 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerMemory;
+import org.lts.litematicaplus.materials.CountParser;
 import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialExport;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.materials.MaterialReport;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.recipes.RawMaterials;
 import org.lts.litematicaplus.util.Notify;
 
 final class MaterialsView extends TabView {
@@ -63,6 +65,12 @@ final class MaterialsView extends TabView {
     private final Map<Item, Set<Block>> blocksByItem = new IdentityHashMap<>();
     private FlatButton hideGhosts;
     private EditBox searchBox;
+    private EditBox collectedBox;
+    private FlatButton markButton;
+    private FlatButton clearMarks;
+    private boolean syncing;
+    private Item editing;
+    private int markedCount;
     private int headerY;
     private int matchCount;
     private int typeCount;
@@ -80,6 +88,9 @@ final class MaterialsView extends TabView {
         }
         Component summary = searching() ? tr("litematicaplus.materials.search_count", this.matchCount, this.typeCount)
                 : tr("litematicaplus.materials.summary", this.entries.size(), this.totalMissing);
+        if (this.markedCount > 0) {
+            summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.marked_summary", this.markedCount));
+        }
         int hidden = GhostEngine.get().hiddenBlocks().size();
         if (hidden > 0) {
             summary = summary.copy().append(" · ").append(tr("litematicaplus.materials.hidden_summary", hidden));
@@ -112,26 +123,33 @@ final class MaterialsView extends TabView {
         if (placement == null) {
             add(FlatButton.primary(this.left + (this.width - 160) / 2, this.top + this.height / 2 + 30, 160,
                     tr("litematicaplus.overview.browse"), button -> this.screen.switchTab(HubScreen.Tab.SCHEMATICS)));
+            add(hint(FlatButton.secondary(this.left + (this.width - 160) / 2, this.top + this.height / 2 + 30
+                    + Theme.CONTROL_HEIGHT + 4, 160, tr("litematicaplus.raw.custom"), button -> this.minecraft.gui.setScreen(
+                            new RawMaterialsScreen(this.screen, RawMaterialsScreen.Source.customList()))),
+                    "litematicaplus.raw.custom.tip"));
             return;
         }
         if (this.exporting) {
             exportRow();
         } else {
-            int quarter = (this.width - Theme.GAP * 3) / 4;
-            add(FlatButton.secondary(this.left, this.top, quarter, tr("litematicaplus.materials.sort",
+            int fifth = (this.width - Theme.GAP * 4) / 5;
+            add(FlatButton.secondary(this.left, this.top, fifth, tr("litematicaplus.materials.sort",
                     tr("litematicaplus.materials.sort." + sort.name().toLowerCase(Locale.ROOT))), button -> {
                         sort = sort.next();
                         this.screen.refresh();
                     }));
-            add(FlatButton.toggle(this.left + quarter + Theme.GAP, this.top, quarter,
+            add(FlatButton.toggle(this.left + fifth + Theme.GAP, this.top, fifth,
                     tr("litematicaplus.materials.hide_completed"), () -> hideCompleted, button -> {
                         hideCompleted = !hideCompleted;
                         recompute();
                     }));
-            this.hideGhosts = add(FlatButton.toggle(this.left + (quarter + Theme.GAP) * 2, this.top, quarter,
+            this.hideGhosts = add(FlatButton.toggle(this.left + (fifth + Theme.GAP) * 2, this.top, fifth,
                     tr("litematicaplus.materials.hide_ghosts"), this::selectedHidden, button -> toggleGhosts()));
-            add(FlatButton.secondary(this.left + (quarter + Theme.GAP) * 3, this.top,
-                    this.width - (quarter + Theme.GAP) * 3, tr("litematicaplus.materials.export"), button -> {
+            add(hint(FlatButton.secondary(this.left + (fifth + Theme.GAP) * 3, this.top, fifth,
+                    tr("litematicaplus.raw.open"), button -> this.minecraft.gui.setScreen(new RawMaterialsScreen(this.screen,
+                            RawMaterialsScreen.Source.placement(placement)))), "litematicaplus.raw.open.tip"));
+            add(FlatButton.secondary(this.left + (fifth + Theme.GAP) * 4, this.top,
+                    this.width - (fifth + Theme.GAP) * 4, tr("litematicaplus.materials.export"), button -> {
                         this.exporting = true;
                         this.screen.refresh();
                     }));
@@ -150,13 +168,99 @@ final class MaterialsView extends TabView {
         int listTop = searchY + Theme.CONTROL_HEIGHT + 16;
         this.columnWidth = Math.max(44, Math.min(110, this.width / 5));
         this.showStacks = this.width >= 400;
-        this.list = add(new ListPanel<MaterialList.Entry>(this.left, listTop, this.width, this.top + this.height - listTop,
-                Theme.ROW_HEIGHT, tr("litematicaplus.tab.materials"), this::renderRow)
+        int barY = this.top + this.height - Theme.CONTROL_HEIGHT;
+        int third = (this.width - Theme.GAP * 2) / 3;
+        this.collectedBox = field(this.left, barY, third, "", tr("litematicaplus.materials.collected"), 24);
+        hint(this.collectedBox, "litematicaplus.materials.collected.tip");
+        this.collectedBox.setResponder(this::collectedChanged);
+        this.markButton = add(hint(FlatButton.toggle(this.left + third + Theme.GAP, barY, third,
+                tr("litematicaplus.materials.mark"), this::selectedMarked, button -> toggleMark()),
+                "litematicaplus.materials.mark.tip"));
+        this.clearMarks = add(hint(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, barY,
+                this.width - (third + Theme.GAP) * 2, tr("litematicaplus.materials.clear_marks"), button -> clearMarks()),
+                "litematicaplus.materials.clear_marks.tip"));
+        this.list = add(new ListPanel<MaterialList.Entry>(this.left, listTop, this.width,
+                barY - 4 - listTop, Theme.ROW_HEIGHT, tr("litematicaplus.tab.materials"), this::renderRow)
+                .onSelect(entry -> syncEditor())
                 .onPress(this::locate)
                 .describe(entry -> InfoHud.stackOf(entry.item()).getHoverName().getString() + " " + entry.missing())
                 .empty(tr("litematicaplus.materials.empty_title"), tr("litematicaplus.materials.empty_hint")));
         recompute();
         this.list.setScroll(this.scroll);
+        syncEditor();
+    }
+
+    private MaterialList.Entry selectedEntry() {
+        return this.list == null ? null : this.list.selectedItem();
+    }
+
+    private boolean selectedMarked() {
+        MaterialList.Entry entry = selectedEntry();
+        return entry != null && entry.marked();
+    }
+
+    private void syncEditor() {
+        if (this.collectedBox == null) {
+            return;
+        }
+        MaterialList.Entry entry = selectedEntry();
+        this.editing = entry == null ? null : entry.item();
+        this.syncing = true;
+        this.collectedBox.setValue(entry == null || entry.marked() || entry.collected() <= 0L ? ""
+                : Long.toString(entry.collected()));
+        this.collectedBox.setEditable(entry != null);
+        this.collectedBox.setTextColor(Theme.TEXT);
+        this.syncing = false;
+    }
+
+    private void collectedChanged(String value) {
+        if (this.syncing) {
+            return;
+        }
+        SchematicPlacement placement = PlacementManager.get().selected();
+        MaterialList.Entry entry = selectedEntry();
+        if (placement == null || entry == null || entry.item() != this.editing) {
+            return;
+        }
+        long amount = CountParser.parse(value, InfoHud.stackOf(entry.item()).getMaxStackSize());
+        if (amount < 0L) {
+            this.collectedBox.setTextColor(Theme.DANGER);
+            return;
+        }
+        this.collectedBox.setTextColor(Theme.TEXT);
+        if (amount == 0L && entry.marked()) {
+            return;
+        }
+        PlacementManager.get().setCollected(placement, entry.item(), amount);
+        recompute();
+    }
+
+    private void toggleMark() {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        MaterialList.Entry entry = selectedEntry();
+        if (placement == null || entry == null) {
+            status(tr("litematicaplus.materials.mark_pick"));
+            return;
+        }
+        boolean mark = !entry.marked();
+        PlacementManager.get().setCollected(placement, entry.item(), mark ? MaterialList.Entry.ALL : 0L);
+        Component name = InfoHud.stackOf(entry.item()).getHoverName();
+        status(tr(mark ? "litematicaplus.panel.marked" : "litematicaplus.panel.unmarked", name));
+        recompute();
+        syncEditor();
+    }
+
+    private void clearMarks() {
+        SchematicPlacement placement = PlacementManager.get().selected();
+        if (placement == null || placement.collected().isEmpty()) {
+            status(tr("litematicaplus.materials.no_marks"));
+            return;
+        }
+        int count = placement.collected().size();
+        PlacementManager.get().clearCollected(placement);
+        status(tr("litematicaplus.materials.marks_cleared", count));
+        recompute();
+        syncEditor();
     }
 
     private void recompute() {
@@ -194,19 +298,24 @@ final class MaterialsView extends TabView {
         boolean searching = searching();
         int matched = 0;
         int doneHidden = 0;
+        int marked = 0;
         for (MaterialList.Entry entry : all) {
             missing += entry.missing();
             packed |= entry.packed() > 0L;
+            if (entry.marked() && entry.missing() > 0L) {
+                marked++;
+            }
             if (searching && !matchesQuery(entry)) {
                 continue;
             }
             matched++;
-            if (!hideCompleted || entry.missing() > 0L) {
+            if (!hideCompleted || entry.missing() > 0L && !entry.marked()) {
                 shown.add(entry);
             } else {
                 doneHidden++;
             }
         }
+        this.markedCount = marked;
         this.matchCount = matched;
         this.typeCount = all.size();
         if (ready && searching && shown.isEmpty()) {
@@ -355,6 +464,11 @@ final class MaterialsView extends TabView {
         }
         LocalDateTime now = LocalDateTime.now();
         MaterialReport report = MaterialReport.of(placement.name(), all, now);
+        MaterialReport.RawSection raw = RawMaterials.sectionFor(all, LitematicaPlusConfig.current().rawScopeAll
+                ? RawMaterials.Scope.ALL : RawMaterials.Scope.MISSING);
+        if (raw != null) {
+            report = report.withRaw(raw);
+        }
         MaterialExport.export(report, MaterialExport.Labels.capture(), format, now).whenComplete((path, failure) ->
                 this.minecraft.execute(() -> exported(path, failure)));
     }
@@ -397,9 +511,20 @@ final class MaterialsView extends TabView {
     void tick() {
         if (this.list != null) {
             this.scroll = this.list.scroll();
+            MaterialList.Entry selected = this.list.selectedItem();
             if (this.hideGhosts != null) {
-                MaterialList.Entry selected = this.list.selectedItem();
                 this.hideGhosts.active = selected != null && this.blocksByItem.containsKey(selected.item());
+            }
+            if (this.markButton != null) {
+                this.markButton.active = selected != null;
+            }
+            if (this.clearMarks != null) {
+                SchematicPlacement current = PlacementManager.get().selected();
+                this.clearMarks.active = current != null && !current.collected().isEmpty();
+            }
+            if (this.collectedBox != null && (selected == null ? null : selected.item()) != this.editing
+                    && !this.collectedBox.isFocused()) {
+                syncEditor();
             }
             if (this.statusTicks > 0 && --this.statusTicks == 0) {
                 this.status = null;
@@ -417,14 +542,19 @@ final class MaterialsView extends TabView {
             graphics.fill(x + 1, y + 2, x + 3, y + rowHeight - 2, Theme.ACCENT);
         }
         graphics.fakeItem(stack, x + 5, y + 3);
+        if (entry.marked()) {
+            graphics.fill(x + 13, y + 11, x + 23, y + 19, Theme.SURFACE_SELECTED);
+            Ui.tick(graphics, x + 14, y + 12, Theme.SUCCESS);
+        }
         int textY = y + (rowHeight - 8) / 2;
         int right = x + rowWidth - 6;
-        boolean done = entry.missing() <= 0L;
+        boolean done = entry.missing() <= 0L || entry.marked();
         boolean enough = entry.available() >= entry.missing();
         RowText text = this.rowText.computeIfAbsent(entry, ignored -> rowText(entry, stack, done));
         Ui.right(graphics, rowFont, text.available(), right, textY,
                 done ? Theme.TEXT_DIM : enough ? Theme.SUCCESS : Theme.WARNING);
-        Ui.right(graphics, rowFont, text.missing(), right - this.columnWidth, textY, done ? Theme.SUCCESS : Theme.TEXT_BRIGHT);
+        Ui.right(graphics, rowFont, text.missing(), right - this.columnWidth, textY,
+                done ? Theme.SUCCESS : entry.manual() ? Theme.ACCENT_HOVER : Theme.TEXT_BRIGHT);
         Ui.right(graphics, rowFont, text.total(), right - this.columnWidth * 2 - 10, textY, Theme.TEXT_DIM);
         int nameWidth = rowWidth - 30 - this.columnWidth * 3 - 16;
         Ui.clipped(graphics, rowFont, text.name(), x + 26, textY, nameWidth,
@@ -437,8 +567,14 @@ final class MaterialsView extends TabView {
         if (hidden) {
             name = tr("litematicaplus.materials.ghosts_hidden", name).getString();
         }
-        return new RowText(entry.haveText(), done ? tr("litematicaplus.materials.done").getString()
-                : compact(entry.missing(), stack.getMaxStackSize()), Long.toString(entry.total()), name, hidden);
+        if (entry.manual()) {
+            name = tr("litematicaplus.materials.collected_name", name, entry.collected()).getString();
+        }
+        String missingText = entry.marked() && entry.missing() > 0L ? tr("litematicaplus.materials.marked").getString()
+                : done ? tr("litematicaplus.materials.done").getString()
+                : entry.manual() ? compact(Math.max(0L, entry.missing() - entry.collected()), stack.getMaxStackSize())
+                : compact(entry.missing(), stack.getMaxStackSize());
+        return new RowText(entry.haveText(), missingText, Long.toString(entry.total()), name, hidden);
     }
 
     private String compact(long count, int stackSize) {
