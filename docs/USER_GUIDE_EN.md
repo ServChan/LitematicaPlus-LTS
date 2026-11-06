@@ -29,6 +29,7 @@ Mod version **1.0.5**, Minecraft **26.3**, Fabric. Guide updated **24 October 20
 - [Files and recovery](#files-and-recovery)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
+- [Feature reference](#feature-reference)
 
 ## Quick start
 
@@ -419,14 +420,39 @@ Select a placement and open **Materials**.
 Counting handles double slabs, candles, snow layers, sea pickles and fluid buckets; a potted flower is a pot plus the flower, a candle cake is a cake plus a candle; upper door halves and bed heads are not counted twice. A block that is there but turned the wrong way or in another state needs no material (except slabs, candles and layers, where the state is the count).
 
 - **Sort**: missing, total, name, not in inventory.
-- **Hide done** — hide materials you already have enough of.
+- **Hide done** — hide materials you already have enough of and the ones marked as collected.
 - **Hide ghosts** — hide the ghosts of the selected material in the world, in every schematic (verification and counters stay the same); press again to show them. The "Hide the ghost block you look at" and "Show all hidden blocks" keys do the same. The choice is kept per world and server.
 - **Click a row** to light up, through walls, the remembered containers that hold that material (needs **Remember opened containers**).
-- **Export**: Excel `.xlsx` (Summary, To gather and All materials sheets), CSV, Markdown, JSON or **Copy**. Files go to `litematica-plus/materials/`, and chat shows a link to the file and the folder. Copy takes the visible rows, files take the whole list.
+- **Raw materials** — open the raw material count for the missing materials (see below).
+- **Export**: Excel `.xlsx` (Summary, To gather and All materials sheets, plus Raw materials and Crafting once the recipes are read), CSV, Markdown, JSON or **Copy**. Files go to `litematica-plus/materials/`, and chat shows a link to the file and the folder. Copy takes the visible rows, files take the whole list.
 
 The **ender chest** is added to Have once you open it after joining (**Count the ender chest in materials**).
 
 **Container memory**: the mod remembers what is in the chests, barrels and shulker boxes you open in this world during this session. Remembered containers within 64 blocks that hold a material you still lack in your inventory get an orange outline on their own (**Highlight containers with missing materials**).
+
+### "Already collected" marks
+
+When a material is gathered but not on you (in a chest at home, with a teammate), mark it so it stops getting in the way:
+
+- **Collected by hand** (the field under the list) — how much of the selected material is already gathered elsewhere. Understands `300`, `5st` (stacks), `2sh` (shulker boxes) and sums like `3st+10`. The amount is subtracted from Needed everywhere: the container panel, Take needed, the highlight and the info panel.
+- **All collected** — mark the material as fully collected. It stays in the list dimmed with a check mark and leaves the container panel and Take needed.
+- **Clear marks** — remove every mark of this placement.
+
+Marks are kept with the placement and go to the export as a "Collected by hand" column.
+
+### Raw materials
+
+The **Raw materials** button (on the Materials tab and in the materials of any file on the Schematics tab) breaks materials down by recipe to what you gather: slabs into planks, planks into logs, stairs through the stonecutter when that is cheaper.
+
+- Left: raw materials — needed, have, to get. Click a row to highlight the crafts it goes into.
+- Right: crafts — how many times to craft, the recipe and what it makes. An orange arrow means other recipes exist: click the craft to switch. `Shift` + click counts the item as raw and stops there; `Shift` + click on that raw row crafts it again.
+- **Only missing / Whole schematic** — count what is missing (minus your inventory and marks) or the whole schematic.
+- **Use stock** — subtract what is in your inventory, shulker boxes and ender chest at every step: ready planks are used before logs are counted.
+- **Smelting** — also go through the furnace (stone into cobblestone, glass into sand). Off by default.
+- **Reset recipes** — go back to the cheapest recipes.
+- **Custom list** — count raw materials for items typed in by hand, without a schematic: type a name (for example "pale oak slab"), an amount (`300`, `5st`, `2sh`) and press **Add**. Right click or `Delete` removes an item. The list is kept.
+
+In singleplayer every recipe of the world is known; on a server the vanilla ones, recipes of installed mods and the ones unlocked in the recipe book. Crafts are rounded up, and the leftover is shown in the tooltip.
 
 ### Container helper
 
@@ -443,6 +469,7 @@ A **material panel** sits beside the container: what is still missing, how much 
 - Click a row to take the needed amount of that item; `Shift` + click takes all of it from here; right-click sends the amount to Stack Calculator.
 - **Take needed** (or the "Take materials from the open container" key) takes exactly the shortfall. A stack is split with a few clicks when needed, and a shulker box is taken whole only when loose items are not enough.
 - **Put back extra** returns materials beyond what is needed. The item in your hand and slots locked in IPN are left alone.
+- The check box at the right of a line (or `Ctrl` + click) marks a material as already collected: it leaves the panel, Take needed and the highlight. "Marked: N" at the bottom of the panel shows marked lines again, and the mark can be removed there.
 - The "−/+" button at the end of the title collapses the panel to one line; slot highlights stay, and transfer results show above the hotbar.
 
 Put down the item on your cursor before a transfer. Closing the container stops it.
@@ -848,3 +875,181 @@ For integration problems open **Add-ons**, press **Copy report** and attach it t
 - In the view from above, terrain is visible only in loaded chunks; some shader packs may still hide it in haze.
 - Materials for entities are not part of the material list.
 - Easy place writes only the plain front text of signs and does not fill chests.
+
+## Feature reference
+
+A detailed description of the features, moved here from the README. Step-by-step instructions are in the sections above.
+
+### 3D schematic previews
+
+The Schematics and Placements tabs show the selected schematic as a 3D picture built from the real block models and textures; drag to rotate, right drag to pan, scroll to zoom, double-click to reset, and the arrow keys and `+`/`-` work from the keyboard. Previews are built on a background thread, the default view is cached in `config/litematicaplus/previews/`, and huge schematics are drawn as simplified cubes.
+
+### Files
+
+Reads and writes `.litematic` (multiple regions, negative sizes, block entities, entities), imports vanilla structure `.nbt`, Sponge `.schem` v2/v3 and legacy MCEdit/Schematica `.schematic` (numeric block IDs go through the vanilla DataFixer table), and exports any schematic to Sponge `.schem` or vanilla `.nbt` with buttons in the Schematics tab; block states from older versions go through the vanilla DataFixer, and unknown blocks are skipped (not pasted and not verified) instead of failing the load, with a chat message saying how many there were.
+
+### Placements
+
+Any number of schematics per world, with move, 90° rotation, X/Z mirror and lock; sub-regions can be toggled, moved, rotated and mirrored one by one (sub-region shifts also travel through Syncmatica); a placement grid repeats the schematic along X/Y/Z with an automatic or custom step, and ghosts, verification, materials, easy place and paste cover every copy; the list is stored per server and dimension.
+
+### Placement stored in the file
+
+When saving on the New schematic tab, turn on Save spot and type the coordinates of the schematic's corner with the lowest X, Y and Z (the selection corner by default), the turn and the mirror; for an existing placement, Save spot into file stores its coordinates, turn, mirror, subregions and grid, and Shift+click also stores block replacements and zones.
+
+When the selected schematic has a spot, the Schematics tab shows two buttons: At the saved spot (also chosen by a double click) and At my position. The dimension and the server or world are saved too; if they differ, the mod warns you but still lets you place it.
+
+The spot lives in a separate metadata block of `.litematic` and `.schem` files: Litematica opens them as usual, but drops the spot if it saves the file again. Exporting to `.schem` merges the subregions into one, so the spot is moved to the new corner and subregion shifts and hidden subregions are not carried over.
+
+### Hologram
+
+Ghost blocks with adjustable opacity, chests and other blocks with a special model, and fluids; drawn only where the block is not there yet. By default ghosts are drawn only in loaded chunks ("Ghosts only in loaded chunks" under the rendering settings), as Litematica does, so with Voxy and shaders they do not show through distant terrain.
+
+### Live verification
+
+Every schematic section is compared with the world whenever a block changes or a chunk loads; colored highlights for "missing", "wrong block", "wrong state" and "extra", always labeled in the UI; optionally visible through walls. Highlights are drawn only on faces not covered by a neighbouring block, water, ice or glass, and only in loaded chunks.
+
+Voxy's distant terrain hides the schematic just like nearby terrain: shader packs such as Complementary ask Voxy not to write its LOD depth into the game's depth buffer, so the mod copies that depth into its own depth buffer before drawing the schematic, and ghosts no longer show through distant mountains in the world or on the VoxyMap map (if the copy fails, the schematic is simply not drawn over distant terrain); a section's verdict is remembered after its chunk unloads, and with Voxy and VoxyMap the unloaded parts are compared against the blocks Voxy has stored ("Check unloaded chunks with Voxy"), so the percentage and counters do not change depending on where you fly.
+
+On a server a block enclosed on all six sides is not counted as a "wrong block" error ("Hidden blocks count as correct"): an anti-xray's decoy blocks would otherwise paint the whole underground red.
+
+### Smart comparison
+
+Properties that change by themselves (leaf `distance`/`persistent`, redstone power, a lit furnace, a pressed button, an extended piston, crop age) are not counted as errors by default; lever position, lit candles and campfires, and open doors are compared strictly.
+
+With "Count similar blocks as correct" (off by default) the verifier accepts a block of the same kind: stone for quartz, plain glass for stained, any stairs with the same facing; redstone parts, rails, falling blocks and blocks with contents stay strict.
+
+Dirt and grass are interchangeable by default: dirt where the schematic has grass counts as correct, easy place puts dirt down when you have no grass, and nothing digs one out for the other ("Dirt and grass are interchangeable")
+
+### Layers and X/Z bounds
+
+All, single layer, this and below/above, range — on any axis; on top of the layer the schematic can be limited along X, Z or both (inclusive from and to; Here buttons take the player's coordinate, Fit placement takes the selected placement's bounds, Fit selection takes the X/Z bounds and a Y layer range from the tool's area selection).
+
+Ghosts, highlights, easy place, pick block and Jade work only inside the layer and the bounds, and with "Count only the visible part" (on by default) progress, counters and the material list count only that part too. All of it lives on the Layers tab (`F7`); bounds are kept per world.
+
+### Materials
+
+Total / still needed / in inventory (shulker boxes included), sorting, search by item name or id (`Ctrl+F`, `Esc` clears), export to Excel (`.xlsx` with Summary, To gather and All materials sheets), CSV, Markdown, JSON or the clipboard; files go to `litematica-plus/materials/` and a link to the file and the folder appears in chat; double slabs, candles, snow layers, sea pickles and fluid buckets are counted correctly, a potted flower counts as a pot plus the flower, a candle cake as a cake plus a candle, and upper door halves and bed heads are not double-counted.
+
+Ender chest contents are added to Have once you open it after joining ("Count the ender chest in materials"). A block that is already there but turned the wrong way or in another state needs no material (except slabs, candles and layers, where the state is the count).
+
+The mod remembers what is in chests, barrels and shulker boxes you open during the session: clicking a material in the tab lights up the containers holding it through walls, and remembered containers within 64 blocks holding a material you lack in your inventory get an orange outline on their own ("Remember opened containers", "Highlight containers with missing materials")
+
+### Block replacements
+
+On the Replacements tab any schematic block (except blocks with contents) can be swapped for another, similar blocks first. Ghosts, the verifier, the material list, easy place and paste all build from the replacement; the file is not changed, replacements are kept per placement and one option turns them off.
+
+### Material helper
+
+In chests, barrels, shulker boxes, ender chests, chest minecarts and chest boats, dispensers, hoppers and on donkeys, mules and llamas the items the selected placement still needs are highlighted green and shulker boxes holding them yellow.
+
+A material panel beside the container lists what is still missing, how much of it is here and how much you carry; click a line to take that item, Shift+click to take all of it from the container, right click to send the amount to Stack Calculator.
+
+Take needed (or the hotkey) takes exactly the shortfall, splitting a stack with a few clicks when needed, and takes a shulker box with materials whole only when loose items are not enough. Put back extra returns materials beyond what is needed, leaving the item in your hand and slots locked in Inventory Profiles Next alone.
+
+Item tooltips show how many more are needed, and shulker box tooltips list the needed items inside. While schematics are hidden or the selected placement is disabled, the schematic stays quiet: no info panel with progress and materials, no helper at containers, no tooltip lines ("Hidden schematics stay quiet")
+
+### Jade
+
+With Jade installed, looking at a schematic block shows whether it is placed, whether it matches and which state is expected; ghost blocks show up in the Jade window too.
+
+### Easy place
+
+**Easy place** with the EasyPlaceFix feature set built in: right-click a ghost to place the right block, hold the button to keep placing along your aim. Before clicking, the mod tries look directions and click points, simulates the placement and picks the one that yields the schematic state; the needed turn is sent to the server while your camera stays still.
+
+Pacing is counted in game ticks (presets Balanced 2, Safe 4, Fast 1, Custom) with an optional random tick.
+
+After placing it finishes the state: repeater delay, comparator mode, lever, open trapdoors, doors and gates, double slabs, candles, potted flowers, note pitch (a click queue with a progress line on the HUD); sign text comes from the schematic and crafter slots are disabled as saved; optionally candles and campfires are lit with flint and steel or a fire charge and put out (campfires with a shovel, candles with an empty hand), and blocks are waterlogged with a water bucket or drained with an empty one.
+
+Also: observers wait for the block they watch, a substitute material list, excavation guard, auto tool switch (inside an enabled placement, with or without easy place), ground variant swap and mining out wrong blocks.
+
+### Schematic entities
+
+Item frames and glow item frames with their item and rotation, paintings and armor stands with armor get an outline marker; aim and use.
+
+### No stray blocks
+
+While easy place is on, a block in hand cannot be placed by hand inside a placement or within two blocks of it, and after placing on a ghost the held button no longer puts a second block next to it; the separate Placement guard also works without easy place.
+
+A right-click with a shovel, hoe or axe on a schematic block is cancelled when it would turn the block into something the schematic does not ask for (grass into a path, dirt into farmland, a log into a stripped log) - "Do not spoil schematic blocks with tools".
+
+### VoxyMap
+
+With VoxyMap installed, placements appear on the 3D map as an outlined box with name and progress, in the objects panel and on the minimap; on the map the ghosts are drawn around the map's view centre; the "Schematics (Litematica Plus)" layer in VoxyMap's settings turns all of it off.
+
+### Axiom (optional)
+
+Axiom `.bp` blueprints load like any other schematic, the Axiom blueprints folder shows up right in the Schematics tab, and the "To .bp" button drops a copy of any schematic into the Axiom blueprint browser (next to the schematic when Axiom is not installed).
+
+With Axiom installed, a placement is handed to Axiom's paste exactly where it stands (with rotation, sub-regions, grid, replacements, the current layer and X/Z limits; move the gizmo and confirm in Axiom, undo through Axiom's history), placement regions become the Axiom selection, the Axiom selection becomes a box for a new schematic and back, and the Axiom clipboard saves to `.litematic` with container data and entities.
+
+While the Axiom editor is open, the tool, easy place and the mod's hotkeys stay out of the way ("Step aside in the Axiom editor")
+
+### Placement editor
+
+A see-through screen with a side panel, so the schematic stays visible in the world and moves at once. X/Y/Z are typed on the keyboard and `Ctrl+V` pastes three numbers; mouse drag, arrow keys, step 1/5/16/64, rotate, mirror, and a view from above with pan and zoom.
+
+### Hotkeys
+
+A Hotkeys tab in the mod's settings binds a key or mouse button, marks conflicts, and `Esc` clears a binding.
+
+### Pick block
+
+Middle-click a ghost to take the needed item (from the inventory in survival, granted in creative)
+
+### Locked slots
+
+Easy place, pick block and auto tool switch only select the marked hotbar slots (Settings → Easy place → Locked slots) and never put other items into them, so tools stay where they are.
+
+### Placeable highlight
+
+The nearest missing and wrong blocks whose item is in your inventory get an outline (option and hotkey)
+
+### Info panel
+
+Drag it anywhere on the screen or snap it to a corner (Settings → HUD → Info panel position...)
+
+### Zones for team builds
+
+The Zones tab cuts a placement into parts along X, Z and floors; taking a zone limits ghosts, easy place and materials to it, and every zone shows its progress against the real world.
+
+Who took which zone is sent to teammates only through commands — private `/msg` to each, team chat `/teammsg`, or a custom command such as a clan chat; commands that write to everyone (`say`, `me`, `tellraw` and the like) are refused, the mod never writes to the public chat, and the service lines are hidden for teammates with the mod. No relay server is needed.
+
+### Selection and saving
+
+Areas made of several boxes, saved as `.litematic`; in singleplayer the full block entity data and entities are saved.
+
+### Paste, fill, replace and delete (creative)
+
+Paste follows the layer and X/Z bounds; in singleplayer everything is direct, and paste brings chest contents and the schematic's entities (pasting again does not duplicate them); the Fill and Replace tool modes fill the selection with a block or swap one block for another (pick the block with Alt + middle click on a block in the world, what to replace with Alt + Shift + middle click); on a server through rate-limited `/setblock` and `/fill ... strict` commands (8 commands per tick by default, and about one command per second without operator rights so the server does not kick for spam).
+
+Both actions need a confirming second click, and delete is limited to 64 million blocks.
+
+### Performance
+
+A 4.4 million block schematic loads from disk in ~0.1 s, is laid out in the world in ~0.2 s, and is fully verified and meshed in ~1.7 s on background threads while the frame rate stayed at its 120 FPS cap (measured on an RTX 5080 by the automated test described under Building).
+
+The main thread only copies world sections within a time budget; comparison and meshing run in the background, and finished meshes live in persistent GPU buffers drawn in a single pass.
+
+### Compatibility
+
+Compatibility was checked by the automated in-game test: without render mods, and with Sodium `0.9.3-alpha.1` + Iris `1.11.6` running the Complementary Reimagined r5.9.3 pack; the material panel together with Inventory Profiles Next 2.3.8, Stack Calculator 1.2.0 and Jade 26.3.3 (the Jade window itself is not checked by the test).
+
+The test runs on the integrated singleplayer server: the mod has not been tried on a real multiplayer server with an anti-cheat, which is why the Safe pace and the switch for air clicks stay in the settings.
+
+### Printer edition
+
+A separate printer edition is built next to it: `build/libs/litematica-plus-lts-1.0.7-printer.jar` (task `printerJar`). It is the same mod with the same id, so put only one of the two files into `mods/`.
+
+The printer places missing schematic blocks within 1–6 blocks of the player by itself, without clicking, using the easy place settings: pace, server rotation, finishing states, breaking wrong blocks, substitutes, layers and bounds. Turn it on in Settings → Printer or with the "Toggle printer" key (unbound by default); its settings live in `config/litematicaplus-printer.json`.
+
+Many servers forbid printers, so the standard edition contains no printer code. Printer game test: `.\gradlew.bat runClientGameTest -PprinterOnly`.
+
+### Checks and automated tests
+
+Check your own schematics (read-only): `.\gradlew.bat test --tests "*SampleLibraryTest*" "-PsampleDir=<schematics folder>"`. Automated in-game test (creates a world, places a schematic, checks highlights, paste, saving, easy place for 33 kinds of blocks, entities, the material helper, export, the placement editor and key binding, and takes screenshots): `.\gradlew.bat runClientGameTest`.
+
+### Settings summary
+
+The menu (`H`) or **Mod Menu**: tabs Quick Access, Schematics, Placements, Layers, New schematic (saving a build from the world), Materials, Replacements, Verifier, Settings. Settings live in `config/litematicaplus.json`, placements and selections in `config/litematica-plus-session.json`, the substitute material list in `config/litematica-plus-substitutes.json` (written atomically with a `.bak` backup).
+
+Easy place options show a tooltip on hover.
