@@ -133,7 +133,7 @@ final class SchematicMaterialsScreen extends Screen {
         if (this.exporting) {
             exportRow(y);
         } else {
-            int quarter = (this.panelWidth - Theme.GAP * 2) / 4;
+            int quarter = (this.panelWidth - Theme.GAP * 4) / 5;
             addRenderableWidget(FlatButton.secondary(this.panelX, y, quarter, Component.translatable(
                     "litematicaplus.materials.sort", Component.translatable(byName ? "litematicaplus.materials.sort.name"
                             : "litematicaplus.materials.sort.total")), button -> {
@@ -147,8 +147,11 @@ final class SchematicMaterialsScreen extends Screen {
                     }));
             addRenderableWidget(FlatButton.secondary(this.panelX + (quarter + Theme.GAP) * 2, y, quarter,
                     Component.translatable("litematicaplus.materials.export_clipboard"), button -> copy()));
-            addRenderableWidget(FlatButton.primary(this.panelX + (quarter + Theme.GAP) * 3, y,
-                    this.panelWidth - (quarter + Theme.GAP) * 3, Component.translatable("gui.back"), button -> onClose()));
+            addRenderableWidget(Ui.hint(FlatButton.secondary(this.panelX + (quarter + Theme.GAP) * 3, y, quarter,
+                    Component.translatable("litematicaplus.raw.open"), button -> openRaw()),
+                    Component.translatable("litematicaplus.raw.open_file.tip")));
+            addRenderableWidget(FlatButton.primary(this.panelX + (quarter + Theme.GAP) * 4, y,
+                    this.panelWidth - (quarter + Theme.GAP) * 4, Component.translatable("gui.back"), button -> onClose()));
         }
         y += Theme.CONTROL_HEIGHT + 4;
         this.search = new InkField(this.font, this.panelX, y, this.panelWidth, Theme.CONTROL_HEIGHT,
@@ -179,6 +182,16 @@ final class SchematicMaterialsScreen extends Screen {
 
     private void rebuild() {
         this.rebuildWidgets();
+    }
+
+    private void openRaw() {
+        if (this.loading || this.all.isEmpty()) {
+            status(Component.translatable(this.loading ? "litematicaplus.schematics.loading"
+                    : "litematicaplus.materials.export_empty"));
+            return;
+        }
+        this.minecraft.gui.setScreen(new RawMaterialsScreen(this, RawMaterialsScreen.Source.fixed(this.schematicName,
+                this.all)));
     }
 
     private void exportRow(int y) {

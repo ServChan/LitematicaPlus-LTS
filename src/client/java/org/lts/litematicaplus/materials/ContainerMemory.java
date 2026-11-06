@@ -260,7 +260,7 @@ public final class ContainerMemory {
             if (entry.missing() <= 0L) {
                 break;
             }
-            if (entry.ready() < entry.missing()) {
+            if (!entry.marked() && entry.ready() < entry.missing()) {
                 items.add(entry.item());
             }
         }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -11,13 +12,18 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.SessionStore;
 import org.lts.litematicaplus.gui.HubScreen;
+import org.lts.litematicaplus.gui.RawMaterialsScreen;
 import org.lts.litematicaplus.materials.MaterialExport;
+import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
+import org.lts.litematicaplus.recipes.RawPlanner;
 import org.lts.litematicaplus.schematic.RegionBuilder;
 import org.lts.litematicaplus.schematic.Schematic;
 import org.lts.litematicaplus.schematic.SchematicIo;
@@ -94,9 +100,12 @@ final class MaterialsSuite {
         int kept = world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
                 .countItem(Items.GOLD_BLOCK));
         LitematicaPlusGameTest.require(kept == 3, "Put back extra should leave exactly the 3 needed gold blocks, got " + kept);
+        marks(context, world, placement, take);
         context.setScreen(() -> null);
         context.waitTicks(5);
+        rawMaterials(context, world, placement);
         if (System.getProperty("litematicaplus.materialsOnly") != null) {
+            context.runOnClient(client -> PlacementManager.get().remove(placement));
             return;
         }
 
@@ -121,6 +130,93 @@ final class MaterialsSuite {
         world.getServer().runCommand("setblock 61 -60 123 minecraft:air");
         world.getServer().runCommand("clear @p");
         world.getServer().runCommand("kill @e[type=minecraft:item]");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(5);
+    }
+
+    private static int gold(TestSingleplayerContext world) {
+        return world.getServer().computeOnServer(server -> server.getPlayerList().getPlayers().get(0).getInventory()
+                .countItem(Items.GOLD_BLOCK));
+    }
+
+    private static void marks(ClientGameTestContext context, TestSingleplayerContext world, SchematicPlacement placement,
+            String take) {
+        world.getServer().runCommand("clear @p");
+        world.getConnection().waitForClientboundPackets();
+        context.runOnClient(client -> PlacementManager.get().setCollected(placement, Items.GOLD_BLOCK,
+                MaterialList.Entry.ALL));
+        context.waitTicks(15);
+        context.takeScreenshot("12c_material_marked");
+        TestUi.clickLabel(context, take);
+        context.waitTicks(20);
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(gold(world) == 0, "a marked material must not be taken, got " + gold(world));
+        context.runOnClient(client -> PlacementManager.get().setCollected(placement, Items.GOLD_BLOCK, 2L));
+        context.waitTicks(15);
+        TestUi.clickLabel(context, take);
+        context.waitTicks(20);
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(gold(world) == 1, "with 2 collected by hand only 1 gold block should be taken, got "
+                + gold(world));
+        boolean saved = context.computeOnClient(client -> {
+            SessionStore.ScopeData data = new SessionStore.ScopeData();
+            PlacementManager.get().snapshot(data);
+            return data.placements.stream().anyMatch(entry -> Long.valueOf(2L).equals(
+                    entry.collected.get("minecraft:gold_block")));
+        });
+        LitematicaPlusGameTest.require(saved, "the hand-entered amount should be saved with the session");
+        context.runOnClient(client -> PlacementManager.get().clearCollected(placement));
+    }
+
+    private static void rawMaterials(ClientGameTestContext context, TestSingleplayerContext world,
+            SchematicPlacement placement) {
+        world.getServer().runCommand("clear @p");
+        world.getServer().runCommand("give @p minecraft:pale_oak_log 4");
+        world.getConnection().waitForClientboundPackets();
+        Map<String, Long> previous = context.computeOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            Map<String, Long> before = new LinkedHashMap<>(config.customMaterials);
+            config.customMaterials = new LinkedHashMap<>(Map.of("minecraft:pale_oak_slab", 100L));
+            config.rawUseStock = true;
+            config.rawSmelting = false;
+            config.rawChoices.clear();
+            config.rawForced.clear();
+            LitematicaPlusConfig.save(config);
+            return before;
+        });
+        context.setScreen(() -> new RawMaterialsScreen(null, RawMaterialsScreen.Source.customList()));
+        context.waitFor(client -> client.gui.screen() instanceof RawMaterialsScreen screen && screen.indexReady()
+                && !screen.plan().isEmpty(), 400);
+        context.waitTicks(25);
+        long logs = context.computeOnClient(client -> {
+            RawPlanner.Raw<Item> raw = ((RawMaterialsScreen) client.gui.screen()).plan()
+                    .rawOf(Items.PALE_OAK_LOG);
+            return raw == null ? -1L : raw.toGet();
+        });
+        long crafts = context.computeOnClient(client -> {
+            RawPlanner.Step<Item> step = ((RawMaterialsScreen) client.gui.screen()).plan()
+                    .stepOf(Items.PALE_OAK_SLAB);
+            return step == null ? -1L : step.crafts();
+        });
+        context.takeScreenshot("gui_raw_custom");
+        LitematicaPlusGameTest.require(crafts == 17L, "100 pale oak slabs need 17 crafts, got " + crafts);
+        LitematicaPlusGameTest.require(logs == 9L, "100 pale oak slabs with 4 logs in stock need 9 more logs, got " + logs);
+        context.setScreen(() -> new RawMaterialsScreen(null, RawMaterialsScreen.Source.placement(placement)));
+        context.waitTicks(25);
+        context.takeScreenshot("gui_raw_placement");
+        long ingots = context.computeOnClient(client -> {
+            RawPlanner.Plan<Item> plan = ((RawMaterialsScreen) client.gui.screen()).plan();
+            RawPlanner.Raw<Item> raw = plan.rawOf(Items.GOLD_INGOT);
+            return plan.rawOf(Items.GOLD_NUGGET) != null ? -2L : raw == null ? -1L : raw.toGet();
+        });
+        LitematicaPlusGameTest.require(ingots == 27L, "3 gold blocks should need 27 gold ingots and no nuggets, got " + ingots);
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.customMaterials = new LinkedHashMap<>(previous);
+            LitematicaPlusConfig.save(config);
+        });
+        context.setScreen(() -> null);
+        world.getServer().runCommand("clear @p");
         world.getConnection().waitForClientboundPackets();
         context.waitTicks(5);
     }

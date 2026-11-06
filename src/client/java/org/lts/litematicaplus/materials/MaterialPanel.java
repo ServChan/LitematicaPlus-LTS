@@ -16,6 +16,7 @@ import org.lts.litematicaplus.compat.StackCalculatorBridge;
 import org.lts.litematicaplus.gui.FlatButton;
 import org.lts.litematicaplus.gui.Blueprint;
 import org.lts.litematicaplus.gui.Theme;
+import org.lts.litematicaplus.gui.Ui;
 import org.lts.litematicaplus.util.Notify;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -32,8 +33,10 @@ final class MaterialPanel {
     private static final int NUMBER_COLUMN = 38;
     private static final int TOGGLE = 16;
 
+    private static final int CHECK = 11;
+
     record Row(Item item, ItemStack icon, String name, long shortfall, long missing, long available, long here,
-            long boxed) {
+            long boxed, boolean marked, long collected) {
     }
 
     interface Actions {
@@ -42,6 +45,10 @@ final class MaterialPanel {
         void deposit();
 
         void take(Item item, boolean everything);
+
+        void mark(Item item, boolean marked);
+
+        void toggleShowMarked();
     }
 
     private final Font font;
@@ -57,6 +64,8 @@ final class MaterialPanel {
     private int statusColor = Theme.TEXT_DIM;
     private Component empty = Component.empty();
     private Item hovered;
+    private int markedCount;
+    private boolean showMarked;
     private boolean visible;
     private boolean collapsed = LitematicaPlusConfig.current().materialPanelCollapsed;
     private FlatButton takeButton;
@@ -156,7 +165,10 @@ final class MaterialPanel {
                 && widget.getY() < rect[1] + rect[3] && widget.getY() + widget.getHeight() > rect[1];
     }
 
-    void update(Component title, List<Row> rows, Component empty, boolean canTake, boolean canDeposit, boolean busy) {
+    void update(Component title, List<Row> rows, Component empty, boolean canTake, boolean canDeposit, boolean busy,
+            int markedCount, boolean showMarked) {
+        this.markedCount = markedCount;
+        this.showMarked = showMarked;
         this.title = title;
         this.rows = rows;
         this.empty = empty;
@@ -215,6 +227,13 @@ final class MaterialPanel {
         }
         Row row = rowAt(event.x(), event.y());
         if (row == null) {
+            if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && overMarkedLink(event.x(), event.y())) {
+                this.actions.toggleShowMarked();
+            }
+            return true;
+        }
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && (overCheck(event.x()) || event.hasControlDown())) {
+            this.actions.mark(row.item(), !row.marked());
             return true;
         }
         if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
@@ -227,6 +246,34 @@ final class MaterialPanel {
             this.actions.take(row.item(), event.hasShiftDown());
         }
         return true;
+    }
+
+    private boolean overCheck(double mouseX) {
+        int right = this.x + this.width;
+        return mouseX >= right - 8 - CHECK && mouseX < right - 2;
+    }
+
+    private Component markedLabel() {
+        return this.showMarked ? Component.translatable("litematicaplus.panel.marked_hide")
+                : Component.translatable("litematicaplus.panel.marked_show", this.markedCount);
+    }
+
+    private boolean compactLink() {
+        return this.font.width(this.status) + this.font.width(markedLabel()) + 16 > this.width - 10;
+    }
+
+    private int linkWidth() {
+        return compactLink() ? 9 + this.font.width(Integer.toString(this.markedCount)) : this.font.width(markedLabel());
+    }
+
+    private boolean overMarkedLink(double mouseX, double mouseY) {
+        if (this.markedCount <= 0 || this.collapsed || !this.visible) {
+            return false;
+        }
+        int labelWidth = linkWidth();
+        int right = this.x + this.width - 5;
+        return mouseY >= listBottom() + 1 && mouseY < listBottom() + FOOTER && mouseX >= right - labelWidth - 2
+                && mouseX < right + 2;
     }
 
     private Row rowAt(double mouseX, double mouseY) {
@@ -290,11 +337,18 @@ final class MaterialPanel {
             }
             graphics.fakeItem(row.icon(), this.x + 4, rowY + 1);
             int nameRight = right - 8 - NUMBER_COLUMN * (compact ? 1 : 2);
-            int nameColor = compact && row.here() > 0L ? Theme.SUCCESS
+            int nameColor = row.marked() ? Theme.TEXT_DISABLED : compact && row.here() > 0L ? Theme.SUCCESS
                     : compact && row.boxed() > 0L ? Theme.WARNING : row.shortfall() > 0L ? Theme.TEXT : Theme.TEXT_DIM;
             graphics.text(this.font, this.font.plainSubstrByWidth(row.name(), Math.max(10, nameRight - this.x - 24)),
                     this.x + 23, rowY + 5, nameColor, false);
+            boolean checkShown = row.marked() || row == hover;
+            if (checkShown) {
+                Ui.checkbox(graphics, right - 6 - CHECK, rowY + 3, row.marked(), row == hover && overCheck(mouseX));
+            }
             if (compact) {
+                if (checkShown) {
+                    continue;
+                }
                 drawRight(graphics, row.shortfall() > 0L ? compact(row.shortfall()) : "0", right - 6, rowY + 5,
                         row.shortfall() > 0L ? Theme.TEXT_BRIGHT : Theme.SUCCESS);
                 continue;
@@ -307,8 +361,10 @@ final class MaterialPanel {
                 hereRight -= this.font.width("+");
             }
             drawRight(graphics, here, hereRight, rowY + 5, hereColor);
-            drawRight(graphics, row.shortfall() > 0L ? compact(row.shortfall()) : "0", right - 6, rowY + 5,
-                    row.shortfall() > 0L ? Theme.TEXT_BRIGHT : Theme.SUCCESS);
+            if (!checkShown) {
+                drawRight(graphics, row.shortfall() > 0L ? compact(row.shortfall()) : "0", right - 6, rowY + 5,
+                        row.shortfall() > 0L ? Theme.TEXT_BRIGHT : Theme.SUCCESS);
+            }
         }
         if (this.rows.size() > visibleRows()) {
             int trackTop = listTop();
@@ -324,8 +380,29 @@ final class MaterialPanel {
             this.depositButton.extractRenderState(graphics, mouseX, mouseY, delta);
         }
         graphics.fill(this.x + 4, listBottom(), this.x + this.width - 4, listBottom() + 1, Theme.DIVIDER);
-        graphics.text(this.font, this.font.plainSubstrByWidth(this.status.getString(), this.width - 10), this.x + 5,
-                listBottom() + 3, this.statusColor, false);
+        int statusWidth = this.width - 10;
+        if (this.markedCount > 0) {
+            Component label = markedLabel();
+            boolean linkHovered = overMarkedLink(mouseX, mouseY);
+            int linkColor = linkHovered ? Theme.TEXT_BRIGHT : Theme.ACCENT_HOVER;
+            int linkWidth = linkWidth();
+            if (compactLink()) {
+                String count = Integer.toString(this.markedCount);
+                drawRight(graphics, count, right - 5, listBottom() + 3, linkColor);
+                Ui.tick(graphics, right - 5 - linkWidth, listBottom() + 4, this.showMarked ? Theme.TEXT_DIM : Theme.SUCCESS);
+                if (linkHovered) {
+                    graphics.setTooltipForNextFrame(this.font.split(label, 200), mouseX, mouseY);
+                }
+            } else {
+                drawRight(graphics, label.getString(), right - 5, listBottom() + 3, linkColor);
+            }
+            if (linkHovered) {
+                graphics.fill(right - 5 - linkWidth, listBottom() + 12, right - 5, listBottom() + 13, Theme.TEXT_BRIGHT);
+            }
+            statusWidth -= linkWidth + 6;
+        }
+        graphics.text(this.font, this.font.plainSubstrByWidth(this.status.getString(), Math.max(10, statusWidth)),
+                this.x + 5, listBottom() + 3, this.statusColor, false);
         if (hover != null) {
             graphics.setComponentTooltipForNextFrame(this.font, tooltip(hover), mouseX, mouseY);
         } else if (this.takeButton != null && this.takeButton.isMouseOver(mouseX, mouseY)) {
@@ -367,7 +444,15 @@ final class MaterialPanel {
             lines.add(Component.translatable("litematicaplus.panel.tip.boxed", amount(row.boxed(), row.icon()))
                     .withStyle(ChatFormatting.GOLD));
         }
+        if (row.marked()) {
+            lines.add(Component.translatable("litematicaplus.panel.tip.marked").withStyle(ChatFormatting.GREEN));
+        } else if (row.collected() > 0L) {
+            lines.add(Component.translatable("litematicaplus.panel.tip.collected", amount(row.collected(), row.icon()))
+                    .withStyle(ChatFormatting.GREEN));
+        }
         lines.add(Component.translatable("litematicaplus.panel.tip.click").withStyle(ChatFormatting.DARK_AQUA));
+        lines.add(Component.translatable(row.marked() ? "litematicaplus.panel.tip.unmark" : "litematicaplus.panel.tip.mark")
+                .withStyle(ChatFormatting.DARK_AQUA));
         if (StackCalculatorBridge.available()) {
             lines.add(Component.translatable("litematicaplus.panel.tip.calculator").withStyle(ChatFormatting.DARK_AQUA));
         }

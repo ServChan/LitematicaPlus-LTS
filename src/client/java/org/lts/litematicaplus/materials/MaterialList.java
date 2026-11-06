@@ -37,13 +37,30 @@ public final class MaterialList {
     private static final Reference2ObjectOpenHashMap<Item, String> NAMES = new Reference2ObjectOpenHashMap<>();
     private static Language namesLanguage;
 
-    public record Entry(Item item, long total, long missing, long available, long ready) {
+    public record Entry(Item item, long total, long missing, long available, long ready, long collected) {
+        public static final long ALL = Long.MAX_VALUE;
+
+        public Entry(Item item, long total, long missing, long available, long ready) {
+            this(item, total, missing, available, ready, 0L);
+        }
+
         public Entry(Item item, long total, long missing, long available) {
-            this(item, total, missing, available, available);
+            this(item, total, missing, available, available, 0L);
         }
 
         public long shortfall() {
-            return Math.max(0L, this.missing - this.available);
+            if (marked()) {
+                return 0L;
+            }
+            return Math.max(0L, Math.max(0L, this.missing - this.available) - Math.max(0L, this.collected));
+        }
+
+        public boolean marked() {
+            return this.collected == ALL;
+        }
+
+        public boolean manual() {
+            return this.collected > 0L && this.collected != ALL;
         }
 
         public long packed() {
@@ -219,11 +236,13 @@ public final class MaterialList {
                 available.put(stored.getKey(), available.getLong(stored.getKey()) + stored.getLongValue());
             }
         }
+        Map<Item, Long> collected = runtime.placement() == null ? Map.of() : runtime.placement().collected();
         List<Entry> entries = new ArrayList<>(totalByItem.size());
         for (Reference2LongMap.Entry<Item> entry : totalByItem.reference2LongEntrySet()) {
             Item item = entry.getKey();
+            Long manual = collected.get(item);
             entries.add(new Entry(item, entry.getLongValue(), missingByItem.getLong(item), available.getLong(item),
-                    ready.getLong(item)));
+                    ready.getLong(item), manual == null ? 0L : manual));
         }
         entries.sort(comparator(sort));
         return entries;

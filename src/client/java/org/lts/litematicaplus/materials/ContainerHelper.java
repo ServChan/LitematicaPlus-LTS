@@ -33,6 +33,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.gui.Theme;
 import org.lts.litematicaplus.mixin.AbstractContainerScreenAccessor;
 import org.lts.litematicaplus.placement.PlacementManager;
+import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.util.Notify;
 
 public final class ContainerHelper {
@@ -51,6 +52,7 @@ public final class ContainerHelper {
     private static Item focusItem;
     private static IntOpenHashSet focusSlots = new IntOpenHashSet();
     private static long focusStamp;
+    private static boolean showMarked;
 
     private ContainerHelper() {
     }
@@ -138,6 +140,24 @@ public final class ContainerHelper {
         @Override
         public void take(Item item, boolean everything) {
             start(this.screen, TransferJob.Kind.TAKE, Set.of(item), everything);
+        }
+
+        @Override
+        public void mark(Item item, boolean marked) {
+            SchematicPlacement placement = MaterialCache.get().placement();
+            if (placement == null) {
+                return;
+            }
+            PlacementManager.get().setCollected(placement, item, marked ? MaterialList.Entry.ALL : 0L);
+            Notify.actionBar(marked ? "litematicaplus.panel.marked" : "litematicaplus.panel.unmarked",
+                    MaterialList.name(item));
+            refresh(this.screen);
+        }
+
+        @Override
+        public void toggleShowMarked() {
+            showMarked = !showMarked;
+            refresh(this.screen);
         }
     }
 
@@ -257,26 +277,34 @@ public final class ContainerHelper {
         }
         List<MaterialPanel.Row> rows = new ArrayList<>();
         boolean canDeposit = false;
+        int markedCount = 0;
         for (MaterialList.Entry entry : snapshot.entries()) {
             canDeposit |= entry.available() > entry.missing();
-            if (entry.missing() <= 0L || entry.shortfall() <= 0L) {
+            boolean markedNeed = entry.marked() && entry.missing() > entry.available();
+            if (markedNeed) {
+                markedCount++;
+            }
+            if (entry.missing() <= 0L || entry.shortfall() <= 0L && !(markedNeed && showMarked)) {
                 continue;
             }
             ItemStack icon = new ItemStack(entry.item());
             rows.add(new MaterialPanel.Row(entry.item(), icon, MaterialList.name(entry.item()), entry.shortfall(),
-                    entry.missing(), entry.available(), here.getLong(entry.item()), boxed.getLong(entry.item())));
+                    entry.missing(), entry.available(), here.getLong(entry.item()), boxed.getLong(entry.item()),
+                    entry.marked(), entry.collected()));
         }
-        rows.sort(Comparator.<MaterialPanel.Row>comparingInt(row -> row.here() > 0L ? 0 : row.boxed() > 0L ? 1 : 2)
+        rows.sort(Comparator.<MaterialPanel.Row>comparingInt(row -> row.marked() ? 3 : row.here() > 0L ? 0
+                : row.boxed() > 0L ? 1 : 2)
                 .thenComparing(Comparator.comparingLong(MaterialPanel.Row::shortfall).reversed()));
-        boolean canTake = rows.stream().anyMatch(row -> row.here() > 0L || row.boxed() > 0L);
+        boolean canTake = rows.stream().anyMatch(row -> !row.marked() && (row.here() > 0L || row.boxed() > 0L));
         boolean anyMissing = snapshot.entries().stream().anyMatch(entry -> entry.missing() > 0L);
-        Component empty = Component.translatable(anyMissing ? "litematicaplus.panel.empty.have_all"
-                : "litematicaplus.panel.empty.complete");
+        Component empty = Component.translatable(markedCount > 0 && !showMarked ? "litematicaplus.panel.empty.marked"
+                : anyMissing ? "litematicaplus.panel.empty.have_all" : "litematicaplus.panel.empty.complete");
         panel.update(Component.translatable("litematicaplus.panel.title", snapshot.placement().name()), rows, empty,
-                canTake, canDeposit, job != null);
+                canTake, canDeposit, job != null, markedCount, showMarked);
         if (job == null && statusHold <= 0) {
-            long useful = rows.stream().filter(row -> row.here() > 0L).count();
-            panel.status(Component.translatable("litematicaplus.panel.summary", rows.size(), useful), Theme.TEXT_DIM);
+            long useful = rows.stream().filter(row -> !row.marked() && row.here() > 0L).count();
+            long needed = rows.stream().filter(row -> !row.marked()).count();
+            panel.status(Component.translatable("litematicaplus.panel.summary", needed, useful), Theme.TEXT_DIM);
         }
     }
 

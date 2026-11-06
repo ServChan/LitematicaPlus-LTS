@@ -78,6 +78,10 @@ public final class FlatButton extends AbstractButton {
         return button;
     }
 
+    public boolean isToggle() {
+        return this.style == Style.TOGGLE;
+    }
+
     public FlatButton withState(BooleanSupplier supplier) {
         this.state = supplier;
         return this;

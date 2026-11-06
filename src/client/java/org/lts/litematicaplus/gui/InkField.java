@@ -1,5 +1,6 @@
 package org.lts.litematicaplus.gui;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
@@ -16,6 +17,7 @@ public final class InkField extends EditBox {
     private int outerY;
     private int outerWidth;
     private int outerHeight;
+    private Component fullHint;
 
     public InkField(Font font, int x, int y, int width, int height, Component narration) {
         super(font, x + INSET, y + (height - 8) / 2, Math.max(1, width - INSET * 2), 8, narration);
@@ -42,6 +44,26 @@ public final class InkField extends EditBox {
     public void setWidth(int width) {
         this.outerWidth = width;
         super.setWidth(Math.max(1, width - INSET * 2));
+        if (this.fullHint != null) {
+            super.setHint(fitted(this.fullHint));
+        }
+    }
+
+    @Override
+    public void setHint(Component hint) {
+        this.fullHint = hint;
+        super.setHint(hint == null ? null : fitted(hint));
+    }
+
+    private Component fitted(Component hint) {
+        Font font = Minecraft.getInstance().font;
+        String text = hint.getString();
+        int width = getWidth();
+        if (font.width(text) <= width) {
+            return hint;
+        }
+        return Component.literal(font.plainSubstrByWidth(text, Math.max(0, width - font.width(".."))) + "..")
+                .withStyle(hint.getStyle());
     }
 
     @Override

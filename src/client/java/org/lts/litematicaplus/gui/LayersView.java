@@ -52,6 +52,9 @@ final class LayersView extends TabView {
     void init() {
         LayerRange layer = GhostEngine.get().layer();
         int third = (this.width - Theme.GAP * 2) / 3;
+        boolean compact = this.height < 12 + ROW * 7 + 28 + 4;
+        int row = compact ? Theme.CONTROL_HEIGHT + 2 : ROW;
+        int gap = compact ? 12 : 14;
         this.layerTop = this.top + 12;
         int y = this.layerTop;
         add(FlatButton.secondary(this.left, y, third, tr("litematicaplus.layer.mode_button",
@@ -72,7 +75,7 @@ final class LayersView extends TabView {
         FlatButton here = add(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, y,
                 this.width - (third + Theme.GAP) * 2, tr("litematicaplus.layers.layer_here"), button -> layerHere()));
         here.active = this.minecraft.player != null && !layer.isAll();
-        y += ROW;
+        y += row;
         if (layer.mode() == LayerRange.Mode.RANGE) {
             int half = (this.width - Theme.GAP) / 2;
             add(new Stepper(this.left, y, half, tr("litematicaplus.layers.from"), () -> GhostEngine.get().layer().min(),
@@ -94,11 +97,11 @@ final class LayersView extends TabView {
             position.active = !layer.isAll();
             add(position);
         }
-        y += ROW + 14;
+        y += row + gap;
         this.clipTop = y;
         LayerRange.Clip clip = layer.clip();
-        int resetWidth = (this.width - Theme.GAP) / 3;
-        int masterWidth = this.width - Theme.GAP - resetWidth;
+        int resetWidth = compact ? (this.width - Theme.GAP * 3) / 6 : (this.width - Theme.GAP) / 3;
+        int masterWidth = compact ? (this.width - Theme.GAP * 3) * 2 / 6 : this.width - Theme.GAP - resetWidth;
         add(FlatButton.toggle(this.left, y, masterWidth, tr("litematicaplus.layers.clip_enabled"),
                 () -> GhostEngine.get().clip().enabled(), button -> {
                     LayerRange.Clip current = GhostEngine.get().clip();
@@ -108,26 +111,33 @@ final class LayersView extends TabView {
                     }
                     applyClip(next);
                 }));
-        add(FlatButton.secondary(this.left + this.width - resetWidth, y, resetWidth, tr("litematicaplus.layers.reset"),
+        add(FlatButton.secondary(this.left + masterWidth + Theme.GAP, y, resetWidth, tr("litematicaplus.layers.reset"),
                 button -> {
                     xZeroChosen = false;
                     zZeroChosen = false;
                     applyClip(LayerRange.Clip.NONE);
                 }));
-        y += ROW;
-        int fitWidth = (this.width - Theme.GAP) / 2;
-        FlatButton fit = add(FlatButton.secondary(this.left, y, fitWidth,
+        int fitLeft = this.left;
+        int fitSpan = this.width;
+        if (compact) {
+            fitLeft = this.left + masterWidth + resetWidth + Theme.GAP * 2;
+            fitSpan = this.left + this.width - fitLeft;
+        } else {
+            y += row;
+        }
+        int fitWidth = (fitSpan - Theme.GAP) / 2;
+        FlatButton fit = add(FlatButton.secondary(fitLeft, y, fitWidth,
                 tr("litematicaplus.layers.fit_placement"), button -> fitToPlacement()));
         fit.active = selectedVolume() != null;
-        FlatButton fitArea = add(FlatButton.secondary(this.left + fitWidth + Theme.GAP, y,
-                this.width - fitWidth - Theme.GAP, tr("litematicaplus.layers.fit_selection"),
+        FlatButton fitArea = add(FlatButton.secondary(fitLeft + fitWidth + Theme.GAP, y,
+                fitSpan - fitWidth - Theme.GAP, tr("litematicaplus.layers.fit_selection"),
                 button -> fitToSelection()));
         fitArea.active = !completeBoxes().isEmpty();
-        y += ROW;
+        y += row;
         axisRow(y, true, clip);
-        y += ROW;
+        y += row;
         axisRow(y, false, clip);
-        y += ROW + 14;
+        y += row + gap;
         this.scopeTop = y;
         int scopeWidth = (this.width - Theme.GAP) * 3 / 5;
         add(FlatButton.toggle(this.left, y, scopeWidth, tr("litematicaplus.option.count_visible_only"),
@@ -143,7 +153,7 @@ final class LayersView extends TabView {
                     LitematicaPlusConfig.save(config);
                 }));
         auto.withHint(tr("litematicaplus.option.auto_layer.tip"));
-        this.footerTop = y + ROW + 4;
+        this.footerTop = y + row + 4;
     }
 
     private void axisRow(int y, boolean xAxis, LayerRange.Clip clip) {

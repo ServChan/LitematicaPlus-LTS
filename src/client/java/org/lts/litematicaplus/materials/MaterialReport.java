@@ -7,17 +7,28 @@ import java.util.List;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 
-public record MaterialReport(String title, String exportedAt, List<Row> rows) {
+public record MaterialReport(String title, String exportedAt, List<Row> rows, RawSection raw) {
     public static final int SHULKER_SLOTS = 27;
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public record Row(String name, String id, long total, long missing, long available, int stackSize) {
+    public record Row(String name, String id, long total, long missing, long available, int stackSize, long collected) {
         public Row {
             stackSize = Math.max(1, stackSize);
         }
 
+        public Row(String name, String id, long total, long missing, long available, int stackSize) {
+            this(name, id, total, missing, available, stackSize, 0L);
+        }
+
+        public boolean marked() {
+            return this.collected == MaterialList.Entry.ALL;
+        }
+
         public long toGather() {
-            return Math.max(0L, this.missing - this.available);
+            if (marked()) {
+                return 0L;
+            }
+            return Math.max(0L, Math.max(0L, this.missing - this.available) - Math.max(0L, this.collected));
         }
 
         public long stacks() {
@@ -29,8 +40,33 @@ public record MaterialReport(String title, String exportedAt, List<Row> rows) {
         }
     }
 
+    public record RawRow(String name, String id, long need, long fromStock, long toGet, int stackSize) {
+        public RawRow {
+            stackSize = Math.max(1, stackSize);
+        }
+
+        public long stacks() {
+            return (this.toGet + this.stackSize - 1) / this.stackSize;
+        }
+    }
+
+    public record StepRow(String name, String id, long demand, long fromStock, long crafts, long produced, long leftover,
+            String recipe) {
+    }
+
+    public record RawSection(List<RawRow> raw, List<StepRow> steps) {
+        public RawSection {
+            raw = List.copyOf(raw);
+            steps = List.copyOf(steps);
+        }
+    }
+
     public MaterialReport {
         rows = List.copyOf(rows);
+    }
+
+    public MaterialReport(String title, String exportedAt, List<Row> rows) {
+        this(title, exportedAt, rows, null);
     }
 
     public static MaterialReport of(String title, List<MaterialList.Entry> entries, LocalDateTime now) {
@@ -38,9 +74,22 @@ public record MaterialReport(String title, String exportedAt, List<Row> rows) {
         for (MaterialList.Entry entry : entries) {
             ItemStack stack = new ItemStack(entry.item());
             rows.add(new Row(stack.getHoverName().getString(), BuiltInRegistries.ITEM.getKey(entry.item()).toString(),
-                    entry.total(), entry.missing(), entry.available(), stack.getMaxStackSize()));
+                    entry.total(), entry.missing(), entry.available(), stack.getMaxStackSize(), entry.collected()));
         }
         return new MaterialReport(title == null || title.isBlank() ? "materials" : title, DISPLAY_TIME.format(now), rows);
+    }
+
+    public MaterialReport withRaw(RawSection section) {
+        return new MaterialReport(this.title, this.exportedAt, this.rows, section);
+    }
+
+    public boolean anyCollected() {
+        for (Row row : this.rows) {
+            if (row.collected() != 0L) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Row> needed() {

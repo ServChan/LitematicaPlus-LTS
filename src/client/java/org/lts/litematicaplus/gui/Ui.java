@@ -96,6 +96,12 @@ public final class Ui {
         for (int i = 0; i < shown; i++) {
             graphics.text(font, lines.get(i), x, y + i * 10, color, false);
         }
+        if (lines.size() > shown) {
+            int end = x + font.width(lines.get(shown - 1)) + 1;
+            if (end + font.width("..") <= x + width + 4) {
+                graphics.text(font, "..", end, y + (shown - 1) * 10, color, false);
+            }
+        }
         if (lines.size() > shown && mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + shown * 10) {
             graphics.setTooltipForNextFrame(font.split(text, 240), mouseX, mouseY);
         }
@@ -104,6 +110,24 @@ public final class Ui {
 
     public static void right(GuiGraphicsExtractor graphics, Font font, String text, int right, int y, int color) {
         graphics.text(font, text, right - font.width(text), y, color, false);
+    }
+
+    public static void checkbox(GuiGraphicsExtractor graphics, int x, int y, boolean checked, boolean hovered) {
+        graphics.fill(x, y, x + 11, y + 11, hovered ? Theme.SURFACE_HOVER : Theme.SURFACE);
+        graphics.outline(x, y, 11, 11, hovered ? Theme.FOCUS : checked ? Theme.SUCCESS : Theme.BORDER_STRONG);
+        if (checked) {
+            tick(graphics, x + 2, y + 3, Theme.SUCCESS);
+        }
+    }
+
+    public static void tick(GuiGraphicsExtractor graphics, int x, int y, int color) {
+        graphics.fill(x, y + 2, x + 1, y + 4, color);
+        graphics.fill(x + 1, y + 3, x + 2, y + 5, color);
+        graphics.fill(x + 2, y + 4, x + 3, y + 6, color);
+        graphics.fill(x + 3, y + 3, x + 4, y + 5, color);
+        graphics.fill(x + 4, y + 2, x + 5, y + 4, color);
+        graphics.fill(x + 5, y + 1, x + 6, y + 3, color);
+        graphics.fill(x + 6, y, x + 7, y + 2, color);
     }
 
     public static void slot(GuiGraphicsExtractor graphics, ItemStack stack, int x, int y) {

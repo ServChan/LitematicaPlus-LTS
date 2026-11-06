@@ -20,6 +20,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
@@ -28,6 +30,8 @@ import org.lts.litematicaplus.LitematicaPlusClient;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.SessionStore;
 import org.lts.litematicaplus.engine.GhostEngine;
+import org.lts.litematicaplus.materials.MaterialCache;
+import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.schematic.BlockStateNbt;
 import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.LitematicCodec;
@@ -436,6 +440,23 @@ public final class PlacementManager {
         }
     }
 
+    public void setCollected(SchematicPlacement placement, Item item, long amount) {
+        boolean changed = amount <= 0L ? placement.collected().remove(item) != null
+                : !Long.valueOf(amount).equals(placement.collected().put(item, amount));
+        if (changed) {
+            MaterialCache.invalidate();
+            this.changeListener.run();
+        }
+    }
+
+    public void clearCollected(SchematicPlacement placement) {
+        if (!placement.collected().isEmpty()) {
+            placement.collected().clear();
+            MaterialCache.invalidate();
+            this.changeListener.run();
+        }
+    }
+
     public void setRegionPlacement(SchematicPlacement placement, String region, RegionPlacement value) {
         if (placement.locked()) {
             return;
@@ -532,6 +553,14 @@ public final class PlacementManager {
             placement.replacements().clear();
             geometryChanged(placement);
         }
+    }
+
+    private static Item itemById(String id) {
+        Identifier key = id == null ? null : Identifier.tryParse(id);
+        if (key == null) {
+            return null;
+        }
+        return BuiltInRegistries.ITEM.getOptional(key).filter(item -> item != Items.AIR).orElse(null);
     }
 
     private static Block blockById(String id) {
@@ -706,6 +735,14 @@ public final class PlacementManager {
                     placement.replacements().put(from, to);
                 }
             }
+            if (entry.collected != null) {
+                entry.collected.forEach((itemId, amount) -> {
+                    Item item = itemById(itemId);
+                    if (item != null && amount != null && amount != 0L) {
+                        placement.collected().put(item, amount < 0L ? MaterialList.Entry.ALL : amount);
+                    }
+                });
+            }
             if (entry.removedCells != null) {
                 placement.removedCells().addAll(entry.removedCells);
             }
@@ -774,6 +811,8 @@ public final class PlacementManager {
                 entry.replacements.put(BuiltInRegistries.BLOCK.getKey(pair.getKey()).toString(),
                         BuiltInRegistries.BLOCK.getKey(pair.getValue()).toString());
             }
+            placement.collected().forEach((item, amount) -> entry.collected.put(
+                    BuiltInRegistries.ITEM.getKey(item).toString(), amount == MaterialList.Entry.ALL ? -1L : amount));
             entry.removedCells = new ArrayList<>(placement.removedCells());
             placement.editedCells().forEach((cell, state) ->
                     entry.editedCells.put(Long.toString(cell), BlockStateNbt.format(state)));

@@ -8,6 +8,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.locale.Language;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.storage.LevelResource;
@@ -156,6 +158,41 @@ public final class Session {
             return "singleplayer:" + (root.getFileName() == null ? "world" : root.getFileName().toString());
         }
         return "local";
+    }
+
+    private static String labelFor = "";
+    private static String label = "";
+
+    public static String label(Minecraft minecraft) {
+        if (scope.isEmpty()) {
+            return "";
+        }
+        String key = scope + "|" + System.identityHashCode(Language.getInstance());
+        if (!key.equals(labelFor)) {
+            labelFor = key;
+            label = worldName(minecraft) + " \u00b7 " + dimensionName(minecraft);
+        }
+        return label;
+    }
+
+    private static String worldName(Minecraft minecraft) {
+        ServerData data = minecraft.getCurrentServer();
+        if (data != null) {
+            return data.name == null || data.name.isBlank() || data.name.equals(data.ip) ? data.ip
+                    : data.name + " (" + data.ip + ")";
+        }
+        if (minecraft.getSingleplayerServer() != null) {
+            String name = minecraft.getSingleplayerServer().getWorldData().getLevelName();
+            return name == null || name.isBlank() ? world(minecraft) : name;
+        }
+        return world(minecraft);
+    }
+
+    private static String dimensionName(Minecraft minecraft) {
+        String id = dimension(minecraft);
+        String key = "litematicaplus.dimension." + id.replace(':', '.');
+        return Language.getInstance().has(key)
+                ? Component.translatable(key).getString() : id;
     }
 
     public static String dimension(Minecraft minecraft) {
