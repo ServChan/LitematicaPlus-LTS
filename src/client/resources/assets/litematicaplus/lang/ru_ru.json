@@ -1176,7 +1176,7 @@
   "litematicaplus.raw.stock": "Учитывать запасы",
   "litematicaplus.raw.stock.tip": "На каждом шаге вычитать то, что уже есть в инвентаре, шалкерах и эндер-сундуке: готовые доски тратятся раньше, чем считаются брёвна.",
   "litematicaplus.raw.smelting": "Печь",
-  "litematicaplus.raw.smelting.tip": "Раскладывать и через печь: камень в булыжник, стекло в песок. По умолчанию выключено, тогда переплавленные блоки считаются сырьём.",
+  "litematicaplus.raw.smelting.tip": "Раскладывать и через печь: стекло в песок, камень в булыжник, слитки в руду. Выключите, чтобы переплавленные блоки считались сырьём.",
   "litematicaplus.raw.reset": "Сбросить рецепты",
   "litematicaplus.raw.reset.tip": "Забыть выбранные рецепты и предметы, отмеченные как сырьё.",
   "litematicaplus.raw.reset_done": "Снова выбраны самые выгодные рецепты",
@@ -1187,7 +1187,7 @@
   "litematicaplus.raw.column.need": "НУЖНО",
   "litematicaplus.raw.column.steps": "КРАФТЫ",
   "litematicaplus.raw.column.recipe": "РЕЦЕПТ",
-  "litematicaplus.raw.crafts_short": "%s×",
+  "litematicaplus.raw.crafts_short": "×%s",
   "litematicaplus.raw.station.crafting": "верстак",
   "litematicaplus.raw.station.stonecutter": "камнерез",
   "litematicaplus.raw.station.smelting": "печь",
@@ -1256,5 +1256,6 @@
   "litematicaplus.panel.empty.marked": "Всё остальное, что ещё нужно, отмечено как собранное.",
   "litematicaplus.dimension.minecraft.overworld": "Верхний мир",
   "litematicaplus.dimension.minecraft.the_nether": "Незер",
-  "litematicaplus.dimension.minecraft.the_end": "Энд"
+  "litematicaplus.dimension.minecraft.the_end": "Энд",
+  "litematicaplus.raw.column.make": "СДЕЛАТЬ"
 }

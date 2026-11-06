@@ -16,6 +16,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.SessionStore;
 import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.gui.RawMaterialsScreen;
@@ -62,6 +63,8 @@ final class MaterialsSuite {
                 + "{Slot:3b,id:\"minecraft:gold_block\",count:5}]}");
         TestUi.aim(context, world, 61.5, -60.0, 125.5, 61.5, -59.5, 124.0);
         world.getConnection().waitForChunksRender();
+        String scope = context.computeOnClient(client -> Session.scope());
+        LitematicaPlusGameTest.require(scope.contains("|seed:"), "the session scope should include the world seed, got " + scope);
         SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, BASE));
         LitematicaPlusGameTest.settle(context, placement);
         context.runOnClient(client -> {

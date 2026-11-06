@@ -25,7 +25,7 @@ import org.lts.litematicaplus.verify.MismatchType;
 
 public final class LitematicaPlusConfig {
     public static final String DEFAULT_GHOST_COLOR = "#FFFFFF";
-    private static final int CURRENT_CONFIG_VERSION = 5;
+    private static final int CURRENT_CONFIG_VERSION = 6;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile LitematicaPlusConfig current = defaults();
     private static final AtomicReference<Pending> PENDING = new AtomicReference<>();
@@ -142,7 +142,7 @@ public final class LitematicaPlusConfig {
     public boolean materialHelper = true;
     public boolean materialPanel = true;
     public boolean materialPanelCollapsed = false;
-    public boolean rawSmelting = false;
+    public boolean rawSmelting = true;
     public boolean rawUseStock = true;
     public boolean rawScopeAll = false;
     public List<String> rawForced = new ArrayList<>();
@@ -355,6 +355,9 @@ public final class LitematicaPlusConfig {
             config.hudX = config.hudRightSide ? 1.0F : 0.0F;
             config.hudY = 0.0F;
             config.hudRightSide = false;
+        }
+        if (config.configVersion < 6) {
+            config.rawSmelting = true;
         }
         return config;
     }

@@ -1176,7 +1176,7 @@
   "litematicaplus.raw.stock": "Use stock",
   "litematicaplus.raw.stock.tip": "Subtract what is already in your inventory, shulker boxes and ender chest at every step: ready planks are used before logs are counted.",
   "litematicaplus.raw.smelting": "Smelting",
-  "litematicaplus.raw.smelting.tip": "Also go through the furnace: stone becomes cobblestone, glass becomes sand. Off by default, so smelted blocks count as raw.",
+  "litematicaplus.raw.smelting.tip": "Also go through the furnace: glass becomes sand, stone becomes cobblestone, ingots become ore. Turn it off to count smelted blocks as raw.",
   "litematicaplus.raw.reset": "Reset recipes",
   "litematicaplus.raw.reset.tip": "Forget the recipes you picked and the items you marked as raw.",
   "litematicaplus.raw.reset_done": "Recipes are back to the cheapest ones",
@@ -1187,7 +1187,7 @@
   "litematicaplus.raw.column.need": "NEEDED",
   "litematicaplus.raw.column.steps": "CRAFTING",
   "litematicaplus.raw.column.recipe": "RECIPE",
-  "litematicaplus.raw.crafts_short": "%sx",
+  "litematicaplus.raw.crafts_short": "×%s",
   "litematicaplus.raw.station.crafting": "crafting table",
   "litematicaplus.raw.station.stonecutter": "stonecutter",
   "litematicaplus.raw.station.smelting": "furnace",
@@ -1256,5 +1256,6 @@
   "litematicaplus.panel.empty.marked": "Everything else you still need is marked as collected.",
   "litematicaplus.dimension.minecraft.overworld": "Overworld",
   "litematicaplus.dimension.minecraft.the_nether": "The Nether",
-  "litematicaplus.dimension.minecraft.the_end": "The End"
+  "litematicaplus.dimension.minecraft.the_end": "The End",
+  "litematicaplus.raw.column.make": "TO MAKE"
 }

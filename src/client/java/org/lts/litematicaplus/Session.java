@@ -26,6 +26,8 @@ public final class Session {
     private static boolean dirty;
     private static boolean restoring;
     private static int saveCooldown;
+    private static volatile boolean seedKnown;
+    private static volatile long seed;
 
     private Session() {
     }
@@ -112,7 +114,7 @@ public final class Session {
                 GhostEngine.get().setHiddenBlocks(Set.of());
                 return;
             }
-            SessionStore.ScopeData data = SessionStore.get().scope(scope);
+            SessionStore.ScopeData data = SessionStore.get().scope(scope, legacyScope(Minecraft.getInstance()));
             PlacementManager.get().restore(data);
             SelectionManager.get().restore(data.area);
             GhostEngine.get().setLayer(new LayerRange(parse(LayerRange.Mode.class, data.layer.mode, LayerRange.Mode.ALL),
@@ -148,7 +150,24 @@ public final class Session {
         return world(minecraft) + "|" + dimension(minecraft);
     }
 
+    private static String legacyScope(Minecraft minecraft) {
+        return minecraft.level == null ? null : address(minecraft) + "|" + dimension(minecraft);
+    }
+
+    public static void setSeed(long value) {
+        seed = value;
+        seedKnown = true;
+    }
+
+    public static String seedSuffix() {
+        return seedKnown ? "|seed:" + Long.toUnsignedString(seed, 16) : "";
+    }
+
     public static String world(Minecraft minecraft) {
+        return address(minecraft) + seedSuffix();
+    }
+
+    public static String address(Minecraft minecraft) {
         ServerData data = minecraft.getCurrentServer();
         if (data != null) {
             return data.ip;
@@ -183,9 +202,9 @@ public final class Session {
         }
         if (minecraft.getSingleplayerServer() != null) {
             String name = minecraft.getSingleplayerServer().getWorldData().getLevelName();
-            return name == null || name.isBlank() ? world(minecraft) : name;
+            return name == null || name.isBlank() ? address(minecraft) : name;
         }
-        return world(minecraft);
+        return address(minecraft);
     }
 
     private static String dimensionName(Minecraft minecraft) {

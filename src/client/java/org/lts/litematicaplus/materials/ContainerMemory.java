@@ -13,7 +13,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -21,7 +20,6 @@ import net.minecraft.world.inventory.AbstractMountInventoryMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -29,6 +27,7 @@ import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -52,10 +51,10 @@ public final class ContainerMemory {
     public record Box(BlockPos pos, BlockPos pair, boolean focused) {
     }
 
-    private static final Map<ResourceKey<Level>, Long2ObjectLinkedOpenHashMap<Stored>> BY_DIMENSION = new HashMap<>();
+    private static final Map<String, Long2ObjectLinkedOpenHashMap<Stored>> BY_DIMENSION = new HashMap<>();
     private static Long2ObjectLinkedOpenHashMap<Stored> memory = new Long2ObjectLinkedOpenHashMap<>();
     private static Object owner;
-    private static ResourceKey<Level> dimension;
+    private static String dimension;
     private static BlockPos usedPos;
     private static int usedTick;
     private static int ticks;
@@ -177,8 +176,8 @@ public final class ContainerMemory {
         if (current == null || minecraft.level == null) {
             return false;
         }
-        ResourceKey<Level> key = minecraft.level.dimension();
-        if (key != dimension) {
+        String key = minecraft.level.dimension().identifier() + Session.seedSuffix();
+        if (!key.equals(dimension)) {
             dimension = key;
             memory = BY_DIMENSION.computeIfAbsent(key, ignored -> new Long2ObjectLinkedOpenHashMap<>());
         }

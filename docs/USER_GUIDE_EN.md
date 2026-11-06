@@ -445,10 +445,10 @@ Marks are kept with the placement and go to the export as a "Collected by hand" 
 The **Raw materials** button (on the Materials tab and in the materials of any file on the Schematics tab) breaks materials down by recipe to what you gather: slabs into planks, planks into logs, stairs through the stonecutter when that is cheaper.
 
 - Left: raw materials — needed, have, to get. Click a row to highlight the crafts it goes into.
-- Right: crafts — how many times to craft, the recipe and what it makes. An orange arrow means other recipes exist: click the craft to switch. `Shift` + click counts the item as raw and stops there; `Shift` + click on that raw row crafts it again.
+- Right: crafts — how many items to make, the recipe, what one craft makes and how many times to craft (`×164`). An orange arrow means other recipes exist: click the craft to switch. `Shift` + click counts the item as raw and stops there; `Shift` + click on that raw row crafts it again.
 - **Only missing / Whole schematic** — count what is missing (minus your inventory and marks) or the whole schematic.
 - **Use stock** — subtract what is in your inventory, shulker boxes and ender chest at every step: ready planks are used before logs are counted.
-- **Smelting** — also go through the furnace (stone into cobblestone, glass into sand). Off by default.
+- **Smelting** — also go through the furnace (glass into sand, stone into cobblestone, ingots into ore). On by default.
 - **Reset recipes** — go back to the cheapest recipes.
 - **Custom list** — count raw materials for items typed in by hand, without a schematic: type a name (for example "pale oak slab"), an amount (`300`, `5st`, `2sh`) and press **Add**. Right click or `Delete` removes an item. The list is kept.
 

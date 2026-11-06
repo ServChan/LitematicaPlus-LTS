@@ -91,6 +91,12 @@ class EmbeddedPlacementTest {
         assertFalse(full().matchesDimension("minecraft:overworld"));
         assertTrue(full().matchesWorld("Play.Example.net"));
         assertFalse(full().matchesWorld("other.example.net"));
+        assertTrue(full().matchesWorld("play.example.net|seed:1a"));
+        EmbeddedPlacement farms = EmbeddedPlacement.at(0, 64, 0, Rotation.NONE, Mirror.NONE, "minecraft:overworld",
+                "play.example.net|seed:1a");
+        assertTrue(farms.matchesWorld("play.example.net|seed:1a"));
+        assertFalse(farms.matchesWorld("play.example.net|seed:2b"));
+        assertFalse(farms.matchesWorld("play.example.net"));
     }
 
     @Test

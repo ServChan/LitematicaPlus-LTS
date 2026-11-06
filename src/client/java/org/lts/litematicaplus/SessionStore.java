@@ -169,10 +169,17 @@ public final class SessionStore {
     }
 
     public synchronized ScopeData scope(String key) {
+        return scope(key, null);
+    }
+
+    public synchronized ScopeData scope(String key, String fallback) {
         if (!this.loaded) {
             load();
         }
         ScopeData scope = this.data.scopes.get(key);
+        if (scope == null && fallback != null && !fallback.equals(key)) {
+            scope = this.data.scopes.get(fallback);
+        }
         return sanitize(scope == null ? new ScopeData() : copy(scope));
     }
 

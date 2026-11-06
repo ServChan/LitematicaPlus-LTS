@@ -260,7 +260,7 @@ public final class RawMaterialsScreen extends Screen {
                 this.panelX + this.panelWidth - this.splitX, listHeight, Theme.ROW_HEIGHT,
                 Component.translatable("litematicaplus.raw.column.steps"), this::renderStep)
                 .onPress(this::pressStep)
-                .describe(step -> RawMaterials.name(step.item()) + " " + step.crafts()));
+                .describe(step -> RawMaterials.name(step.item()) + " " + toMake(step)));
         replan();
     }
 
@@ -665,21 +665,29 @@ public final class RawMaterialsScreen extends Screen {
         int inputs = 1;
         int counts = font.width("9");
         int outputs = font.width("9");
-        int crafts = font.width(Component.translatable("litematicaplus.raw.crafts_short", 9).getString());
+        int make = font.width(Component.translatable("litematicaplus.raw.column.make"));
         for (RawPlanner.Step<Item> step : this.plan.steps()) {
             RawPlanner.Choice<Item> choice = step.choice();
             inputs = Math.max(inputs, Math.min(MAX_RECIPE_INPUTS, choice.option().inputs().size()));
             for (RecipeGraph.Input<Item> input : choice.option().inputs()) {
                 counts = Math.max(counts, font.width(Integer.toString(input.count())));
             }
-            outputs = Math.max(outputs, font.width(Integer.toString(choice.option().count())));
-            crafts = Math.max(crafts, font.width(Component.translatable("litematicaplus.raw.crafts_short", step.crafts())
-                    .getString()));
+            outputs = Math.max(outputs, font.width(outputText(step)));
+            make = Math.max(make, font.width(Long.toString(toMake(step))));
         }
         this.slotWidth = 17 + counts + 3;
         this.recipeSlots = inputs;
-        this.outputWidth = font.width(ARROW) + 2 + outputs;
-        this.craftsWidth = crafts;
+        this.outputWidth = outputs;
+        this.craftsWidth = make;
+    }
+
+    private static long toMake(RawPlanner.Step<Item> step) {
+        return Math.max(0L, step.demand() - step.fromStock());
+    }
+
+    private static String outputText(RawPlanner.Step<Item> step) {
+        return ARROW + " " + step.choice().option().count() + "  "
+                + Component.translatable("litematicaplus.raw.crafts_short", step.crafts()).getString();
     }
 
     private void renderStep(GuiGraphicsExtractor graphics, Font rowFont, RawPlanner.Step<Item> step, int x, int y,
@@ -696,8 +704,10 @@ public final class RawMaterialsScreen extends Screen {
         int right = x + rowWidth - 6;
         RawPlanner.Choice<Item> choice = step.choice();
         int outputLeft = right - this.outputWidth;
-        graphics.text(rowFont, ARROW + " " + choice.option().count(), outputLeft, textY,
-                choice.alternatives() > 1 ? Theme.AMBER : Theme.TEXT_DIM, false);
+        String output = ARROW + " " + choice.option().count();
+        graphics.text(rowFont, output, outputLeft, textY, choice.alternatives() > 1 ? Theme.AMBER : Theme.TEXT_DIM, false);
+        graphics.text(rowFont, "  " + Component.translatable("litematicaplus.raw.crafts_short", step.crafts()).getString(),
+                outputLeft + rowFont.width(output), textY, Theme.TEXT_DISABLED, false);
         int recipeLeft = outputLeft - 4 - this.slotWidth * this.recipeSlots;
         List<RecipeGraph.Input<Item>> inputs = choice.option().inputs();
         int shown = Math.min(this.recipeSlots, inputs.size());
@@ -709,8 +719,7 @@ public final class RawMaterialsScreen extends Screen {
                     more ? Theme.TEXT_DIM : Theme.TEXT, false);
         }
         int craftsRight = recipeLeft - COLUMN_GAP;
-        Ui.right(graphics, rowFont, Component.translatable("litematicaplus.raw.crafts_short", step.crafts()).getString(),
-                craftsRight, textY, Theme.TEXT_BRIGHT);
+        Ui.right(graphics, rowFont, Long.toString(toMake(step)), craftsRight, textY, Theme.TEXT_BRIGHT);
         int nameRight = craftsRight - this.craftsWidth - COLUMN_GAP;
         Ui.clipped(graphics, rowFont, RawMaterials.name(step.item()), x + 26, textY, Math.max(10, nameRight - x - 26),
                 step.target() ? Theme.TEXT_BRIGHT : Theme.TEXT);
@@ -750,6 +759,8 @@ public final class RawMaterialsScreen extends Screen {
             int recipeLeft = stepRight - this.outputWidth - 4 - this.slotWidth * this.recipeSlots;
             graphics.text(this.font, Component.translatable("litematicaplus.raw.column.recipe"), recipeLeft, this.headerY,
                     Theme.ACCENT, false);
+            Ui.right(graphics, this.font, Component.translatable("litematicaplus.raw.column.make").getString(),
+                    recipeLeft - COLUMN_GAP, this.headerY, Theme.ACCENT);
         }
         if (this.source.custom() && this.nameBox != null) {
             int textY = this.addRowY + (Theme.CONTROL_HEIGHT - 8) / 2;

@@ -15,11 +15,13 @@ import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.Session;
 
 public final class EnderChestMemory {
     private static final String TITLE_KEY = "container.enderchest";
 
     private static ClientPacketListener owner;
+    private static String ownerWorld = "";
     private static List<ItemStack> contents = List.of();
     private static Reference2LongMap<Item> counts;
 
@@ -51,10 +53,11 @@ public final class EnderChestMemory {
         for (int slot = 0; slot < container.getContainerSize(); slot++) {
             copy.add(container.getItem(slot).copy());
         }
-        if (owner == minecraft.getConnection() && same(copy, contents)) {
+        if (known() && same(copy, contents)) {
             return;
         }
         owner = minecraft.getConnection();
+        ownerWorld = Session.seedSuffix();
         contents = copy;
         counts = null;
         MaterialCache.invalidate();
@@ -73,7 +76,7 @@ public final class EnderChestMemory {
     }
 
     public static boolean known() {
-        return owner != null && owner == Minecraft.getInstance().getConnection();
+        return owner != null && owner == Minecraft.getInstance().getConnection() && ownerWorld.equals(Session.seedSuffix());
     }
 
     public static Reference2LongMap<Item> counts() {

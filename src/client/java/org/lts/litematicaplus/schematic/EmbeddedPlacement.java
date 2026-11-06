@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -60,8 +61,15 @@ public record EmbeddedPlacement(int x, int y, int z, Rotation rotation, Mirror m
         return this.dimension.isEmpty() || this.dimension.equals(current);
     }
 
+    private static final String SEED_MARK = "|seed:";
+
     public boolean matchesWorld(String current) {
-        return this.world.isEmpty() || this.world.equalsIgnoreCase(current);
+        if (this.world.isEmpty()) {
+            return true;
+        }
+        String stored = this.world.toLowerCase(Locale.ROOT);
+        String now = current == null ? "" : current.toLowerCase(Locale.ROOT);
+        return stored.equals(now) || !stored.contains(SEED_MARK) && now.startsWith(stored + SEED_MARK);
     }
 
     public EmbeddedPlacement withPose(int x, int y, int z, Rotation rotation, Mirror mirror, String dimension,

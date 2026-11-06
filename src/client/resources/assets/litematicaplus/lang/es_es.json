@@ -1176,7 +1176,7 @@
   "litematicaplus.raw.stock": "Usar reservas",
   "litematicaplus.raw.stock.tip": "En cada paso resta lo que ya tienes en el inventario, las cajas de shulker y el cofre de ender: los tablones listos se gastan antes de contar troncos.",
   "litematicaplus.raw.smelting": "Horno",
-  "litematicaplus.raw.smelting.tip": "Pasa también por el horno: la piedra se convierte en roca, el cristal en arena. Desactivado por defecto, así que los bloques fundidos cuentan como materia prima.",
+  "litematicaplus.raw.smelting.tip": "Pasa también por el horno: el cristal se convierte en arena, la piedra en roca y los lingotes en mena. Desactívalo para contar los bloques fundidos como materia prima.",
   "litematicaplus.raw.reset": "Restablecer recetas",
   "litematicaplus.raw.reset.tip": "Olvida las recetas elegidas y los objetos marcados como materia prima.",
   "litematicaplus.raw.reset_done": "Vuelven a usarse las recetas más baratas",
@@ -1187,7 +1187,7 @@
   "litematicaplus.raw.column.need": "NECESARIO",
   "litematicaplus.raw.column.steps": "FABRICACIÓN",
   "litematicaplus.raw.column.recipe": "RECETA",
-  "litematicaplus.raw.crafts_short": "%sx",
+  "litematicaplus.raw.crafts_short": "×%s",
   "litematicaplus.raw.station.crafting": "mesa de trabajo",
   "litematicaplus.raw.station.stonecutter": "cortapiedras",
   "litematicaplus.raw.station.smelting": "horno",
@@ -1256,5 +1256,6 @@
   "litematicaplus.panel.empty.marked": "Todo lo demás que aún hace falta está marcado como reunido.",
   "litematicaplus.dimension.minecraft.overworld": "Superficie",
   "litematicaplus.dimension.minecraft.the_nether": "El Nether",
-  "litematicaplus.dimension.minecraft.the_end": "El End"
+  "litematicaplus.dimension.minecraft.the_end": "El End",
+  "litematicaplus.raw.column.make": "FABRICAR"
 }

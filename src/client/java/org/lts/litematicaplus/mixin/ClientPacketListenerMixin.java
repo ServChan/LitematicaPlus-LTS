@@ -2,8 +2,11 @@ package org.lts.litematicaplus.mixin;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import org.lts.litematicaplus.Session;
 import org.lts.litematicaplus.tool.BlockEntityAssist;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,6 +15,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ClientPacketListener.class)
 public abstract class ClientPacketListenerMixin {
+    @Inject(method = "handleLogin", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/protocol/PacketUtils;ensureRunningOnSameThread(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/network/PacketProcessor;)V",
+            shift = At.Shift.AFTER))
+    private void litematicaplus$loginWorld(ClientboundLoginPacket packet, CallbackInfo ci) {
+        Session.setSeed(packet.commonPlayerSpawnInfo().seed());
+    }
+
+    @Inject(method = "handleRespawn", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/protocol/PacketUtils;ensureRunningOnSameThread(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/network/PacketProcessor;)V",
+            shift = At.Shift.AFTER))
+    private void litematicaplus$respawnWorld(ClientboundRespawnPacket packet, CallbackInfo ci) {
+        Session.setSeed(packet.commonPlayerSpawnInfo().seed());
+    }
+
     @Inject(method = "handleOpenSignEditor", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/network/protocol/PacketUtils;ensureRunningOnSameThread(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;Lnet/minecraft/network/PacketProcessor;)V",
             shift = At.Shift.AFTER), cancellable = true)

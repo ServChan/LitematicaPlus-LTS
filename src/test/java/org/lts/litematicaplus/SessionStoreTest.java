@@ -35,6 +35,22 @@ class SessionStoreTest {
     }
 
     @Test
+    void worldsOnOneAddressKeepTheirOwnPlacements(@TempDir Path directory) {
+        SessionStore store = new SessionStore(directory.resolve("session.json"));
+        store.load();
+        String legacy = "vanillasquad.com|minecraft:overworld";
+        String farms = "vanillasquad.com|seed:1a|minecraft:overworld";
+        String builds = "vanillasquad.com|seed:2b|minecraft:overworld";
+        store.save(legacy, sample());
+        assertEquals(1, store.scope(farms, legacy).placements.size());
+        assertEquals(1, store.scope(builds, legacy).placements.size());
+        store.save(builds, new SessionStore.ScopeData());
+        assertTrue(store.scope(builds, legacy).placements.isEmpty());
+        assertEquals(1, store.scope(farms, legacy).placements.size());
+        assertTrue(store.scope("other.net|seed:3c|minecraft:overworld", "other.net|minecraft:overworld").placements.isEmpty());
+    }
+
+    @Test
     void scopesRoundTripThroughTheFile(@TempDir Path directory) {
         Path file = directory.resolve("session.json");
         SessionStore store = new SessionStore(file);
