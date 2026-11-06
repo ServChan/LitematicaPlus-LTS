@@ -1200,8 +1200,8 @@
   "litematicaplus.raw.empty_hint": "Всё, что ещё нужно размещению, уже покрыто. Включите «Вся схема», чтобы посчитать целиком.",
   "litematicaplus.raw.steps_empty": "Крафтить нечего",
   "litematicaplus.raw.steps_empty_hint": "Все материалы уже сырьё или покрыты запасами.",
-  "litematicaplus.raw.footer": "Клик по крафту: другой рецепт · Shift+клик по крафту: считать сырьём · клик по сырью: показать, куда идёт",
-  "litematicaplus.raw.footer_custom": "ПКМ или Delete: убрать из списка · Shift+клик по крафту: считать сырьём · клик по крафту: другой рецепт",
+  "litematicaplus.raw.footer": "Оранжевая стрелка: есть другие рецепты, клик по крафту переключает · Shift+клик по крафту: считать сырьём · клик по сырью: показать, куда идёт",
+  "litematicaplus.raw.footer_custom": "ПКМ или Delete: убрать из списка · оранжевая стрелка: клик по крафту даёт другой рецепт · Shift+клик по крафту: считать сырьём",
   "litematicaplus.raw.forced": "%s считается сырьём",
   "litematicaplus.raw.unforced": "%s снова крафтится",
   "litematicaplus.raw.forced_name": "%s (сырьё по выбору)",
@@ -1253,5 +1253,8 @@
   "litematicaplus.export.raw.column.made": "Получится",
   "litematicaplus.export.raw.column.leftover": "Лишнее",
   "litematicaplus.export.raw.column.recipe": "Рецепт",
-  "litematicaplus.panel.empty.marked": "Всё остальное, что ещё нужно, отмечено как собранное."
+  "litematicaplus.panel.empty.marked": "Всё остальное, что ещё нужно, отмечено как собранное.",
+  "litematicaplus.dimension.minecraft.overworld": "Верхний мир",
+  "litematicaplus.dimension.minecraft.the_nether": "Незер",
+  "litematicaplus.dimension.minecraft.the_end": "Энд"
 }

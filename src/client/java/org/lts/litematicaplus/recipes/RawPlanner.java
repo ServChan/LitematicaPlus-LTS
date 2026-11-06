@@ -258,8 +258,11 @@ public final class RawPlanner {
                     for (RecipeGraph.Input<T> input : option.inputs()) {
                         List<T> kept = new ArrayList<>();
                         for (T choice : input.choices()) {
+                            if (choice.equals(item)) {
+                                continue;
+                            }
                             int other = rankOf(choice);
-                            if (!choice.equals(item) && (other < own || other == own && compression)) {
+                            if (!madeFrom(choice, item) || other < own || other == own && compression) {
                                 kept.add(choice);
                             }
                         }
@@ -277,6 +280,17 @@ public final class RawPlanner {
             List<Allowed<T>> immutable = List.copyOf(result);
             this.allowed.put(item, immutable);
             return immutable;
+        }
+
+        private boolean madeFrom(T product, T ingredient) {
+            for (RecipeGraph.Option<T> option : this.graph.options(product)) {
+                for (RecipeGraph.Input<T> input : option.inputs()) {
+                    if (input.choices().contains(ingredient)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         double cost(T item) {

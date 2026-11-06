@@ -132,30 +132,33 @@ final class MaterialsView extends TabView {
         if (this.exporting) {
             exportRow();
         } else {
-            int fifth = (this.width - Theme.GAP * 4) / 5;
-            add(FlatButton.secondary(this.left, this.top, fifth, tr("litematicaplus.materials.sort",
+            int third = (this.width - Theme.GAP * 2) / 3;
+            add(FlatButton.secondary(this.left, this.top, third, tr("litematicaplus.materials.sort",
                     tr("litematicaplus.materials.sort." + sort.name().toLowerCase(Locale.ROOT))), button -> {
                         sort = sort.next();
                         this.screen.refresh();
                     }));
-            add(FlatButton.toggle(this.left + fifth + Theme.GAP, this.top, fifth,
-                    tr("litematicaplus.materials.hide_completed"), () -> hideCompleted, button -> {
+            add(FlatButton.secondary(this.left + third + Theme.GAP, this.top, third,
+                    tr("litematicaplus.materials.hide_completed"), button -> {
                         hideCompleted = !hideCompleted;
                         recompute();
-                    }));
-            this.hideGhosts = add(FlatButton.toggle(this.left + (fifth + Theme.GAP) * 2, this.top, fifth,
-                    tr("litematicaplus.materials.hide_ghosts"), this::selectedHidden, button -> toggleGhosts()));
-            add(hint(FlatButton.secondary(this.left + (fifth + Theme.GAP) * 3, this.top, fifth,
-                    tr("litematicaplus.raw.open"), button -> this.minecraft.gui.setScreen(new RawMaterialsScreen(this.screen,
-                            RawMaterialsScreen.Source.placement(placement)))), "litematicaplus.raw.open.tip"));
-            add(FlatButton.secondary(this.left + (fifth + Theme.GAP) * 4, this.top,
-                    this.width - (fifth + Theme.GAP) * 4, tr("litematicaplus.materials.export"), button -> {
-                        this.exporting = true;
-                        this.screen.refresh();
-                    }));
+                    }).withState(() -> hideCompleted));
+            this.hideGhosts = add(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, this.top,
+                    this.width - (third + Theme.GAP) * 2, tr("litematicaplus.materials.hide_ghosts"),
+                    button -> toggleGhosts()).withState(this::selectedHidden));
         }
         int searchY = this.top + Theme.CONTROL_HEIGHT + 4;
-        this.searchBox = field(this.left, searchY, this.width, query, tr("litematicaplus.materials.search"), 64);
+        int actionWidth = Math.max(80, Math.min(120, this.width / 5));
+        int searchWidth = this.width - (actionWidth + Theme.GAP) * 2;
+        add(hint(FlatButton.secondary(this.left + searchWidth + Theme.GAP, searchY, actionWidth,
+                tr("litematicaplus.raw.open"), button -> this.minecraft.gui.setScreen(new RawMaterialsScreen(this.screen,
+                        RawMaterialsScreen.Source.placement(placement)))), "litematicaplus.raw.open.tip"));
+        add(FlatButton.secondary(this.left + this.width - actionWidth, searchY, actionWidth,
+                tr("litematicaplus.materials.export"), button -> {
+                    this.exporting = !this.exporting;
+                    this.screen.refresh();
+                }).withState(() -> this.exporting));
+        this.searchBox = field(this.left, searchY, searchWidth, query, tr("litematicaplus.materials.search"), 64);
         this.searchBox.setResponder(value -> {
             if (!value.equals(query)) {
                 query = value;
@@ -173,8 +176,8 @@ final class MaterialsView extends TabView {
         this.collectedBox = field(this.left, barY, third, "", tr("litematicaplus.materials.collected"), 24);
         hint(this.collectedBox, "litematicaplus.materials.collected.tip");
         this.collectedBox.setResponder(this::collectedChanged);
-        this.markButton = add(hint(FlatButton.toggle(this.left + third + Theme.GAP, barY, third,
-                tr("litematicaplus.materials.mark"), this::selectedMarked, button -> toggleMark()),
+        this.markButton = add(hint(FlatButton.secondary(this.left + third + Theme.GAP, barY, third,
+                tr("litematicaplus.materials.mark"), button -> toggleMark()).withState(this::selectedMarked),
                 "litematicaplus.materials.mark.tip"));
         this.clearMarks = add(hint(FlatButton.secondary(this.left + (third + Theme.GAP) * 2, barY,
                 this.width - (third + Theme.GAP) * 2, tr("litematicaplus.materials.clear_marks"), button -> clearMarks()),
@@ -556,7 +559,7 @@ final class MaterialsView extends TabView {
         Ui.right(graphics, rowFont, text.missing(), right - this.columnWidth, textY,
                 done ? Theme.SUCCESS : entry.manual() ? Theme.ACCENT_HOVER : Theme.TEXT_BRIGHT);
         Ui.right(graphics, rowFont, text.total(), right - this.columnWidth * 2 - 10, textY, Theme.TEXT_DIM);
-        int nameWidth = rowWidth - 30 - this.columnWidth * 3 - 16;
+        int nameWidth = right - this.columnWidth * 2 - 10 - rowFont.width(text.total()) - 12 - (x + 26);
         Ui.clipped(graphics, rowFont, text.name(), x + 26, textY, nameWidth,
                 done || text.hidden() ? Theme.TEXT_DIM : Theme.TEXT);
     }

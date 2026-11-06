@@ -4,15 +4,23 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.Item;
+import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.gui.HubScreen;
+import org.lts.litematicaplus.gui.ListPanel;
+import org.lts.litematicaplus.gui.RawMaterialsScreen;
+import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.schematic.SchematicIo;
@@ -40,11 +48,76 @@ final class UiSuite {
         });
         SchematicPlacement placement = context.computeOnClient(client -> PlacementManager.get().create(file, ORIGIN));
         LitematicaPlusGameTest.settle(context, placement);
-        screens(context);
-        context.runOnClient(client -> PlacementManager.get().remove(placement));
+        Map<String, Long> previous = context.computeOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            Map<String, Long> before = new LinkedHashMap<>(config.customMaterials);
+            Map<String, Long> custom = new LinkedHashMap<>();
+            custom.put("minecraft:pale_oak_slab", 100L);
+            custom.put("minecraft:oak_fence", 30L);
+            custom.put("minecraft:stone_brick_stairs", 50L);
+            custom.put("minecraft:glass_pane", 64L);
+            custom.put("minecraft:lantern", 10L);
+            custom.put("minecraft:red_wool", 40L);
+            config.customMaterials = custom;
+            LitematicaPlusConfig.save(config);
+            List<Item> items = new ArrayList<>();
+            for (MaterialList.Entry entry : MaterialList.compute(GhostEngine.get().runtime(placement.id()),
+                    client.player.getInventory(), MaterialList.Sort.MISSING)) {
+                items.add(entry.item());
+            }
+            if (items.size() > 1) {
+                PlacementManager.get().setCollected(placement, items.get(0), 5L);
+                PlacementManager.get().setCollected(placement, items.get(1), MaterialList.Entry.ALL);
+            }
+            return before;
+        });
+        screens(context, placement);
+        context.runOnClient(client -> {
+            LitematicaPlusConfig config = LitematicaPlusConfig.currentCopy();
+            config.customMaterials = new LinkedHashMap<>(previous);
+            LitematicaPlusConfig.save(config);
+            PlacementManager.get().clearCollected(placement);
+            PlacementManager.get().remove(placement);
+        });
+    }
+
+    private static void raw(ClientGameTestContext context, String prefix, SchematicPlacement placement,
+            List<String> problems) {
+        context.setScreen(() -> new RawMaterialsScreen(null, RawMaterialsScreen.Source.placement(placement)));
+        context.waitFor(client -> client.gui.screen() instanceof RawMaterialsScreen screen && screen.indexReady(), 400);
+        context.waitTicks(25);
+        audit(context, prefix + "raw_placement", problems);
+        context.takeScreenshot(prefix + "raw_placement");
+        context.setScreen(() -> new RawMaterialsScreen(null, RawMaterialsScreen.Source.customList()));
+        context.waitTicks(25);
+        audit(context, prefix + "raw_custom", problems);
+        context.takeScreenshot(prefix + "raw_custom");
+        hoverFirstRow(context);
+        context.takeScreenshot(prefix + "raw_custom_tooltip");
+    }
+
+    private static void hoverFirstRow(ClientGameTestContext context) {
+        int[] point = context.computeOnClient(client -> {
+            for (GuiEventListener child : client.gui.screen().children()) {
+                if (child instanceof ListPanel<?> list && list.getX() > client.gui.screen().width / 3) {
+                    return new int[] {list.getX() + list.getWidth() / 3, list.getY() + 12};
+                }
+            }
+            return null;
+        });
+        if (point == null) {
+            return;
+        }
+        int scale = context.computeOnClient(client -> client.getWindow().getGuiScale());
+        context.getInput().setCursorPos(point[0] * scale, point[1] * scale);
+        context.waitTicks(10);
     }
 
     static void screens(ClientGameTestContext context) {
+        screens(context, null);
+    }
+
+    static void screens(ClientGameTestContext context, SchematicPlacement placement) {
         List<String> problems = new ArrayList<>();
         for (int[] size : SIZES) {
             context.getInput().resizeWindow(size[0], size[1]);
@@ -59,6 +132,9 @@ final class UiSuite {
                 if (tab == HubScreen.Tab.SETTINGS) {
                     settings(context, prefix, problems);
                 }
+            }
+            if (placement != null) {
+                raw(context, prefix, placement, problems);
             }
         }
         context.setScreen(() -> null);

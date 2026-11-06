@@ -1200,8 +1200,8 @@
   "litematicaplus.raw.empty_hint": "Everything this placement still needs is covered. Switch to Whole schematic to count it all.",
   "litematicaplus.raw.steps_empty": "Nothing to craft",
   "litematicaplus.raw.steps_empty_hint": "Every material is raw already or covered by your stock.",
-  "litematicaplus.raw.footer": "Click a craft: other recipe · Shift+click a craft: count it as raw · click raw: show where it goes",
-  "litematicaplus.raw.footer_custom": "Right click or Delete: remove from the list · Shift+click a craft: count it as raw · click a craft: other recipe",
+  "litematicaplus.raw.footer": "Orange arrow: other recipes exist, click the craft to switch · Shift+click a craft: count it as raw · click raw: show where it goes",
+  "litematicaplus.raw.footer_custom": "Right click or Delete: remove from the list · orange arrow: click the craft for another recipe · Shift+click a craft: count it as raw",
   "litematicaplus.raw.forced": "%s is counted as raw",
   "litematicaplus.raw.unforced": "%s is crafted again",
   "litematicaplus.raw.forced_name": "%s (raw by choice)",
@@ -1253,5 +1253,8 @@
   "litematicaplus.export.raw.column.made": "Made",
   "litematicaplus.export.raw.column.leftover": "Left over",
   "litematicaplus.export.raw.column.recipe": "Recipe",
-  "litematicaplus.panel.empty.marked": "Everything else you still need is marked as collected."
+  "litematicaplus.panel.empty.marked": "Everything else you still need is marked as collected.",
+  "litematicaplus.dimension.minecraft.overworld": "Overworld",
+  "litematicaplus.dimension.minecraft.the_nether": "The Nether",
+  "litematicaplus.dimension.minecraft.the_end": "The End"
 }

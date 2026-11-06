@@ -258,11 +258,19 @@ final class MaterialPanel {
                 : Component.translatable("litematicaplus.panel.marked_show", this.markedCount);
     }
 
+    private boolean compactLink() {
+        return this.font.width(this.status) + this.font.width(markedLabel()) + 16 > this.width - 10;
+    }
+
+    private int linkWidth() {
+        return compactLink() ? 9 + this.font.width(Integer.toString(this.markedCount)) : this.font.width(markedLabel());
+    }
+
     private boolean overMarkedLink(double mouseX, double mouseY) {
         if (this.markedCount <= 0 || this.collapsed || !this.visible) {
             return false;
         }
-        int labelWidth = this.font.width(markedLabel());
+        int labelWidth = linkWidth();
         int right = this.x + this.width - 5;
         return mouseY >= listBottom() + 1 && mouseY < listBottom() + FOOTER && mouseX >= right - labelWidth - 2
                 && mouseX < right + 2;
@@ -376,13 +384,22 @@ final class MaterialPanel {
         if (this.markedCount > 0) {
             Component label = markedLabel();
             boolean linkHovered = overMarkedLink(mouseX, mouseY);
-            drawRight(graphics, label.getString(), right - 5, listBottom() + 3,
-                    linkHovered ? Theme.TEXT_BRIGHT : Theme.ACCENT_HOVER);
-            if (linkHovered) {
-                graphics.fill(right - 5 - this.font.width(label), listBottom() + 12, right - 5, listBottom() + 13,
-                        Theme.TEXT_BRIGHT);
+            int linkColor = linkHovered ? Theme.TEXT_BRIGHT : Theme.ACCENT_HOVER;
+            int linkWidth = linkWidth();
+            if (compactLink()) {
+                String count = Integer.toString(this.markedCount);
+                drawRight(graphics, count, right - 5, listBottom() + 3, linkColor);
+                Ui.tick(graphics, right - 5 - linkWidth, listBottom() + 4, this.showMarked ? Theme.TEXT_DIM : Theme.SUCCESS);
+                if (linkHovered) {
+                    graphics.setTooltipForNextFrame(this.font.split(label, 200), mouseX, mouseY);
+                }
+            } else {
+                drawRight(graphics, label.getString(), right - 5, listBottom() + 3, linkColor);
             }
-            statusWidth -= this.font.width(label) + 6;
+            if (linkHovered) {
+                graphics.fill(right - 5 - linkWidth, listBottom() + 12, right - 5, listBottom() + 13, Theme.TEXT_BRIGHT);
+            }
+            statusWidth -= linkWidth + 6;
         }
         graphics.text(this.font, this.font.plainSubstrByWidth(this.status.getString(), Math.max(10, statusWidth)),
                 this.x + 5, listBottom() + 3, this.statusColor, false);

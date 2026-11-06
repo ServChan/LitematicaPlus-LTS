@@ -122,7 +122,7 @@ public final class RawMaterials {
             }
             text.append(inputs.get(i).count()).append(' ').append(name(choice.inputs().get(i)));
         }
-        text.append(" -> ").append(choice.option().count()).append(" (").append(station(choice.option().kind()).getString())
+        text.append(" \u2192 ").append(choice.option().count()).append(" (").append(station(choice.option().kind()).getString())
                 .append(')');
         return text.toString();
     }

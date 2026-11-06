@@ -265,7 +265,7 @@ public final class HubScreen extends Screen {
                 inWorld ? Screen.INWORLD_HEADER_SEPARATOR : Screen.HEADER_SEPARATOR, 0, Theme.HEADER_HEIGHT - 2, 0.0F, 0.0F,
                 this.width, 2, 32, 2);
         graphics.text(this.font, this.title, 10, (Theme.HEADER_HEIGHT - 9) / 2, Theme.TEXT_BRIGHT, true);
-        String scope = Session.scope();
+        String scope = Session.label(this.minecraft);
         int titleRight = 10 + this.font.width(this.title) + 14;
         if (SessionStore.get().readOnly()) {
             Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.error.session_read_only"),

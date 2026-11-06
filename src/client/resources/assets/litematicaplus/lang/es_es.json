@@ -1200,8 +1200,8 @@
   "litematicaplus.raw.empty_hint": "Todo lo que aún necesita la colocación ya está cubierto. Cambia a Esquema entero para contarlo todo.",
   "litematicaplus.raw.steps_empty": "No hay nada que fabricar",
   "litematicaplus.raw.steps_empty_hint": "Todos los materiales ya son materia prima o los cubren tus reservas.",
-  "litematicaplus.raw.footer": "Clic en un paso: otra receta · Mayús+clic en un paso: contarlo como materia prima · clic en materia prima: ver adónde va",
-  "litematicaplus.raw.footer_custom": "Clic derecho o Supr: quitar de la lista · Mayús+clic en un paso: contarlo como materia prima · clic en un paso: otra receta",
+  "litematicaplus.raw.footer": "Flecha naranja: hay otras recetas, clic en el paso para cambiar · Mayús+clic en un paso: contarlo como materia prima · clic en materia prima: ver adónde va",
+  "litematicaplus.raw.footer_custom": "Clic derecho o Supr: quitar de la lista · flecha naranja: clic en el paso para otra receta · Mayús+clic en un paso: contarlo como materia prima",
   "litematicaplus.raw.forced": "%s cuenta como materia prima",
   "litematicaplus.raw.unforced": "%s vuelve a fabricarse",
   "litematicaplus.raw.forced_name": "%s (materia prima elegida)",
@@ -1253,5 +1253,8 @@
   "litematicaplus.export.raw.column.made": "Salen",
   "litematicaplus.export.raw.column.leftover": "Sobra",
   "litematicaplus.export.raw.column.recipe": "Receta",
-  "litematicaplus.panel.empty.marked": "Todo lo demás que aún hace falta está marcado como reunido."
+  "litematicaplus.panel.empty.marked": "Todo lo demás que aún hace falta está marcado como reunido.",
+  "litematicaplus.dimension.minecraft.overworld": "Superficie",
+  "litematicaplus.dimension.minecraft.the_nether": "El Nether",
+  "litematicaplus.dimension.minecraft.the_end": "El End"
 }

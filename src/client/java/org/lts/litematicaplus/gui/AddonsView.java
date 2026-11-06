@@ -225,8 +225,14 @@ final class AddonsView extends TabView {
         int color = problems > 0 && state == Addon.State.ACTIVE ? Theme.WARNING : stateColor(state);
         int textY = y + (rowHeight - 8) / 2;
         int labelWidth = rowFont.width(label);
-        Ui.clipped(graphics, rowFont, addon.title().getString(), x + 8, textY, rowWidth - labelWidth - 22,
-                state == Addon.State.MISSING ? Theme.TEXT_DIM : Theme.TEXT_BRIGHT);
+        String title = addon.title().getString();
+        int titleColor = state == Addon.State.MISSING ? Theme.TEXT_DIM : Theme.TEXT_BRIGHT;
+        if (rowFont.width(title) > rowWidth - labelWidth - 22) {
+            graphics.fill(x + rowWidth - 12, y + rowHeight / 2 - 3, x + rowWidth - 6, y + rowHeight / 2 + 3, color);
+            Ui.clipped(graphics, rowFont, title, x + 8, textY, rowWidth - 26, titleColor);
+            return;
+        }
+        Ui.clipped(graphics, rowFont, title, x + 8, textY, rowWidth - labelWidth - 22, titleColor);
         Ui.right(graphics, rowFont, label, x + rowWidth - 6, textY, color);
     }
 

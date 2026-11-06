@@ -139,6 +139,35 @@ class RawPlannerTest {
     }
 
     @Test
+    void anOddShortRecipeDoesNotHideTheUsualOne() {
+        RecipeGraph<String> graph = RecipeGraph.<String>builder()
+                .add(craft("planks", 4, "log", 1))
+                .add(craft("stick", 4, "planks", 2))
+                .add(craft("stick", 1, "bamboo", 2))
+                .add(craft("torch", 4, "coal", 1, "stick", 1))
+                .build();
+        RawPlanner.Plan<String> plan = RawPlanner.plan(graph, map("torch", 16), Map.of(), RawPlanner.Settings.defaults());
+        assertEquals("planks", plan.stepOf("stick").choice().inputs().get(0));
+        assertNull(plan.rawOf("bamboo"));
+        assertEquals(1L, plan.rawOf("log").toGet());
+        assertEquals(4L, plan.rawOf("coal").toGet());
+    }
+
+    @Test
+    void dyedVariantsComeFromTheUndyedOne() {
+        RecipeGraph<String> graph = RecipeGraph.<String>builder()
+                .add(craft("white_wool", 1, "string", 4))
+                .add(craft("red_wool", 1, "red_dye", 1, List.of("white_wool", "blue_wool"), 1))
+                .add(craft("blue_wool", 1, "blue_dye", 1, List.of("white_wool", "red_wool"), 1))
+                .build();
+        RawPlanner.Plan<String> plan = RawPlanner.plan(graph, map("red_wool", 3, "blue_wool", 2), Map.of(),
+                RawPlanner.Settings.defaults());
+        assertEquals("white_wool", plan.stepOf("red_wool").choice().inputs().get(1));
+        assertEquals("white_wool", plan.stepOf("blue_wool").choice().inputs().get(1));
+        assertEquals(20L, plan.rawOf("string").toGet());
+    }
+
+    @Test
     void forcedRawStopsExpansion() {
         RawPlanner.Plan<String> plan = RawPlanner.plan(wood(), map("slab", 12), Map.of(),
                 new RawPlanner.Settings<>(false, true, Set.of("planks"), Map.of()));

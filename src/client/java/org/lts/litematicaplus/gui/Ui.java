@@ -96,6 +96,12 @@ public final class Ui {
         for (int i = 0; i < shown; i++) {
             graphics.text(font, lines.get(i), x, y + i * 10, color, false);
         }
+        if (lines.size() > shown) {
+            int end = x + font.width(lines.get(shown - 1)) + 1;
+            if (end + font.width("..") <= x + width + 4) {
+                graphics.text(font, "..", end, y + (shown - 1) * 10, color, false);
+            }
+        }
         if (lines.size() > shown && mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + shown * 10) {
             graphics.setTooltipForNextFrame(font.split(text, 240), mouseX, mouseY);
         }
