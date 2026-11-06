@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
+import org.lts.litematicaplus.mhud.HudExport;
 import org.lts.litematicaplus.util.Workers;
 
 public final class MaterialExport {
@@ -23,19 +24,32 @@ public final class MaterialExport {
     private static final int MAX_NAME_LENGTH = 64;
 
     public enum Format {
-        XLSX("xlsx"),
-        CSV("csv"),
-        MARKDOWN("md"),
-        JSON("json");
+        XLSX("xlsx", false),
+        CSV("csv", false),
+        MARKDOWN("md", false),
+        JSON("json", false),
+        TSV("tsv", true),
+        LITEMATICA("txt", true),
+        PNG("png", true),
+        SHEETS("xlsx", true);
+
+        public static final List<Format> FILES = List.of(XLSX, CSV, MARKDOWN, JSON);
+        public static final List<Format> HUD = List.of(TSV, LITEMATICA, PNG, SHEETS);
 
         private final String extension;
+        private final boolean hud;
 
-        Format(String extension) {
+        Format(String extension, boolean hud) {
             this.extension = extension;
+            this.hud = hud;
         }
 
         public String extension() {
             return this.extension;
+        }
+
+        public boolean hud() {
+            return this.hud;
         }
     }
 
@@ -89,15 +103,19 @@ public final class MaterialExport {
         if (cleaned.length() > MAX_NAME_LENGTH) {
             cleaned = cleaned.substring(0, MAX_NAME_LENGTH).strip();
         }
+        if (format == Format.SHEETS) {
+            cleaned += "_google";
+        }
         return cleaned + "_" + FILE_TIME.format(now) + "." + format.extension();
     }
 
     public static CompletableFuture<Path> export(MaterialReport report, Labels labels, Format format, LocalDateTime now) {
+        HudExport.Context context = format.hud() ? HudExport.Context.capture(report) : null;
         Path first = directory().resolve(fileName(report.title(), now, format));
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Path target = unique(first);
-                write(report, labels, format, target);
+                write(report, labels, format, target, context);
                 return target;
             } catch (IOException exception) {
                 throw new UncheckedIOException(exception);
@@ -123,6 +141,12 @@ public final class MaterialExport {
     }
 
     public static void write(MaterialReport report, Labels labels, Format format, Path target) throws IOException {
+        write(report, labels, format, target, format.hud() ? HudExport.Context.plain() : null);
+    }
+
+    public static void write(MaterialReport report, Labels labels, Format format, Path target, HudExport.Context context)
+            throws IOException {
+        HudExport.Context hud = context == null ? HudExport.Context.plain() : context;
         Path parent = target.toAbsolutePath().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
@@ -132,6 +156,10 @@ public final class MaterialExport {
             case CSV -> Files.writeString(target, csv(report, labels), StandardCharsets.UTF_8);
             case MARKDOWN -> Files.writeString(target, markdown(report, labels), StandardCharsets.UTF_8);
             case JSON -> Files.writeString(target, json(report), StandardCharsets.UTF_8);
+            case TSV -> Files.writeString(target, HudExport.tsv(report, hud.texts()), StandardCharsets.UTF_8);
+            case LITEMATICA -> HudExport.writeList(report, hud.texts(), target);
+            case PNG -> HudExport.writeCards(report, hud, target);
+            case SHEETS -> workbook(report, labels).write(target);
         }
     }
 

@@ -22,6 +22,9 @@ import org.lts.litematicaplus.gui.HubScreen;
 import org.lts.litematicaplus.gui.RawMaterialsScreen;
 import org.lts.litematicaplus.materials.MaterialExport;
 import org.lts.litematicaplus.materials.MaterialList;
+import org.lts.litematicaplus.mhud.MaterialHud;
+import org.lts.litematicaplus.mhud.StorageIndex;
+import org.lts.litematicaplus.mhud.StorageSearch;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.recipes.RawPlanner;
@@ -106,6 +109,7 @@ final class MaterialsSuite {
         marks(context, world, placement, take);
         context.setScreen(() -> null);
         context.waitTicks(5);
+        materialHud(context, world);
         rawMaterials(context, world, placement);
         if (System.getProperty("litematicaplus.materialsOnly") != null) {
             context.runOnClient(client -> PlacementManager.get().remove(placement));
@@ -171,6 +175,51 @@ final class MaterialsSuite {
         context.runOnClient(client -> PlacementManager.get().clearCollected(placement));
     }
 
+    private static void materialHud(ClientGameTestContext context, TestSingleplayerContext world) {
+        world.getServer().runCommand("clear @p");
+        world.getConnection().waitForClientboundPackets();
+        context.runOnClient(client -> MaterialHud.setEnabled(true));
+        context.waitTicks(25);
+        TestUi.use(context, world, 12);
+        LitematicaPlusGameTest.require(context.computeOnClient(client -> client.gui.screen() instanceof AbstractContainerScreen),
+                "right click should open the chest for Material HUD");
+        context.waitTicks(15);
+        context.runOnClient(client -> MaterialHud.refresh());
+        context.waitTicks(12);
+        boolean recorded = context.computeOnClient(client -> {
+            StorageIndex.Record record = StorageIndex.get().at(StorageIndex.scope(client), new BlockPos(61, -60, 123));
+            return record != null && record.counts.containsKey("minecraft:gold_block");
+        });
+        LitematicaPlusGameTest.require(recorded, "Material HUD should remember the gold in the opened chest");
+        context.runOnClient(client -> StorageSearch.get().toggle(MaterialHud.pageEntries()));
+        context.waitTicks(15);
+        boolean marked = context.computeOnClient(client -> StorageSearch.get().matches().stream()
+                .anyMatch(match -> match.pos().equals(new BlockPos(61, -60, 123))));
+        LitematicaPlusGameTest.require(marked, "the storage search should mark the chest holding gold");
+        context.takeScreenshot("12d_material_hud_container");
+        TestUi.clickLabel(context, TestUi.text("litematicaplus.mhud.transfer"));
+        context.waitTicks(25);
+        world.getConnection().waitForClientboundPackets();
+        LitematicaPlusGameTest.require(gold(world) == 3, "Move everything needed should take the 3 missing gold blocks, got "
+                + gold(world));
+        int before = context.computeOnClient(client -> StorageSearch.highlightFrames());
+        context.setScreen(() -> null);
+        context.waitTicks(10);
+        int drawn = context.computeOnClient(client -> StorageSearch.highlightFrames()) - before;
+        int found = context.computeOnClient(client -> StorageSearch.get().matches().size());
+        LitematicaPlusGameTest.require(drawn > 0, "storage highlight should be drawn in the world, frames " + drawn
+                + ", matches " + found);
+        context.takeScreenshot("12e_material_hud_world");
+        hudExports(context);
+        context.runOnClient(client -> {
+            StorageSearch.get().clear();
+            MaterialHud.setEnabled(false);
+        });
+        world.getServer().runCommand("clear @p");
+        world.getConnection().waitForClientboundPackets();
+        context.waitTicks(5);
+    }
+
     private static void rawMaterials(ClientGameTestContext context, TestSingleplayerContext world,
             SchematicPlacement placement) {
         world.getServer().runCommand("clear @p");
@@ -222,6 +271,68 @@ final class MaterialsSuite {
         world.getServer().runCommand("clear @p");
         world.getConnection().waitForClientboundPackets();
         context.waitTicks(5);
+    }
+
+    private static void hudExports(ClientGameTestContext context) {
+        Path directory = MaterialExport.directory();
+        long start = System.currentTimeMillis() - 1000L;
+        context.setScreen(() -> new HubScreen(null, HubScreen.Tab.MATERIALS));
+        context.waitTicks(12);
+        TestUi.clickLabel(context, TestUi.text("litematicaplus.materials.export"));
+        context.waitTicks(4);
+        context.takeScreenshot("12f_material_hud_export");
+        for (String label : List.of("TSV", "PNG")) {
+            TestUi.clickLabel(context, label);
+            String extension = "." + label.toLowerCase(java.util.Locale.ROOT);
+            context.waitFor(client -> newest(directory, extension, start) != null, 200);
+        }
+        TestUi.clickLabel(context, TestUi.text("litematicaplus.mhud.export.button.litematica"));
+        context.waitFor(client -> newest(directory, ".json", start) != null, 200);
+        TestUi.clickLabel(context, TestUi.text("litematicaplus.mhud.export.button.discord"));
+        context.waitTicks(3);
+        String clipboard = context.computeOnClient(client -> client.keyboardHandler.getClipboard());
+        LitematicaPlusGameTest.require(clipboard.startsWith("**") && clipboard.contains("\n\u2022 "),
+                "Discord export should copy a list, got " + clipboard);
+        Path card = newest(directory, ".png", start);
+        Path list = newest(directory, ".txt", start);
+        try {
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(card.toFile());
+            java.util.Set<Integer> colors = new java.util.HashSet<>();
+            for (int y = 146; y < 178; y++) {
+                for (int x = 24; x < 56; x++) {
+                    colors.add(image.getRGB(x, y));
+                }
+            }
+            LitematicaPlusGameTest.require(image.getWidth() == 800 && colors.size() > 6,
+                    "PNG card should show an item icon, colors " + colors.size());
+            String text = Files.readString(list);
+            LitematicaPlusGameTest.require(text.contains("minecraft:gold_block "), "Litematica list: " + text);
+            LitematicaPlusGameTest.require(Files.readString(newest(directory, ".tsv", start)).contains("minecraft:gold_block"),
+                    "TSV should list the gold block");
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+        context.setScreen(() -> null);
+        context.waitTicks(5);
+    }
+
+    private static Path newest(Path directory, String extension, long since) {
+        if (!Files.isDirectory(directory)) {
+            return null;
+        }
+        try (Stream<Path> files = Files.list(directory)) {
+            return files.filter(path -> {
+                String name = path.getFileName().toString();
+                try {
+                    return name.startsWith("gold_") && name.endsWith(extension) && Files.size(path) > 20L
+                            && Files.getLastModifiedTime(path).toMillis() >= since;
+                } catch (IOException exception) {
+                    return false;
+                }
+            }).findFirst().orElse(null);
+        } catch (IOException exception) {
+            return null;
+        }
     }
 
     private static boolean exported(Path directory, String extension) {

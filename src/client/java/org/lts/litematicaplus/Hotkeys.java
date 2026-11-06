@@ -90,6 +90,8 @@ public final class Hotkeys {
                 (config, value) -> config.inventoryHighlight = value);
         toggle("toggle_auto_layer", "auto_layer", config -> config.autoLayerAdvance,
                 (config, value) -> config.autoLayerAdvance = value);
+        toggle("toggle_shelf_highlight", "shelf_highlight", config -> config.shelfHighlight,
+                (config, value) -> config.shelfHighlight = value);
         takeMaterials = add("take_materials", 0, minecraft -> { });
     }
 

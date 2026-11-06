@@ -20,6 +20,7 @@ import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.materials.ContainerMemory;
+import org.lts.litematicaplus.mhud.StorageHighlight;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.PlacementLayout;
 import org.lts.litematicaplus.placement.SchematicPlacement;
@@ -30,6 +31,7 @@ import org.lts.litematicaplus.tool.EntityAssist;
 import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.verify.BlockDataCheck;
 import org.lts.litematicaplus.verify.MismatchType;
+import org.lts.litematicaplus.verify.ShelfHighlight;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class BoxRenderer {
@@ -152,6 +154,23 @@ public final class BoxRenderer {
                         Math.max(a.getX(), b.getX()) + 1.02, Math.max(a.getY(), b.getY()) + 1.02,
                         Math.max(a.getZ(), b.getZ()) + 1.02, color, container.focused() ? 4.0F : 2.5F,
                         alpha << 24 | color & 0xFFFFFF);
+            }
+        }
+        if (visible) {
+            StorageHighlight.emit((bounds, line, width, fill) -> box(XRAY_LINES, XRAY_FILLS, camera, bounds.minX,
+                    bounds.minY, bounds.minZ, bounds.maxX, bounds.maxY, bounds.maxZ, line, Math.max(1.0F, width), fill));
+        }
+        if (visible && config.shelfHighlight) {
+            for (ShelfHighlight.Shelf shelf : ShelfHighlight.shelves()) {
+                if (!shelf.stocked() && !config.shelfShowEmpty) {
+                    continue;
+                }
+                BlockPos pos = shelf.pos();
+                double grow = shelf.stocked() ? 0.004 : 0.001;
+                int color = shelf.stocked() ? ShelfHighlight.STOCKED : ShelfHighlight.EMPTY;
+                box(XRAY_LINES, shelf.stocked() ? XRAY_FILLS : null, camera, pos.getX() - grow, pos.getY() - grow,
+                        pos.getZ() - grow, pos.getX() + 1 + grow, pos.getY() + 1 + grow, pos.getZ() + 1 + grow, color,
+                        shelf.stocked() ? 2.0F : 1.0F, 0x50 << 24 | color & 0xFFFFFF);
             }
         }
         if (visible && config.entityPlacement) {

@@ -282,7 +282,7 @@ public final class RawMaterialsScreen extends Screen {
     }
 
     private void exportRow(int y) {
-        MaterialExport.Format[] formats = MaterialExport.Format.values();
+        MaterialExport.Format[] formats = MaterialExport.Format.FILES.toArray(MaterialExport.Format[]::new);
         int back = 22;
         int count = formats.length;
         int cell = (this.panelWidth - back - Theme.GAP * count) / count;

@@ -32,6 +32,7 @@ import org.lts.litematicaplus.Hotkeys;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.gui.Theme;
 import org.lts.litematicaplus.mixin.AbstractContainerScreenAccessor;
+import org.lts.litematicaplus.mhud.MaterialHud;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.util.Notify;
@@ -68,8 +69,8 @@ public final class ContainerHelper {
             }
             open = container;
             AbstractContainerScreenAccessor bounds = (AbstractContainerScreenAccessor) container;
-            panel = new MaterialPanel(client.font, new PanelActions(container));
-            if (LitematicaPlusConfig.current().materialPanel) {
+            panel = MaterialHud.enabled() ? null : new MaterialPanel(client.font, new PanelActions(container));
+            if (panel != null && LitematicaPlusConfig.current().materialPanel) {
                 panel.layout(container, bounds.litematicaplus$leftPos(), bounds.litematicaplus$topPos(),
                         bounds.litematicaplus$imageWidth(), bounds.litematicaplus$imageHeight());
             }
@@ -124,6 +125,22 @@ public final class ContainerHelper {
 
     public static void take(AbstractContainerScreen<?> screen) {
         start(screen, TransferJob.Kind.TAKE, null, false);
+    }
+
+    public static boolean open(AbstractContainerScreen<?> screen) {
+        return open == screen;
+    }
+
+    public static boolean busy() {
+        return job != null;
+    }
+
+    public static boolean takeFor(AbstractContainerScreen<?> screen, Set<Item> items) {
+        if (job != null || open != screen) {
+            return false;
+        }
+        start(screen, TransferJob.Kind.TAKE, Set.copyOf(items), false);
+        return job != null;
     }
 
     private record PanelActions(AbstractContainerScreen<?> screen) implements MaterialPanel.Actions {
@@ -309,6 +326,9 @@ public final class ContainerHelper {
     }
 
     private static void highlight(AbstractContainerScreen<?> screen, GuiGraphicsExtractor graphics) {
+        if (MaterialHud.enabled()) {
+            return;
+        }
         AbstractContainerScreenAccessor bounds = (AbstractContainerScreenAccessor) screen;
         int left = bounds.litematicaplus$leftPos();
         int top = bounds.litematicaplus$topPos();

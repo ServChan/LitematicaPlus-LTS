@@ -94,6 +94,7 @@ public final class Addons {
         EnumMap<Addon, ModLog> loggers = new EnumMap<>(Addon.class);
         for (Addon addon : Addon.values()) {
             String area = switch (addon) {
+                case MATERIAL_HUD -> "MaterialHud";
                 case SYNCMATICA -> "Syncmatica";
                 case VOXYMAP -> "VoxyMap";
                 case VOXY -> "Voxy";

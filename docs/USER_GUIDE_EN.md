@@ -244,6 +244,10 @@ On the **Schematics** tab:
 
 Block states from older game versions go through the vanilla DataFixer. Blocks this game version does not know are skipped (not pasted and not verified), and the mod says in chat how many there were.
 
+### Trash
+
+**Delete** sends a schematic to the trash instead of erasing it: it is kept for 30 days in `litematica-plus/trash/`. The **Trash** button on the Schematics tab lists deleted files: **Restore** puts a file back where it was (numbered if the name is taken), **Delete forever** and **Empty the trash** ask for a second press. Expired items are removed when the game starts. Taken from Material HUD (Aell_).
+
 ### Other schematic folders
 
 The `schematics` folder always works. To show schematics from somewhere else, open Settings → Tools, paste a full path into "Another schematics folder" and press Add. The folder appears at the root of the Schematics tab with all its subfolders. New schematics are still saved to `schematics`.
@@ -478,6 +482,19 @@ Item tooltips show how many more are needed, and shulker box tooltips list the n
 
 While schematics are hidden or the selected placement is disabled, the schematic stays quiet: no info panel, no container helper, no tooltip lines (**Hidden schematics stay quiet**).
 
+### Material HUD module
+
+The **Litematica Material HUD** mod by **Aell_**, built in with the author's permission (see `NOTICE.md`). Off by default: turn it on in **Add-ons → Material HUD** or in **Settings → Material HUD**. While it is on, it replaces the info panel's material list and the panel beside containers.
+
+- **Layer material panel**: what the current layer or zone still lacks; the number's color says whether you have it (green yes, yellow partly, red no). **Page Up / Page Down** turn pages, **Y** hides the panel. Optional: progress bar, "need N" (after your inventory and the chests you opened), only missing, alphabetical order, amounts in shulker boxes, scale. The "Material HUD: panel position" key places it on screen. When you leave for another dimension, the last list stays as a snapshot: totals are frozen, the inventory column is live.
+- **Storage search** (**U**, press again to stop): the mod remembers the contents of chests, barrels and shulker boxes you open across sessions (per world) and highlights through walls the ones holding the blocks of the current page, each block in its own color with a label above the chest. An item in a frame on a container counts as a sign of its contents. Turning a page switches the search to it. Inside a marked chest the needed slots are painted in the same color.
+- **At an open storage** the panel docks beside the window (right or left, shrunk when tight) with a **Move everything needed** button above it: it takes exactly what the page still lacks. The **Auto** button turns on auto-transfer each time a storage opens.
+- **Search all chests** (a setting or its own key): looks for everything the layer still lacks at once, not only the current page, and keeps up as you build.
+- **Item frames and other entities**: the schematic's item frames, paintings, armor stands, minecarts and boats, and the items inside frames, go into the material list; placed ones are subtracted. Turn it off with "Count item frames and other entities".
+- **Holograms by inventory** (a setting or its own key): ghost blocks show only for blocks you carry, so you see at a glance what you can place right now. Creative mode shows every block.
+- **Export** on the Materials tab → **Export**: while the module is on, the search field gives way to **TSV** (a tab-separated table with a shulker and stack breakdown that pastes into Excel and Google Sheets), **Discord** (text on the clipboard in parts of up to 2000 characters; each press copies the next part), **List** (Litematica's format: `id count` in a `.txt` and the same list as `.json`), **PNG** (a card with item icons, 60 rows per picture, the number's color says whether you have it) and **Google** (the workbook plus a chat link to a new Google sheet, where you load it with File → Import). The export holds what is still to be placed, minus what you entered as collected; marked materials are left out. Files go to `litematica-plus/materials/`.
+- **The original's Easy Place options** fixed Litematica's Easy Place. Litematica Plus has its own, and it already does the same: "Schematic only" is **Easy place → No stray blocks**, "Do not dig the wrong thing" is **Breaking → Excavation guard** (with "outside the schematic" and "correct blocks"), "Dirt instead of grass" is **Dirt and grass are interchangeable**, "Pick the tool for digging" is **Auto tool switch**, "Place entities" is **Place schematic entities**, "Finish blocks with tools", "Light and put out" and "Waterlog" are **Finish block states** and the options next to it, "Uneven pace" is **Random extra tick**, "Never turn the player" is **Turn for the server** switched off, and the debug lines are **Explain refusals**. Layer checking is the Verify tab and the error highlight.
+
 ## Block replacements
 
 On the **Replacements** tab any schematic block except blocks with contents (chests, signs) can be swapped for another in the selected placement:
@@ -516,6 +533,10 @@ Verification rules (**Settings → Checking**):
 ### Block data
 
 "Check block data" (on by default) compares what the block itself does not show: sign text on both sides, banner patterns, pot sherds and container contents. The client does not know what is inside a closed container, so a container is checked only if you opened it this session. Differences come first in the Verifier list and get an outline in the world, but they do not change the progress percentage.
+
+### Shelves with items
+
+**Settings → Checking → Shelves with items** (or a key) highlights the shelves around you that hold items, green and filled and through walls, so you can see at a glance where resources are lying. The client knows a shelf's contents without opening it. Empty shelves can be outlined too; the range is **Shelf range**. Taken from Material HUD (Aell_).
 
 ## New schematic: saving a build
 

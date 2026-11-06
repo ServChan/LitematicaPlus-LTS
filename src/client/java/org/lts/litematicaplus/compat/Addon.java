@@ -8,6 +8,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.LitematicaPlusConfig;
+import org.lts.litematicaplus.mhud.MaterialHud;
 import org.lts.litematicaplus.render.ExternalMap;
 import org.lts.litematicaplus.render.LodDepth;
 import org.lts.litematicaplus.render.SectionReady;
@@ -17,6 +18,8 @@ import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.world.WorldCache;
 
 public enum Addon {
+    MATERIAL_HUD("", List.of(new Setting("mh_enabled", config -> MaterialHud.enabled(),
+            (config, value) -> MaterialHud.setEnabled(value)))),
     SYNCMATICA("", List.of(new Setting("syncmatica", config -> config.syncmaticaEnabled,
             (config, value) -> config.syncmaticaEnabled = value))),
     VOXYMAP("voxymap", List.of(new Setting("world_cache", config -> config.useWorldCache,
@@ -121,6 +124,9 @@ public enum Addon {
             }
             return SyncSession.INCOMPATIBLE_VERSION.equals(client.serverVersion()) ? State.FAILED : State.STANDBY;
         }
+        if (this == MATERIAL_HUD) {
+            return MaterialHud.enabled() ? State.ACTIVE : State.OFF;
+        }
         if (!installed()) {
             return State.MISSING;
         }
@@ -164,6 +170,7 @@ public enum Addon {
             case AXIOM -> state == State.FAILED ? Component.translatable(base + "failed", version())
                     : Component.translatable(AxiomBridge.active() ? base + "active" : base + "standby", version());
             case IRIS, MOD_MENU -> Component.translatable(base + "active");
+            case MATERIAL_HUD -> Component.translatable(base + (state == State.ACTIVE ? "active" : "off"));
             default -> Component.translatable(base + (state == State.ACTIVE ? "active" : "failed"));
         };
     }

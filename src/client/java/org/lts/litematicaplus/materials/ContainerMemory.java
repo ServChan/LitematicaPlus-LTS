@@ -28,6 +28,8 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import org.lts.litematicaplus.LitematicaPlusConfig;
 import org.lts.litematicaplus.Session;
+import org.lts.litematicaplus.mhud.MaterialHud;
+import org.lts.litematicaplus.mhud.StorageIndex;
 import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.engine.PlacementRuntime;
 import org.lts.litematicaplus.placement.PlacementManager;
@@ -71,7 +73,8 @@ public final class ContainerMemory {
     public static void register() {
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (!(screen instanceof AbstractContainerScreen<?> container) || !ContainerHelper.isStorage(container)
-                    || EnderChestMemory.isEnderChest(screen) || !LitematicaPlusConfig.current().containerMemory) {
+                    || EnderChestMemory.isEnderChest(screen)
+                    || !LitematicaPlusConfig.current().containerMemory && !MaterialHud.enabled()) {
                 return;
             }
             AbstractContainerMenu menu = container.getMenu();
@@ -153,6 +156,9 @@ public final class ContainerMemory {
             }
         }
         Stored stored = new Stored(target.pos(), target.pair(), MaterialList.countStacks(stacks));
+        if (MaterialHud.enabled()) {
+            StorageIndex.get().record(minecraft, target.pos(), target.pair(), stored.counts());
+        }
         memory.remove(target.pos().asLong());
         if (target.pair() != null) {
             memory.remove(target.pair().asLong());

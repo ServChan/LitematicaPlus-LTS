@@ -22,6 +22,7 @@ import org.lts.litematicaplus.gui.Blueprint;
 import org.lts.litematicaplus.gui.TextMemo;
 import org.lts.litematicaplus.gui.Theme;
 import org.lts.litematicaplus.materials.MaterialList;
+import org.lts.litematicaplus.mhud.MaterialHud;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.placement.SchematicPlacement;
@@ -128,7 +129,7 @@ public final class InfoHud {
             return;
         }
         SchematicPlacement placement = PlacementManager.get().visibleSelection();
-        if (config.hudMaterialLines <= 0 || placement == null) {
+        if (config.hudMaterialLines <= 0 || placement == null || MaterialHud.enabled()) {
             materials = List.of();
             return;
         }
@@ -175,7 +176,11 @@ public final class InfoHud {
     }
 
     public static int left(int screenWidth, float fraction) {
-        return MARGIN + Math.round(fraction * Math.max(0, screenWidth - WIDTH - MARGIN * 2));
+        return left(screenWidth, WIDTH, fraction);
+    }
+
+    public static int left(int screenWidth, int width, float fraction) {
+        return MARGIN + Math.round(fraction * Math.max(0, screenWidth - width - MARGIN * 2));
     }
 
     public static int top(int screenHeight, int height, float fraction) {

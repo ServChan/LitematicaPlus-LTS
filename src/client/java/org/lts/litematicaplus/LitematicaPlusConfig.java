@@ -163,6 +163,9 @@ public final class LitematicaPlusConfig {
     public boolean inventoryHighlight = false;
     public boolean containerMemory = true;
     public boolean containerHighlight = true;
+    public boolean shelfHighlight = false;
+    public boolean shelfShowEmpty = false;
+    public int shelfRange = 48;
     public int pasteCommandsPerTick = 8;
     public PasteReplace pasteReplace = PasteReplace.ALL;
     public boolean pasteBlockEntityData = true;
@@ -377,6 +380,7 @@ public final class LitematicaPlusConfig {
         config.meshUploadsPerFrame = clamp(config.meshUploadsPerFrame, 1, 256);
         config.snapshotBudgetMicros = clamp(config.snapshotBudgetMicros, 200, 10000);
         config.hudMaterialLines = clamp(config.hudMaterialLines, 0, 16);
+        config.shelfRange = clamp(config.shelfRange, 16, 128);
         config.hudX = (float) clamp(config.hudX, 0.0, 1.0);
         config.hudY = (float) clamp(config.hudY, 0.0, 1.0);
         config.lockedHotbarSlots &= 0x1FF;

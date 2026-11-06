@@ -2,6 +2,7 @@ package org.lts.litematicaplus.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.function.BiConsumer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -10,12 +11,31 @@ import net.minecraft.network.chat.Component;
 import org.lts.litematicaplus.hud.InfoHud;
 
 public final class HudLayoutScreen extends Screen {
+    public interface Panel {
+        int width();
+
+        int render(GuiGraphicsExtractor graphics, float fractionX, float fractionY);
+    }
+
+    private static final Panel INFO_HUD = new Panel() {
+        @Override
+        public int width() {
+            return InfoHud.WIDTH;
+        }
+
+        @Override
+        public int render(GuiGraphicsExtractor graphics, float fractionX, float fractionY) {
+            return InfoHud.renderAt(Minecraft.getInstance(), graphics, fractionX, fractionY);
+        }
+    };
+
     private static final int PLACEHOLDER_HEIGHT = 52;
     private static final int SNAP = 6;
     private static final int TOOLBAR_WIDTH = 236;
 
     private final Screen parent;
     private final BiConsumer<Float, Float> apply;
+    private final Panel panel;
     private float fractionX;
     private float fractionY;
     private int panelHeight = PLACEHOLDER_HEIGHT;
@@ -25,9 +45,14 @@ public final class HudLayoutScreen extends Screen {
     private int toolbarTop;
 
     public HudLayoutScreen(Screen parent, float fractionX, float fractionY, BiConsumer<Float, Float> apply) {
+        this(parent, fractionX, fractionY, apply, INFO_HUD);
+    }
+
+    public HudLayoutScreen(Screen parent, float fractionX, float fractionY, BiConsumer<Float, Float> apply, Panel panel) {
         super(Component.translatable("litematicaplus.hud_layout.title"));
         this.parent = parent;
         this.apply = apply;
+        this.panel = panel;
         this.fractionX = fractionX;
         this.fractionY = fractionY;
     }
@@ -58,7 +83,7 @@ public final class HudLayoutScreen extends Screen {
     }
 
     private int panelLeft() {
-        return InfoHud.left(this.width, this.fractionX);
+        return InfoHud.left(this.width, this.panel.width(), this.fractionX);
     }
 
     private int panelTop() {
@@ -68,7 +93,7 @@ public final class HudLayoutScreen extends Screen {
     private boolean overPanel(double mouseX, double mouseY) {
         int x = panelLeft();
         int y = panelTop();
-        return mouseX >= x && mouseX < x + InfoHud.WIDTH && mouseY >= y && mouseY < y + this.panelHeight;
+        return mouseX >= x && mouseX < x + this.panel.width() && mouseY >= y && mouseY < y + this.panelHeight;
     }
 
     private static float fraction(double position, int room) {
@@ -90,7 +115,7 @@ public final class HudLayoutScreen extends Screen {
     }
 
     private int roomX() {
-        return Math.max(0, this.width - InfoHud.WIDTH - 12);
+        return Math.max(0, this.width - this.panel.width() - 12);
     }
 
     private int roomY() {
@@ -162,23 +187,23 @@ public final class HudLayoutScreen extends Screen {
         Ui.panel(graphics, left - 8, this.toolbarTop - 8, TOOLBAR_WIDTH + 16, 24 + (Theme.CONTROL_HEIGHT + 4) * 3 + 12);
         Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.hud_layout.hint"), left, this.toolbarTop,
                 TOOLBAR_WIDTH, 2, Theme.TEXT, mouseX, mouseY);
-        int drawn = InfoHud.renderAt(this.minecraft, graphics, this.fractionX, this.fractionY);
+        int drawn = this.panel.render(graphics, this.fractionX, this.fractionY);
         if (drawn <= 0) {
             this.panelHeight = PLACEHOLDER_HEIGHT;
             int x = panelLeft();
             int y = panelTop();
-            graphics.fill(x, y, x + InfoHud.WIDTH, y + PLACEHOLDER_HEIGHT, Theme.HUD_BACKGROUND);
-            graphics.outline(x, y, InfoHud.WIDTH, PLACEHOLDER_HEIGHT, Theme.BORDER);
+            graphics.fill(x, y, x + this.panel.width(), y + PLACEHOLDER_HEIGHT, Theme.HUD_BACKGROUND);
+            graphics.outline(x, y, this.panel.width(), PLACEHOLDER_HEIGHT, Theme.BORDER);
             graphics.text(this.font, Component.translatable("litematicaplus.hud.title"), x + 14, y + 6, Theme.TEXT_DIM, false);
             Ui.wrapped(graphics, this.font, Component.translatable("litematicaplus.hud_layout.placeholder"), x + 8, y + 20,
-                    InfoHud.WIDTH - 16, 3, Theme.TEXT_DIM, mouseX, mouseY);
+                    this.panel.width() - 16, 3, Theme.TEXT_DIM, mouseX, mouseY);
         } else {
             this.panelHeight = drawn;
         }
         int x = panelLeft();
         int y = panelTop();
         boolean hot = this.dragging || overPanel(mouseX, mouseY);
-        graphics.outline(x - 1, y - 1, InfoHud.WIDTH + 2, this.panelHeight + 2, hot ? Theme.FOCUS : Theme.ACCENT_DARK);
+        graphics.outline(x - 1, y - 1, this.panel.width() + 2, this.panelHeight + 2, hot ? Theme.FOCUS : Theme.ACCENT_DARK);
         super.extractRenderState(graphics, mouseX, mouseY, delta);
     }
 

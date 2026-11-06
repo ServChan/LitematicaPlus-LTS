@@ -485,6 +485,10 @@ final class SettingsView extends TabView {
                 rows.add(toggle("count_visible_only", c -> c.countVisibleOnly, (c, v) -> c.countVisibleOnly = v));
                 rows.add(toggle("auto_layer", c -> c.autoLayerAdvance, (c, v) -> c.autoLayerAdvance = v));
                 rows.add(toggle("world_cache", c -> c.useWorldCache, (c, v) -> c.useWorldCache = v));
+                rows.add(header("shelves"));
+                rows.add(toggle("shelf_highlight", c -> c.shelfHighlight, (c, v) -> c.shelfHighlight = v));
+                rows.add(toggle("shelf_show_empty", c -> c.shelfShowEmpty, (c, v) -> c.shelfShowEmpty = v));
+                rows.add(number("shelf_range", () -> this.working.shelfRange, v -> this.working.shelfRange = v, 16, 128, 16));
             }
             case HUD -> {
                 rows.add(toggle("hud_enabled", c -> c.hudEnabled, (c, v) -> c.hudEnabled = v));

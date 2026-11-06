@@ -77,6 +77,7 @@ public final class GhostEngine {
     private BlockStateModelSet modelIdentity;
     private LayerRange layer = LayerRange.ALL;
     private final Set<Block> hiddenBlocks = new HashSet<>();
+    private final Set<Block> autoHidden = new HashSet<>();
     private LayerRange scope;
     private SectionJob.Options options;
     private SectionJob.Options optionsWithoutGhost;
@@ -475,6 +476,16 @@ public final class GhostEngine {
         }
     }
 
+    public void setAutoHidden(Collection<Block> blocks) {
+        Set<Block> next = new HashSet<>(blocks);
+        next.removeIf(block -> block.defaultBlockState().isAir());
+        if (!next.equals(this.autoHidden)) {
+            this.autoHidden.clear();
+            this.autoHidden.addAll(next);
+            hiddenChanged();
+        }
+    }
+
     private void hiddenChanged() {
         for (PlacementRuntime runtime : this.runtimes.values()) {
             computeHidden(runtime);
@@ -748,7 +759,7 @@ public final class GhostEngine {
 
     private void computeHidden(PlacementRuntime runtime) {
         PlacementVolume volume = runtime.volume;
-        if (volume == null || this.hiddenBlocks.isEmpty()) {
+        if (volume == null || this.hiddenBlocks.isEmpty() && this.autoHidden.isEmpty()) {
             runtime.hiddenByPalette = new boolean[0];
             runtime.anyHidden = false;
             return;
@@ -757,7 +768,8 @@ public final class GhostEngine {
         boolean[] hidden = new boolean[palette.length];
         boolean any = false;
         for (int i = 0; i < palette.length; i++) {
-            hidden[i] = this.hiddenBlocks.contains(palette[i].getBlock());
+            Block block = palette[i].getBlock();
+            hidden[i] = this.hiddenBlocks.contains(block) || this.autoHidden.contains(block);
             any |= hidden[i];
         }
         runtime.hiddenByPalette = hidden;

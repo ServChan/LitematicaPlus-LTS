@@ -31,6 +31,7 @@ import org.lts.litematicaplus.preview.PreviewService;
 import org.lts.litematicaplus.schematic.EmbeddedPlacement;
 import org.lts.litematicaplus.schematic.SchematicExport;
 import org.lts.litematicaplus.schematic.SchematicIo;
+import org.lts.litematicaplus.schematic.SchematicTrash;
 import org.lts.litematicaplus.schematic.SchematicMetadata;
 import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.util.Notify;
@@ -230,15 +231,19 @@ final class SchematicsView extends TabView {
                 tr("litematicaplus.schematics.place"), button -> place()));
         this.deleteButton = add(FlatButton.danger(this.detailX + this.detailWidth - deleteWidth, placeY, deleteWidth,
                 deleteLabel(), button -> delete()));
-        add(FlatButton.secondary(this.detailX, buttonY, third, tr("litematicaplus.schematics.open_folder"),
+        int quarter = (this.detailWidth - Theme.GAP * 3) / 4;
+        add(FlatButton.secondary(this.detailX, buttonY, quarter, tr("litematicaplus.schematics.open_folder"),
                 button -> openFolder()));
-        add(FlatButton.secondary(this.detailX + third + Theme.GAP, buttonY, third,
+        add(FlatButton.secondary(this.detailX + quarter + Theme.GAP, buttonY, quarter,
                 tr("litematicaplus.schematics.refresh"), button -> {
                     PreviewService.retryFailed();
                     reload();
                 }));
-        this.placeEditButton = add(FlatButton.secondary(this.detailX + (third + Theme.GAP) * 2, buttonY,
-                this.detailWidth - (third + Theme.GAP) * 2, tr("litematicaplus.schematics.edit_place"),
+        add(FlatButton.secondary(this.detailX + (quarter + Theme.GAP) * 2, buttonY, quarter,
+                tr("litematicaplus.trash.open"), button -> this.minecraft.gui.setScreen(new TrashScreen(this.screen))))
+                .withHint(tr("litematicaplus.trash.open.tip", SchematicTrash.KEEP_DAYS));
+        this.placeEditButton = add(FlatButton.secondary(this.detailX + (quarter + Theme.GAP) * 3, buttonY,
+                this.detailWidth - (quarter + Theme.GAP) * 3, tr("litematicaplus.schematics.edit_place"),
                 button -> openPlaceEditor()));
         this.placeEditButton.withHint(tr("litematicaplus.schematics.edit_place.tip"));
         int panelHeight = panelHeight();
@@ -348,9 +353,12 @@ final class SchematicsView extends TabView {
             Workers.io().execute(() -> {
                 Component message;
                 try {
-                    boolean removed = Files.deleteIfExists(entry.path());
-                    message = tr(removed ? "litematicaplus.schematics.deleted" : "litematicaplus.schematics.delete_gone",
-                            entry.name());
+                    if (Files.isRegularFile(entry.path())) {
+                        SchematicTrash.global().trash(entry.path(), System.currentTimeMillis());
+                        message = tr("litematicaplus.schematics.trashed", entry.name(), SchematicTrash.KEEP_DAYS);
+                    } else {
+                        message = tr("litematicaplus.schematics.delete_gone", entry.name());
+                    }
                 } catch (IOException | RuntimeException exception) {
                     LitematicaPlusClient.LOGGER.warn("Could not delete schematic {}", entry.path(), exception);
                     message = tr("litematicaplus.schematics.delete_failed", Notify.describe(exception));

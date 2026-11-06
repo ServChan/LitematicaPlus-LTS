@@ -5,6 +5,7 @@
   "name": "Litematica Plus LTS",
   "description": "Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes .litematic files.",
   "authors": ["LTS_Server"],
+  "contributors": ["Aell_ (Material HUD module)"],
   "license": "MIT",
   "icon": "assets/litematicaplus/icon.png",
   "environment": "client",

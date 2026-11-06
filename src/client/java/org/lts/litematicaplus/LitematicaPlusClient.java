@@ -11,6 +11,8 @@ import org.lts.litematicaplus.engine.GhostEngine;
 import org.lts.litematicaplus.hud.InfoHud;
 import org.lts.litematicaplus.materials.ContainerHelper;
 import org.lts.litematicaplus.materials.ContainerMemory;
+import org.lts.litematicaplus.mhud.MaterialHud;
+import org.lts.litematicaplus.verify.ShelfHighlight;
 import org.lts.litematicaplus.tool.LayerAdvance;
 import org.lts.litematicaplus.verify.BlockDataCheck;
 import org.lts.litematicaplus.materials.EnderChestMemory;
@@ -18,6 +20,7 @@ import org.lts.litematicaplus.materials.MaterialTooltips;
 import org.lts.litematicaplus.render.BoxRenderer;
 import org.lts.litematicaplus.render.GhostRenderer;
 import org.lts.litematicaplus.render.TopView;
+import org.lts.litematicaplus.schematic.SchematicTrash;
 import org.lts.litematicaplus.share.SyncmaticaClient;
 import org.lts.litematicaplus.tool.InventoryHighlight;
 import org.lts.litematicaplus.tool.Substitutes;
@@ -36,6 +39,12 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         Substitutes.load();
         Session.init();
         Hotkeys.register();
+        MaterialHud.register();
+        try {
+            Workers.io().execute(() -> SchematicTrash.global().purgeExpired(System.currentTimeMillis()));
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Could not clean the schematic trash", exception);
+        }
         GhostRenderer.register();
         ContainerHelper.register();
         EnderChestMemory.register();
@@ -63,6 +72,7 @@ public final class LitematicaPlusClient implements ClientModInitializer {
         InfoHud.tick(minecraft);
         InventoryHighlight.tick(minecraft);
         ContainerMemory.tick(minecraft);
+        ShelfHighlight.tick(minecraft);
         BlockDataCheck.tick(minecraft);
         LayerAdvance.tick(minecraft);
         TopView.tick(minecraft);

@@ -31,6 +31,7 @@ import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import org.lts.litematicaplus.engine.PlacementRuntime;
+import org.lts.litematicaplus.mhud.SchematicEntities;
 import org.lts.litematicaplus.world.PlacementVolume;
 
 public final class MaterialList {
@@ -228,6 +229,9 @@ public final class MaterialList {
                 totalByItem.addTo(item, total * multiplier);
                 missingByItem.addTo(item, (total - done) * multiplier);
             });
+        }
+        if (SchematicEntities.active()) {
+            SchematicEntities.add(runtime, totalByItem, missingByItem);
         }
         Reference2LongMap<Item> available = inventory == null ? new Reference2LongOpenHashMap<>() : countInventory(inventory);
         Reference2LongMap<Item> ready = inventory == null ? new Reference2LongOpenHashMap<>() : countTopLevel(inventory);

@@ -5,7 +5,7 @@
 [![Minecraft Version](https://img.shields.io/badge/Minecraft-26.3-brightgreen?style=flat-square&logo=minecraft)](README.md)
 [![Platform](https://img.shields.io/badge/Platform-Fabric-blue?style=flat-square&logo=fabric)](README.md)
 [![Java Target](https://img.shields.io/badge/Java-25-orange?style=flat-square&logo=openjdk)](README.md)
-[![Mod Version](https://img.shields.io/badge/Version-1.0.11-purple?style=flat-square)](README.md)
+[![Mod Version](https://img.shields.io/badge/Version-1.0.12-purple?style=flat-square)](README.md)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
 Schematic holograms, area selection, verification, material lists, easy place and paste. A from-scratch, standalone replacement for Litematica that reads and writes `.litematic` files.
@@ -33,6 +33,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 | Выделение и вставка | Области из нескольких боксов, сохранение в `.litematic`; в творческом режиме вставка, заливка, замена и удаление; правка схемы в мире, сравнение схем, сохранение размещения как новой схемы |
 | Командная стройка | Зоны по X, Z и этажам с процентом готовности |
 | Интеграции | Syncmatica, Jade, VoxyMap, Axiom (все необязательны) |
+| Модуль Material HUD | Встроенный мод Litematica Material HUD автора Aell_ (по умолчанию выключен): панель материалов слоя со страницами, поиск по хранилищам с подсветкой сундуков, кнопка и автоперенос у контейнеров. Подробнее: [NOTICE.md](NOTICE.md) |
 | Интерфейс | Вкладка «Клавиши» с подсветкой конфликтов, перетаскиваемая инфопанель, подсветка блоков, которые можно поставить |
 | Производительность | Схема на 4,4 млн блоков загружается из файла за ~0,1 с и проверяется в фоновых потоках за ~1,7 с |
 
@@ -104,7 +105,7 @@ Schematic holograms, area selection, verification, material lists, easy place an
 
 1. **Fabric Loader** `0.19.3+` и **Fabric API** `0.161.0+26.3`.
 2. Отключите Litematica, MaLiLib и EasyPlaceFix, если они стоят: их функции уже внутри мода. Мод ставится вместо Litematica, а не вместе с ней: если обе лежат в `mods/`, при запуске поверх главного меню появится предупреждение.
-3. Скопируйте `litematica-plus-lts-1.0.11.jar` из `build/libs/` в папку `mods/`.
+3. Скопируйте `litematica-plus-lts-1.0.12.jar` из `build/libs/` в папку `mods/`.
 4. **Mod Menu** — опционально, открывает меню мода из списка модов.
 
 **Требования:** Minecraft `26.3` · Java `25` · только клиент.
@@ -115,9 +116,9 @@ Schematic holograms, area selection, verification, material lists, easy place an
 .\gradlew.bat clean build
 ```
 
-Готовый JAR: `build/libs/litematica-plus-lts-1.0.11.jar`.
+Готовый JAR: `build/libs/litematica-plus-lts-1.0.12.jar`.
 
-Рядом собирается отдельная версия с принтером: `build/libs/litematica-plus-lts-1.0.11-printer.jar` (задача `printerJar`). В `mods/` кладётся только один из двух файлов. Многие серверы запрещают принтеры, в обычной версии его кода нет. Подробности: [версия с принтером](docs/USER_GUIDE_RU.md#версия-с-принтером).
+Рядом собирается отдельная версия с принтером: `build/libs/litematica-plus-lts-1.0.12-printer.jar` (задача `printerJar`). В `mods/` кладётся только один из двух файлов. Многие серверы запрещают принтеры, в обычной версии его кода нет. Подробности: [версия с принтером](docs/USER_GUIDE_RU.md#версия-с-принтером).
 
 Команды проверки на своих схемах и игровых тестов: [раздел в руководстве](docs/USER_GUIDE_RU.md#проверка-и-автотесты).
 
@@ -144,6 +145,7 @@ A detailed description of every feature: [feature reference](docs/USER_GUIDE_EN.
 | Selection and paste | Areas made of several boxes, saving to `.litematic`; paste, fill, replace and delete in creative; editing the schematic in the world, comparing schematics, saving a placement as a new schematic |
 | Team builds | Zones along X, Z and floors with a progress percentage |
 | Integrations | Syncmatica, Jade, VoxyMap, Axiom (all optional) |
+| Material HUD module | The Litematica Material HUD mod by Aell_ built in (off by default): a layer material panel with pages, a storage search that marks chests, a button and auto-transfer at containers. See [NOTICE.md](NOTICE.md) |
 | Interface | A Hotkeys tab that marks conflicts, a draggable info panel, a highlight for placeable blocks |
 | Performance | A 4.4 million block schematic loads from disk in ~0.1 s and is verified on background threads in ~1.7 s |
 
@@ -215,7 +217,7 @@ The files are written atomically, with a `.bak` backup.
 
 1. **Fabric Loader** `0.19.3+` and **Fabric API** `0.161.0+26.3`.
 2. Disable Litematica, MaLiLib and EasyPlaceFix if they are installed: their features are already inside the mod. The mod replaces Litematica rather than going alongside it: if both are in `mods/`, a warning appears over the title screen at startup.
-3. Copy `litematica-plus-lts-1.0.11.jar` from `build/libs/` into `mods/`.
+3. Copy `litematica-plus-lts-1.0.12.jar` from `build/libs/` into `mods/`.
 4. **Mod Menu** — optional, opens the mod's menu from the mod list.
 
 **Requirements:** Minecraft `26.3` · Java `25` · client-only.
@@ -226,9 +228,9 @@ The files are written atomically, with a `.bak` backup.
 .\gradlew.bat clean build
 ```
 
-Output JAR: `build/libs/litematica-plus-lts-1.0.11.jar`.
+Output JAR: `build/libs/litematica-plus-lts-1.0.12.jar`.
 
-A separate printer edition is built next to it: `build/libs/litematica-plus-lts-1.0.11-printer.jar` (task `printerJar`). Put only one of the two files into `mods/`. Many servers forbid printers, and the regular edition has no printer code. Details: [printer edition](docs/USER_GUIDE_EN.md#printer-edition).
+A separate printer edition is built next to it: `build/libs/litematica-plus-lts-1.0.12-printer.jar` (task `printerJar`). Put only one of the two files into `mods/`. Many servers forbid printers, and the regular edition has no printer code. Details: [printer edition](docs/USER_GUIDE_EN.md#printer-edition).
 
 Commands for checking your own schematics and for the in-game tests: [section in the guide](docs/USER_GUIDE_EN.md#checks-and-automated-tests).
 

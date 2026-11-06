@@ -1,6 +1,7 @@
 package org.lts.litematicaplus.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,6 +38,8 @@ import org.lts.litematicaplus.materials.EnderChestMemory;
 import org.lts.litematicaplus.materials.MaterialExport;
 import org.lts.litematicaplus.materials.MaterialList;
 import org.lts.litematicaplus.materials.MaterialReport;
+import org.lts.litematicaplus.mhud.HudExport;
+import org.lts.litematicaplus.mhud.MaterialHud;
 import org.lts.litematicaplus.placement.PlacementManager;
 import org.lts.litematicaplus.placement.SchematicPlacement;
 import org.lts.litematicaplus.recipes.RawMaterials;
@@ -59,6 +62,8 @@ final class MaterialsView extends TabView {
     private int columnWidth;
     private boolean showStacks;
     private boolean exporting;
+    private static List<String> discordParts;
+    private static int discordNext;
     private Component status;
     private int statusTicks;
     private final Map<MaterialList.Entry, RowText> rowText = new IdentityHashMap<>();
@@ -150,23 +155,31 @@ final class MaterialsView extends TabView {
         int searchY = this.top + Theme.CONTROL_HEIGHT + 4;
         int actionWidth = Math.max(80, Math.min(120, this.width / 5));
         int searchWidth = this.width - (actionWidth + Theme.GAP) * 2;
-        add(hint(FlatButton.secondary(this.left + searchWidth + Theme.GAP, searchY, actionWidth,
-                tr("litematicaplus.raw.open"), button -> this.minecraft.gui.setScreen(new RawMaterialsScreen(this.screen,
-                        RawMaterialsScreen.Source.placement(placement)))), "litematicaplus.raw.open.tip"));
+        boolean hudRow = this.exporting && MaterialHud.enabled();
+        if (!hudRow) {
+            add(hint(FlatButton.secondary(this.left + searchWidth + Theme.GAP, searchY, actionWidth,
+                    tr("litematicaplus.raw.open"), button -> this.minecraft.gui.setScreen(new RawMaterialsScreen(this.screen,
+                            RawMaterialsScreen.Source.placement(placement)))), "litematicaplus.raw.open.tip"));
+        }
         add(FlatButton.secondary(this.left + this.width - actionWidth, searchY, actionWidth,
                 tr("litematicaplus.materials.export"), button -> {
                     this.exporting = !this.exporting;
                     this.screen.refresh();
                 }).withState(() -> this.exporting));
-        this.searchBox = field(this.left, searchY, searchWidth, query, tr("litematicaplus.materials.search"), 64);
-        this.searchBox.setResponder(value -> {
-            if (!value.equals(query)) {
-                query = value;
-                recompute();
-                this.list.setScroll(0);
-            }
-        });
-        hint(this.searchBox, "litematicaplus.materials.search_tip");
+        if (hudRow) {
+            this.searchBox = null;
+            hudExportRow(searchY, this.width - actionWidth - Theme.GAP);
+        } else {
+            this.searchBox = field(this.left, searchY, searchWidth, query, tr("litematicaplus.materials.search"), 64);
+            this.searchBox.setResponder(value -> {
+                if (!value.equals(query)) {
+                    query = value;
+                    recompute();
+                    this.list.setScroll(0);
+                }
+            });
+            hint(this.searchBox, "litematicaplus.materials.search_tip");
+        }
         this.headerY = searchY + Theme.CONTROL_HEIGHT + 5;
         int listTop = searchY + Theme.CONTROL_HEIGHT + 16;
         this.columnWidth = Math.max(44, Math.min(110, this.width / 5));
@@ -428,7 +441,7 @@ final class MaterialsView extends TabView {
     }
 
     private void exportRow() {
-        MaterialExport.Format[] formats = MaterialExport.Format.values();
+        MaterialExport.Format[] formats = MaterialExport.Format.FILES.toArray(MaterialExport.Format[]::new);
         int back = 22;
         int count = formats.length + 1;
         int cell = (this.width - back - Theme.GAP * count) / count;
@@ -456,27 +469,96 @@ final class MaterialsView extends TabView {
         }
     }
 
-    private void export(MaterialExport.Format format) {
+    private void hudExportRow(int y, int width) {
+        String[] keys = {"tsv", "discord", "litematica", "png", "sheets"};
+        int count = keys.length;
+        Component[] labels = new Component[count];
+        int[] widths = new int[count];
+        int wanted = 0;
+        for (int i = 0; i < count; i++) {
+            labels[i] = keys[i].equals("discord") && discordParts != null && discordNext < discordParts.size()
+                    ? tr("litematicaplus.mhud.export.button.discord_next", discordNext + 1, discordParts.size())
+                    : tr("litematicaplus.mhud.export.button." + keys[i]);
+            widths[i] = this.minecraft.font.width(labels[i]) + 12;
+            wanted += widths[i];
+        }
+        int free = width - Theme.GAP * (count - 1);
+        for (int i = 0; i < count; i++) {
+            widths[i] = wanted <= free ? widths[i] + (free - wanted) / count : widths[i] * free / Math.max(1, wanted);
+        }
+        int x = this.left;
+        for (int i = 0; i < count; i++) {
+            String key = keys[i];
+            int w = i == count - 1 ? this.left + width - x : widths[i];
+            Component label = labels[i];
+            add(hint(FlatButton.secondary(x, y, w, label, button -> {
+                switch (key) {
+                    case "tsv" -> export(MaterialExport.Format.TSV);
+                    case "discord" -> discord();
+                    case "litematica" -> export(MaterialExport.Format.LITEMATICA);
+                    case "png" -> export(MaterialExport.Format.PNG);
+                    default -> export(MaterialExport.Format.SHEETS);
+                }
+                this.screen.refresh();
+            }), "litematicaplus.mhud.export.button." + key + ".tip"));
+            x += w + Theme.GAP;
+        }
+    }
+
+    private void discord() {
+        if (discordParts == null || discordNext >= discordParts.size()) {
+            MaterialReport report = currentReport(LocalDateTime.now());
+            if (report == null) {
+                return;
+            }
+            if (HudExport.lines(report).isEmpty()) {
+                status(tr("litematicaplus.mhud.export.nothing"));
+                return;
+            }
+            discordParts = HudExport.discord(report, HudExport.Texts.capture());
+            discordNext = 0;
+        }
+        int total = discordParts.size();
+        this.minecraft.keyboardHandler.setClipboard(discordParts.get(discordNext));
+        discordNext++;
+        status(total == 1 ? tr("litematicaplus.mhud.export.discord_single")
+                : tr("litematicaplus.mhud.export.discord_part", discordNext, total));
+        if (discordNext >= total) {
+            discordParts = null;
+            discordNext = 0;
+        }
+    }
+
+    private MaterialReport currentReport(LocalDateTime now) {
         SchematicPlacement placement = PlacementManager.get().selected();
         PlacementRuntime runtime = placement == null ? null : GhostEngine.get().runtime(placement.id());
         List<MaterialList.Entry> all = MaterialList.compute(runtime,
                 this.minecraft.player == null ? null : this.minecraft.player.getInventory(), sort);
-        if (all.isEmpty()) {
+        if (placement == null || all.isEmpty()) {
             status(tr("litematicaplus.materials.export_empty"));
-            return;
+            return null;
         }
-        LocalDateTime now = LocalDateTime.now();
         MaterialReport report = MaterialReport.of(placement.name(), all, now);
         MaterialReport.RawSection raw = RawMaterials.sectionFor(all, LitematicaPlusConfig.current().rawScopeAll
                 ? RawMaterials.Scope.ALL : RawMaterials.Scope.MISSING);
-        if (raw != null) {
-            report = report.withRaw(raw);
-        }
-        MaterialExport.export(report, MaterialExport.Labels.capture(), format, now).whenComplete((path, failure) ->
-                this.minecraft.execute(() -> exported(path, failure)));
+        return raw == null ? report : report.withRaw(raw);
     }
 
-    private void exported(Path path, Throwable failure) {
+    private void export(MaterialExport.Format format) {
+        LocalDateTime now = LocalDateTime.now();
+        MaterialReport report = currentReport(now);
+        if (report == null) {
+            return;
+        }
+        if (format.hud() && HudExport.lines(report).isEmpty()) {
+            status(tr("litematicaplus.mhud.export.nothing"));
+            return;
+        }
+        MaterialExport.export(report, MaterialExport.Labels.capture(), format, now).whenComplete((path, failure) ->
+                this.minecraft.execute(() -> exported(path, failure, format)));
+    }
+
+    private void exported(Path path, Throwable failure, MaterialExport.Format format) {
         if (failure != null || path == null) {
             LitematicaPlusClient.LOGGER.warn("Could not export the material list", failure);
             Component message = tr("litematicaplus.materials.export_failed", Notify.describe(failure));
@@ -493,6 +575,14 @@ final class MaterialsView extends TabView {
                 .withColor(ChatFormatting.GRAY).withUnderlined(true)
                 .withClickEvent(new ClickEvent.OpenFile(absolute.getParent())));
         Notify.chat(tr("litematicaplus.materials.export_saved", file).copy().append(" ").append(folder));
+        if (format == MaterialExport.Format.SHEETS) {
+            MutableComponent link = tr("litematicaplus.mhud.export.sheets_link").copy().withStyle(style -> style
+                    .withColor(ChatFormatting.AQUA).withUnderlined(true)
+                    .withClickEvent(new ClickEvent.OpenUrl(URI.create("https://sheets.new"))));
+            Notify.chat(link.append(Component.literal(" ")).append(tr("litematicaplus.mhud.export.sheets_hint")
+                    .copy().withStyle(style -> style.withColor(ChatFormatting.GRAY).withUnderlined(false)
+                            .withClickEvent(null))));
+        }
     }
 
     private void copy() {

@@ -41,10 +41,10 @@ class SessionStoreTest {
         String legacy = "vanillasquad.com|minecraft:overworld";
         String farms = "vanillasquad.com|seed:1a|minecraft:overworld";
         String builds = "vanillasquad.com|seed:2b|minecraft:overworld";
-        store.save(legacy, sample());
+        store.saveBlocking(legacy, sample());
         assertEquals(1, store.scope(farms, legacy).placements.size());
         assertEquals(1, store.scope(builds, legacy).placements.size());
-        store.save(builds, new SessionStore.ScopeData());
+        store.saveBlocking(builds, new SessionStore.ScopeData());
         assertTrue(store.scope(builds, legacy).placements.isEmpty());
         assertEquals(1, store.scope(farms, legacy).placements.size());
         assertTrue(store.scope("other.net|seed:3c|minecraft:overworld", "other.net|minecraft:overworld").placements.isEmpty());
